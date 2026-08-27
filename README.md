@@ -306,6 +306,14 @@ when the contact is under your feet and invisible from any distance. Undo takes
 back the last point; Done keeps the line; the × throws it away. **Keep drawing**
 picks an existing line back up and adds to its end.
 
+**Points can be dragged**, while the line is being drawn and afterwards. A
+selected line shows a handle on every point; take one and move it. A whole drag
+is one undo step, not sixty. Handles appear only on the line being drawn and
+the line selected — every line on the map offering them would make a busy sheet
+impossible to pan across. Undo takes back the last point while drawing, and a
+stray point on a finished line can be removed outright, down to the two a line
+needs to exist.
+
 Every line carries **how well you know it**, and is drawn the way a published
 map draws it:
 

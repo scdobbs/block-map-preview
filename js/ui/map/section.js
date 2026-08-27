@@ -127,6 +127,8 @@ export class MapSection {
       onTap: (ll, screen) => this.onTap(ll, screen),
       onMove: () => this._onMapMove(),
       onUserMove: () => this.breakFollow(),
+      onVertexDrag: (target, i, ll) => this.dragVertex(target, i, ll),
+      onVertexDragEnd: () => this.endVertexDrag(),
       onCoverage: (c) => this._onCoverage(c),
     });
   }
@@ -303,8 +305,59 @@ export class MapSection {
   selectLine(id) {
     this.selectedLineId = id;
     this.map.selectedLineId = id;
+    // The handle you were holding belongs to the line you were holding it on.
+    if (this.map.activeVertex?.target !== id) this.map.activeVertex = null;
     this.map.invalidate();
     if (this.activeTab === 'lines') this.host.renderSectionPanel();
+  }
+
+  /**
+   * Move a point that is already down.
+   *
+   * Coalesced under one key per vertex, so dragging a contact into place is
+   * one undo step rather than sixty, and left non-structural so the panel is
+   * not rebuilt under the finger.
+   */
+  dragVertex(target, index, { lon, lat }) {
+    if (target === 'draft') {
+      if (!this.drawing || !this.drawing.points[index]) return;
+      this.drawing.points[index] = [lon, lat];
+      this.map.invalidate();
+      return;
+    }
+    this.editLine(target, (l) => {
+      if (l.points[index]) l.points[index] = [lon, lat];
+    }, `vertex:${target}:${index}`);
+  }
+
+  endVertexDrag() {
+    this.store.breakCoalesce();
+    // Length and point count are printed in the panel and have just moved.
+    if (this.activeTab === 'lines') this.rebuild();
+  }
+
+  /** The vertex last touched, if it belongs to the line asked about. */
+  activeVertex(lineId) {
+    const v = this.map.activeVertex;
+    return v && v.target === lineId ? v.index : -1;
+  }
+
+  /**
+   * Take a point out.
+   *
+   * Undo covers a stray point while the line is still being drawn, but a
+   * finished one would otherwise have to be deleted and walked again. Refused
+   * at two points, below which there is no line left to edit.
+   */
+  removeVertex(lineId, index) {
+    const line = this.store.doc.lines.find((l) => l.id === lineId);
+    if (!line || line.points.length <= 2) return;
+    this.store.edit((doc) => {
+      const l = doc.lines.find((x) => x.id === lineId);
+      if (l && l.points.length > 2) l.points.splice(index, 1);
+    }, { structural: true });
+    this.map.activeVertex = null;
+    this.map.invalidate();
   }
 
   /**
@@ -1171,6 +1224,8 @@ export class MapSection {
       drawingLine: () => this.drawingLine(),
       extendLine: (id) => this.extendLine(id),
       editLine: (id, fn, c) => this.editLine(id, fn, c),
+      activeVertex: (id) => this.activeVertex(id),
+      removeVertex: (id, i) => this.removeVertex(id, i),
       deleteLine: (id) => this.deleteLine(id),
       goToLine: (id) => this.goToLine(id),
 

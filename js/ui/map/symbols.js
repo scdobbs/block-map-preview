@@ -247,7 +247,9 @@ export function drawPosition(ctx, x, y, { accuracyPx = 0, heading = null, scale 
  * dark line over a shadowed cliff would otherwise vanish exactly where the
  * geology is most interesting.
  */
-export function drawLine(ctx, pts, line, { selected = false, scale = 1, drawing = false } = {}) {
+export function drawLine(ctx, pts, line, {
+  selected = false, scale = 1, drawing = false, active = -1,
+} = {}) {
   if (pts.length < 2) return;
   const kind = lineKind(line.kind);
   const dash = lineCertainty(line.certainty).dash.map((d) => d * scale);
@@ -286,12 +288,13 @@ export function drawLine(ctx, pts, line, { selected = false, scale = 1, drawing 
   if (drawing || selected) {
     for (let i = 0; i < pts.length; i++) {
       const last = drawing && i === pts.length - 1;
+      const held = i === active;
       ctx.beginPath();
-      ctx.arc(pts[i].x, pts[i].y, (last ? 6 : 4) * scale, 0, Math.PI * 2);
-      ctx.fillStyle = last ? '#ffc857' : '#ffffff';
+      ctx.arc(pts[i].x, pts[i].y, (held ? 8 : last ? 6 : 4.5) * scale, 0, Math.PI * 2);
+      ctx.fillStyle = held || last ? '#ffc857' : '#ffffff';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(8, 12, 15, .75)';
-      ctx.lineWidth = 1.5 * scale;
+      ctx.strokeStyle = held ? '#ffffff' : 'rgba(8, 12, 15, .75)';
+      ctx.lineWidth = (held ? 2.5 : 1.5) * scale;
       ctx.stroke();
     }
   }

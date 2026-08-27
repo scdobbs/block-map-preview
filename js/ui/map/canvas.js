@@ -39,6 +39,8 @@ export class MapCanvas {
     // difference matters: following your position moves the map constantly,
     // and something has to be able to tell that apart from being dragged.
     this.onUserMove = opts.onUserMove || (() => {});
+    this.onVertexDrag = opts.onVertexDrag || (() => {});
+    this.onVertexDragEnd = opts.onVertexDragEnd || (() => {});
     this.onCoverage = opts.onCoverage || (() => {});
 
     this.center = { x: lonToWorld(-109.549), y: latToWorld(38.573) };
@@ -55,6 +57,7 @@ export class MapCanvas {
     this.lines = [];
     this.selectedLineId = null;
     this.draftLine = null;      // the one being drawn right now
+    this.activeVertex = null;   // { target, index } — the one last touched
     this.units = [];
     this.areas = [];
     this.selectedId = null;
@@ -410,7 +413,12 @@ export class MapCanvas {
     const project = (line) => line.points.map((p) => this.lonLatToScreen(p[0], p[1]));
     for (const line of this.lines) {
       if (!line.points || line.points.length < 2) continue;
-      drawLine(ctx, project(line), line, { selected: line.id === this.selectedLineId });
+      const selected = line.id === this.selectedLineId;
+      drawLine(ctx, project(line), line, {
+        selected,
+        active: selected && this.activeVertex?.target === line.id
+          ? this.activeVertex.index : -1,
+      });
     }
     if (this.draftLine && this.draftLine.points.length) {
       const pts = project(this.draftLine);
@@ -423,9 +431,36 @@ export class MapCanvas {
         ctx.lineWidth = 1.5;
         ctx.stroke();
       } else {
-        drawLine(ctx, pts, this.draftLine, { drawing: true });
+        drawLine(ctx, pts, this.draftLine, {
+          drawing: true,
+          active: this.activeVertex?.target === 'draft' ? this.activeVertex.index : -1,
+        });
       }
     }
+  }
+
+  /**
+   * The vertex nearest a touch, on whichever line is currently editable.
+   *
+   * Only the line being drawn and the selected line offer handles. Every line
+   * on the map offering them would make it impossible to pan across a busy
+   * sheet without grabbing something.
+   */
+  _vertexAt(px, py, slop = 22) {
+    let best = null;
+    const scan = (line, target) => {
+      if (!line || !line.points) return;
+      for (let i = 0; i < line.points.length; i++) {
+        const p = this.lonLatToScreen(line.points[i][0], line.points[i][1]);
+        const d = Math.hypot(px - p.x, py - p.y);
+        if (d < slop && (!best || d < best.d)) best = { target, index: i, d };
+      }
+    };
+    scan(this.draftLine, 'draft');
+    if (this.selectedLineId) {
+      scan(this.lines.find((l) => l.id === this.selectedLineId), this.selectedLineId);
+    }
+    return best;
   }
 
   /** The line nearest a tap, within a finger's width. */
@@ -488,10 +523,16 @@ export class MapCanvas {
       this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 });
       if (this._pointers.size === 1) {
         const local = this._local(e);
-        this._gesture = {
-          kind: this.selection ? this._handleAt(local.x, local.y) || 'pan' : 'pan',
-          startX: e.clientX, startY: e.clientY,
-        };
+        let kind = this.selection ? this._handleAt(local.x, local.y) || 'pan' : 'pan';
+        if (kind === 'pan') {
+          const v = this._vertexAt(local.x, local.y);
+          if (v) {
+            kind = `vertex:${v.target}:${v.index}`;
+            this.activeVertex = { target: v.target, index: v.index };
+            this.invalidate();
+          }
+        }
+        this._gesture = { kind, startX: e.clientX, startY: e.clientY };
       } else if (this._pointers.size === 2) {
         this._gesture = { kind: 'pinch', ...this._pinchState() };
       }
@@ -520,6 +561,10 @@ export class MapCanvas {
         this.onUserMove();
       } else if (this._gesture?.kind?.startsWith('corner:')) {
         this._dragCorner(this._gesture.kind.slice(7), e);
+      } else if (this._gesture?.kind?.startsWith('vertex:')) {
+        const [, target, idx] = this._gesture.kind.split(':');
+        const local = this._local(e);
+        this.onVertexDrag(target, Number(idx), this.screenToLonLat(local.x, local.y));
       }
     });
 
@@ -534,8 +579,12 @@ export class MapCanvas {
         if (only) { only.x = only.x; only.y = only.y; }
       } else if (this._pointers.size === 0) {
         const wasPinch = this._gesture?.kind === 'pinch';
+        const wasVertex = !!this._gesture?.kind?.startsWith('vertex:');
         this._gesture = null;
-        if (p && !wasPinch && p.moved < TAP_SLOP && performance.now() - p.t < TAP_MS) {
+        if (wasVertex) this.onVertexDragEnd();
+        // A touch that started on a vertex is never a tap, or picking one up
+        // while drawing would drop a new point on top of it.
+        if (p && !wasPinch && !wasVertex && p.moved < TAP_SLOP && performance.now() - p.t < TAP_MS) {
           const local = this._local(e);
           this.onTap(this.screenToLonLat(local.x, local.y), local);
         }

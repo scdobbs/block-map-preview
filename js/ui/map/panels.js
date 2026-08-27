@@ -600,6 +600,8 @@ export function linesPanel(ctx) {
     }));
     node.appendChild(el('div', { class: 'ctl-hint standalone',
       text: 'A line you walked is certain; one you traced across a covered slope is not. Drawing the difference is most of what makes a map honest, and both of these can be changed afterwards.' }));
+    node.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'Points can be dragged while you draw. Undo takes back the last one.' }));
     return node;
   }
 
@@ -684,11 +686,27 @@ export function linesPanel(ctx) {
         onChange: (v) => ctx.editLine(line.id, (l) => { l.note = v; }),
       }));
 
+      // Dragging is the way a line gets corrected; this only says so, and
+      // offers the one thing dragging cannot do.
+      const active = ctx.activeVertex(line.id);
+      box.appendChild(el('div', { class: 'ctl-hint standalone',
+        text: active >= 0
+          ? `Point ${active + 1} of ${line.points.length} is in hand. Drag it on the map to move it.`
+          : 'Drag any point on the map to move it. Tap one to be able to remove it.' }));
+
       box.appendChild(el('div', { class: 'row-actions wrap' }, [
         el('button', { class: 'btn small', type: 'button', text: 'Go to', onclick: () => ctx.goToLine(line.id) }),
         el('button', { class: 'btn small', type: 'button', text: 'Keep drawing',
           title: 'Add more points to the end of this line',
           onclick: () => ctx.extendLine(line.id) }),
+        el('button', {
+          class: 'btn small', type: 'button',
+          text: active >= 0 ? `Remove point ${active + 1}` : 'Remove a point',
+          disabled: active < 0 || line.points.length <= 2,
+          title: line.points.length <= 2
+            ? 'A line needs two points' : 'Take the held point out of the line',
+          onclick: () => ctx.removeVertex(line.id, active),
+        }),
         el('button', { class: 'btn small danger', type: 'button', text: 'Delete',
           onclick: () => ctx.deleteLine(line.id) }),
       ]));
