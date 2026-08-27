@@ -289,8 +289,15 @@ export function makeLine(over = {}) {
     // [[lon, lat], ...] — a line only, never a ring. Closing an area is a
     // different job and would need a fill and a unit to fill it with.
     points: [],
-    unitA: '',
-    unitB: '',
+    // Named by where they sit in the column, not by which side of the line
+    // they happen to fall on. "One side and the other" is unanswerable from a
+    // map alone and means the pair cannot be used for anything: the whole
+    // point of naming them is that a contact with the same unit above and the
+    // same unit below is the same contact wherever it crops out, and that is
+    // what makes a fault's throw solvable. Upper is the younger of the two
+    // where the beds are the right way up.
+    unitUpper: '',
+    unitLower: '',
     note: '',
     at: new Date().toISOString(),
     ...over,
@@ -401,13 +408,27 @@ export function migrateFieldDoc(doc) {
     .map((s) => ({ ...makeStation(), ...s }));
   out.lines = (Array.isArray(doc.lines) ? doc.lines : [])
     .filter((l) => l && Array.isArray(l.points))
-    .map((l) => ({
-      ...makeLine(),
-      ...l,
-      points: l.points
-        .filter((pt) => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]))
-        .map((pt) => [pt[0], pt[1]]),
-    }));
+    .map((l) => {
+      const line = {
+        ...makeLine(),
+        ...l,
+        points: l.points
+          .filter((pt) => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]))
+          .map((pt) => [pt[0], pt[1]]),
+      };
+      // The two units used to be recorded as "one side" and "the other", which
+      // carries no order at all. They are carried across in the order they were
+      // typed because that is the only thing the old field held — it is not a
+      // claim that the first one is the upper. Nothing here can know which way
+      // up they were meant, and guessing quietly would be worse than being
+      // wrong loudly: building a block checks whether the column joins up and
+      // says so when a whole notebook comes across inverted.
+      if (line.unitUpper === '' && typeof l.unitA === 'string') line.unitUpper = l.unitA;
+      if (line.unitLower === '' && typeof l.unitB === 'string') line.unitLower = l.unitB;
+      delete line.unitA;
+      delete line.unitB;
+      return line;
+    });
   out.units = (Array.isArray(doc.units) ? doc.units : [])
     .filter((u) => u && typeof u === 'object')
     .map((u) => ({ ...makeUnit(), ...u }));
@@ -472,8 +493,8 @@ export function toGeoJSON(doc) {
         name: l.name || null,
         kind: l.kind,
         certainty: l.certainty,
-        unit_a: l.unitA || null,
-        unit_b: l.unitB || null,
+        unit_upper: l.unitUpper || null,
+        unit_lower: l.unitLower || null,
         length_m: Math.round(lineLength(l)),
         vertices: l.points.length,
         note: l.note || null,
@@ -557,12 +578,13 @@ export function toKML(doc) {
     push(`<name>${xml(l.name || k.label)}</name>`);
     push(`<styleUrl>#line-${l.kind}</styleUrl>`);
     push(`<description><![CDATA[${xml(k.label)}, ${xml(lineCertainty(l.certainty).label.toLowerCase())}`
-      + `${l.unitA || l.unitB ? `<br>${xml(l.unitA || '?')} / ${xml(l.unitB || '?')}` : ''}`
+      + `${l.unitUpper || l.unitLower ? `<br>${xml(l.unitUpper || '?')} over ${xml(l.unitLower || '?')}` : ''}`
       + `<br>${Math.round(lineLength(l))} m`
       + `${l.note ? `<br>${xml(l.note)}` : ''}]]></description>`);
     push('<ExtendedData>');
     for (const [key, v] of [['kind', l.kind], ['certainty', l.certainty],
-      ['unit_a', l.unitA], ['unit_b', l.unitB], ['length_m', Math.round(lineLength(l))],
+      ['unit_upper', l.unitUpper], ['unit_lower', l.unitLower],
+      ['length_m', Math.round(lineLength(l))],
       ['note', l.note]]) {
       if (v == null || v === '') continue;
       push(`<Data name="${key}"><value>${xml(String(v))}</value></Data>`);
@@ -599,10 +621,10 @@ function xml(s) {
  * as a table nobody can map.
  */
 export function toLinesCSV(doc) {
-  const cols = ['name', 'kind', 'certainty', 'unit_a', 'unit_b', 'length_m',
+  const cols = ['name', 'kind', 'certainty', 'unit_upper', 'unit_lower', 'length_m',
     'vertices', 'note', 'time', 'wkt'];
   const rows = (doc.lines || []).filter(lineIsDrawable).map((l) => [
-    l.name || '', l.kind, l.certainty, l.unitA || '', l.unitB || '',
+    l.name || '', l.kind, l.certainty, l.unitUpper || '', l.unitLower || '',
     Math.round(lineLength(l)), l.points.length, l.note || '', l.at,
     `LINESTRING (${l.points.map((p) => `${p[0].toFixed(6)} ${p[1].toFixed(6)}`).join(', ')})`,
   ].map(csvCell).join(','));

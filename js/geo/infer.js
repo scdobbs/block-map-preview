@@ -164,11 +164,19 @@ export function contactsOf(obs) {
 export function contactGroups(obs) {
   const groups = new Map();
   for (const ln of contactsOf(obs)) {
-    const a = String(ln.unitA || '').trim().toLowerCase();
-    const b = String(ln.unitB || '').trim().toLowerCase();
-    const key = a && b ? `pair:${[a, b].sort().join('|')}` : `line:${ln.id}`;
+    const upper = String(ln.unitUpper || '').trim();
+    const lower = String(ln.unitLower || '').trim();
+    // Ordered, not sorted. "A over B" and "B over A" are two different
+    // contacts, and on an overturned limb telling them apart is the whole
+    // question — so the pair is keyed the way it was recorded.
+    const key = upper && lower
+      ? `pair:${upper.toLowerCase()}|${lower.toLowerCase()}`
+      : `line:${ln.id}`;
     if (!groups.has(key)) {
-      groups.set(key, { key, named: !!(a && b), lines: [], pts: [], name: ln.name || 'Contact' });
+      groups.set(key, {
+        key, named: !!(upper && lower), upper, lower,
+        lines: [], pts: [], name: ln.name || (upper && lower ? `${upper} / ${lower}` : 'Contact'),
+      });
     }
     const g = groups.get(key);
     g.lines.push(ln);
@@ -583,6 +591,7 @@ export function columnFrom(events, obs) {
     seen.push({
       id: g.key, name: g.name, depth: mean, sd: Math.sqrt(v / d.length),
       pieces: g.lines.length, named: g.named,
+      upper: g.upper || '', lower: g.lower || '',
     });
   }
   // Shallowest depth is the youngest contact: the top of the column.

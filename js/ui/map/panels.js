@@ -684,18 +684,25 @@ export function linesPanel(ctx) {
 
       const known = knownUnitNames(doc);
       if (line.kind === 'contact' || line.kind === 'unconformity') {
+        // Upper and lower, not one side and the other. A contact's two units
+        // are its place in the column, and a pair recorded by which side of
+        // the line they fell on says nothing that can be used later: it cannot
+        // give a thickness, and it cannot recognise the same contact again
+        // across a fault.
         box.appendChild(el('div', { class: 'ctl-pair' }, [
           textRow({
-            label: 'Unit on one side', value: line.unitA, placeholder: 'e.g. Poleta Fm',
+            label: 'Upper unit', value: line.unitUpper, placeholder: 'e.g. Poleta Fm',
             list: known.length ? 'field-unit-names' : null,
-            onChange: (v) => ctx.editLine(line.id, (l) => { l.unitA = v.trim(); }),
+            onChange: (v) => ctx.editLine(line.id, (l) => { l.unitUpper = v.trim(); }),
           }),
           textRow({
-            label: 'and on the other', value: line.unitB, placeholder: 'e.g. Campito Fm',
+            label: 'Lower unit', value: line.unitLower, placeholder: 'e.g. Campito Fm',
             list: known.length ? 'field-unit-names' : null,
-            onChange: (v) => ctx.editLine(line.id, (l) => { l.unitB = v.trim(); }),
+            onChange: (v) => ctx.editLine(line.id, (l) => { l.unitLower = v.trim(); }),
           }),
         ]));
+        box.appendChild(el('div', { class: 'ctl-hint standalone', text:
+          'Which unit sits on top of the other in the column — the younger one where the beds are the right way up, whatever the ground does. Naming them this way is what lets a thickness be read between two contacts, and what recognises the same contact again on the far side of a fault.' }));
         if (known.length) {
           box.appendChild(el('datalist', { id: 'field-unit-names' },
             known.map((u) => el('option', { value: u.name }))));

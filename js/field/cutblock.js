@@ -64,7 +64,7 @@ export function projectNotes(doc, g, ground) {
     if (pts.length < 2) continue;
     lines.push({
       id: ln.id, name: ln.name || '', kind: ln.kind, pts,
-      unitA: ln.unitA || '', unitB: ln.unitB || '',
+      unitUpper: ln.unitUpper || '', unitLower: ln.unitLower || '',
       certainty: ln.certainty,
       use: ln.kind !== 'traverse',
     });
@@ -86,7 +86,7 @@ export function projectNotes(doc, g, ground) {
  * of a contact, because a column of "unit 1, unit 2" helps nobody who has just
  * spent two days calling it the Poleta Formation.
  */
-export function columnFor(column, fieldDoc) {
+export function columnFor(column, fieldDoc, warnings = []) {
   const known = new Map(
     (fieldDoc.units || []).map((u) => [String(u.name || '').trim().toLowerCase(), u]),
   );
@@ -94,24 +94,69 @@ export function columnFor(column, fieldDoc) {
   const layers = [];
   const named = [];
 
-  // Walk the contacts youngest first; the unit between two of them is the one
-  // both of them touch.
+  // Contacts come in shallowest first, which is youngest first. The unit
+  // between two of them is the one below the upper contact — and it is also
+  // the one above the lower contact, so the two names have to agree. When they
+  // do not, the column the student recorded does not join up, and that is a
+  // mapping error worth surfacing rather than papering over.
   const cs = column.contacts;
+  const disagree = [];
+  // Junctions where both sides actually carry a name. A contact with its units
+  // left blank says nothing about the one above it, and must neither count as
+  // an error nor dilute the test below.
+  let comparable = 0;
   for (let i = 0; i < cs.length - 1; i++) {
-    const thickness = Math.max(5, cs[i + 1].depth - cs[i].depth);
-    const name = sharedUnit(cs[i], cs[i + 1]);
-    named.push({ name, thickness, measured: true });
+    const above = cs[i];
+    const below = cs[i + 1];
+    const fromAbove = (above.lower || '').trim();
+    const fromBelow = (below.upper || '').trim();
+    if (fromAbove && fromBelow) {
+      comparable++;
+      if (fromAbove.toLowerCase() !== fromBelow.toLowerCase()) {
+        disagree.push({ above, below, fromAbove, fromBelow });
+      }
+    }
+    named.push({
+      name: fromAbove || fromBelow,
+      thickness: Math.max(5, below.depth - above.depth),
+      measured: true,
+    });
+  }
+
+  // Every junction disagreeing is not many errors, it is one: the pairs are
+  // all the right way round relative to each other and the wrong way round
+  // relative to the ground. Testing whether swapping them all would fix it
+  // turns a hunt through every contact into a single answerable question.
+  const swapFixes = comparable > 0 && disagree.length === comparable
+    && cs.slice(0, -1).every((c, i) => {
+      const a = (c.upper || '').trim().toLowerCase();
+      const b = (cs[i + 1].lower || '').trim().toLowerCase();
+      return !a || !b || a === b;
+    });
+
+  if (swapFixes) {
+    warnings.push(
+      `Every contact whose units can be checked has them the other way up from the order they crop out in, and swapping upper and lower on all of them would make the column join up. That is what a notebook looks like when the pair was recorded as "one side and the other": the names are right, the order is not.`,
+    );
+  } else {
+    for (const d of disagree) {
+      warnings.push(
+        `Your contacts do not join up: "${d.above.name}" has ${d.fromAbove} beneath it, but the next contact down, "${d.below.name}", has ${d.fromBelow} above it. One of the two pairs is the wrong way round, or a contact between them has not been mapped.`,
+      );
+    }
   }
 
   // A roof and a floor, so the measured units are not left hanging in nothing.
   const typical = named.length
     ? named.reduce((a, u) => a + u.thickness, 0) / named.length
     : 200;
-  const roof = { name: topUnit(cs[0]), thickness: Math.round(typical), measured: false };
-  const floor = {
-    name: bottomUnit(cs[cs.length - 1]), thickness: Math.round(typical), measured: false,
-  };
-  const all = cs.length ? [roof, ...named, floor] : [];
+  const all = cs.length
+    ? [
+      { name: (cs[0].upper || '').trim(), thickness: Math.round(typical), measured: false },
+      ...named,
+      { name: (cs[cs.length - 1].lower || '').trim(), thickness: Math.round(typical), measured: false },
+    ]
+    : [];
 
   all.forEach((u, i) => {
     const hit = known.get(String(u.name || '').trim().toLowerCase());
@@ -124,25 +169,6 @@ export function columnFor(column, fieldDoc) {
   });
 
   return { layers, units: all };
-}
-
-/** The unit two neighbouring contacts share — the one that lies between them. */
-function sharedUnit(a, b) {
-  const A = [a.unitA, a.unitB].filter(Boolean).map((s) => s.trim());
-  const B = [b.unitA, b.unitB].filter(Boolean).map((s) => s.trim());
-  const both = A.find((n) => B.some((m) => m.toLowerCase() === n.toLowerCase()));
-  return both || '';
-}
-
-function topUnit(c) {
-  if (!c) return '';
-  // Of the two units a contact separates, the one that is NOT shared downward.
-  return (c.unitA || c.unitB || '').trim();
-}
-
-function bottomUnit(c) {
-  if (!c) return '';
-  return (c.unitB || c.unitA || '').trim();
 }
 
 /**
@@ -173,7 +199,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     );
   }
   const column = fit.events.length ? columnFrom(fit.events, notes) : { contacts: [], units: [] };
-  const built = columnFor(column, fieldDoc);
+  const built = columnFor(column, fieldDoc, fit.warnings);
 
   const doc = defaultDocument();
   doc.name = name || fieldDoc.name || 'Field area';
@@ -225,7 +251,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     })),
     lines: notes.lines.map((l) => ({
       id: l.id, name: l.name, kind: l.kind, certainty: l.certainty,
-      unitA: l.unitA, unitB: l.unitB,
+      unitUpper: l.unitUpper, unitLower: l.unitLower,
       // Thinned. A contact walked with a GPS on every second is a thousand
       // points that draw the same line as eighty. Height travels with each
       // point for the same reason a station's does: a contact is a surface of
@@ -361,7 +387,7 @@ export function surveyExtent(fieldDoc, bbox) {
     if (!inside) continue;
     if (ln.kind === 'contact' || ln.kind === 'unconformity') {
       lines.contact++;
-      if (!String(ln.unitA || '').trim() || !String(ln.unitB || '').trim()) lines.unnamed++;
+      if (!String(ln.unitUpper || '').trim() || !String(ln.unitLower || '').trim()) lines.unnamed++;
     } else if (ln.kind === 'fault') lines.fault++;
     else lines.other++;
   }

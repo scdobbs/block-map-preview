@@ -351,7 +351,7 @@ map draws it:
 That distinction is most of what makes a map honest. A student who cannot draw
 an inferred contact will either not draw it or draw it as fact, and both are
 worse than a dashed line. Faults are drawn heavier and in red, the way a map
-prints them, and a contact can record the unit on each side.
+prints them, and a contact records the unit above it and the unit below it.
 
 Deleting a line asks first, and says what it is about to lose — its name, how
 many points, how far it runs. So do deleting a station and removing a unit.
@@ -411,11 +411,22 @@ something says those two traces are the *same* contact, each is internally
 consistent whatever the fault did — so the offset is unconstrained and the fit
 will happily report a confident wrong number.
 
-What says so is already in the notebook: **the units on either side**. A contact
-with sandstone above and shale below is that contact wherever it crops out, on
-either side of any fault. So filling in `unitA` and `unitB` is not paperwork,
-it is the measurement that makes the throw solvable — and the app says so when
-it has to refuse.
+What says so is already in the notebook: **the upper unit and the lower unit**.
+A contact with sandstone above and shale below is that contact wherever it crops
+out, on either side of any fault. So naming the two is not paperwork, it is the
+measurement that makes the throw solvable — and the app says so when it has to
+refuse.
+
+They are recorded as **upper** and **lower** rather than as one side and the
+other, because a pair with no order in it cannot be used for anything. The
+order is what gives a thickness between two contacts, what recognises the same
+contact again across a fault, and what tells "A over B" from "B over A" on an
+overturned limb. Upper means higher in the column — the younger of the two
+where the beds are the right way up — whatever the ground happens to do.
+
+It also lets the column be checked. The unit beneath one contact is the unit
+above the next one down, so the two names have to agree; when they do not, the
+mapping does not join up and the app says which pair disagrees.
 
 ### Where it says it cannot answer
 
