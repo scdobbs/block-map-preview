@@ -150,6 +150,15 @@ export const TAB_ICONS = {
     svg('path', { d: 'M9 4 V17.5 M15 6.5 V20', class: 'tabicon-line' }),
   ]),
 
+  // The block diagram itself, in the oblique view the app draws it in: the
+  // map face on top, and one bed wrapping the two cut walls — which is the
+  // thing this tab makes, and the one silhouette no other tab has.
+  block: tab(() => [
+    svg('path', { d: 'M12 3 L21 8 L21 16 L12 21 L3 16 L3 8 Z', class: 'tabicon-line' }),
+    svg('path', { d: 'M3 8 L12 13 L21 8 M12 13 V21', class: 'tabicon-line' }),
+    svg('path', { d: 'M3 11.6 L12 16.6 L21 11.6', class: 'tabicon-line' }),
+  ]),
+
   // Sliders.
   setup: tab(() => [
     svg('path', { d: 'M4 8 H20 M4 16 H20', class: 'tabicon-line' }),
