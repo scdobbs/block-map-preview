@@ -1203,3 +1203,9 @@ html, body {
    away when the clinometer is open. Whichever one is being used gets the
    screen. */
 .map-full .sheet { display: none; }
+
+.mf-target {
+  flex: 1 1 auto; text-align: center; min-width: 0;
+  font-size: 12px; font-weight: 650; color: var(--accent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

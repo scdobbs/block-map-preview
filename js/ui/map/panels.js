@@ -464,7 +464,9 @@ function stationEditor(ctx, st) {
   }));
 
   const linear = isLinearFeature(st.feature);
-  if (hasAttitude(st)) {
+  const has = hasAttitude(st);
+
+  if (has) {
     const azKey = linear ? 'trend' : 'strike';
     const incKey = linear ? 'plunge' : 'dip';
     const dial = compassDial({
@@ -476,17 +478,49 @@ function stationEditor(ctx, st) {
       onChange: (v) => { dial.setDip(v); edit((s) => { s[incKey] = v; }, `st-inc:${st.id}`); },
     });
     box.append(dial, prot);
+  } else {
+    // A station taken without a reading is not finished, and it should not be
+    // a dead end. Plenty of them are deliberate at the time — a covered
+    // contact, float, somewhere you could not reach the surface — and plenty
+    // become measurable later, on the way back down or from the far side.
+    box.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'No attitude recorded here yet.' }));
+    box.appendChild(el('div', { class: 'row-actions' }, [
+      el('button', {
+        class: 'btn small', type: 'button', text: 'Type one in',
+        onclick: () => ctx.addAttitude(st.id),
+      }),
+      el('button', {
+        class: 'btn small primary', type: 'button', text: 'Read it now',
+        title: 'Take a reading with the phone and put it on this station',
+        onclick: () => ctx.openMeasure({ target: st.id }),
+      }),
+    ]));
   }
 
-  // Only features of the same kind are offered. Correcting bedding to a joint
-  // is an everyday mis-tap; turning a plane into a line is not a correction,
-  // it is a different measurement, and quietly blanking the numbers to allow
-  // it would lose the reading.
+  // While there is no reading, the station is free to become either kind.
+  // Once there is one, only features of the same kind are offered: correcting
+  // bedding to a joint is an everyday mis-tap, but turning a plane into a line
+  // is a different measurement, and quietly blanking the numbers to allow it
+  // would lose the reading.
+  if (!has) {
+    box.appendChild(chipsRow({
+      label: 'Measuring',
+      value: linear ? 'linear' : 'planar',
+      options: [
+        { id: 'planar', label: 'A plane' },
+        { id: 'linear', label: 'A line' },
+      ],
+      onChange: (v) => ctx.setStationFeature(st.id,
+        v === 'linear' ? 'lineation' : 'bedding'),
+    }));
+  }
+
   box.appendChild(chipsRow({
     label: 'Feature', value: st.feature,
-    options: (linear ? LINEAR_FEATURES : PLANAR_FEATURES)
+    options: (has ? (linear ? LINEAR_FEATURES : PLANAR_FEATURES) : FEATURES)
       .map((f) => ({ id: f.id, label: f.label, hint: f.hint })),
-    onChange: (v) => edit((s) => { s.feature = v; }),
+    onChange: (v) => (has ? edit((s) => { s.feature = v; }) : ctx.setStationFeature(st.id, v)),
   }));
 
   const known = knownUnitNames(doc);
@@ -528,6 +562,11 @@ function stationEditor(ctx, st) {
     el('button', { class: 'btn small', type: 'button', text: 'Center map', onclick: () => ctx.goToStation(st.id) }),
     el('button', { class: 'btn small', type: 'button', text: 'Move here', onclick: () => ctx.moveStationToFix(st.id),
       title: 'Put this station at your current position' }),
+    hasAttitude(st) ? el('button', {
+      class: 'btn small', type: 'button', text: 'Clear reading',
+      title: 'Keep the station, drop the attitude',
+      onclick: () => ctx.clearAttitude(st.id),
+    }) : null,
     el('button', { class: 'btn small danger', type: 'button', text: 'Delete', onclick: () => ctx.deleteStation(st.id) }),
   ]));
 

@@ -279,6 +279,17 @@ tap and it keeps a joint from quietly joining a fold-axis fit. Name the unit by
 tapping one you have used before or typing a new one; a name typed once becomes
 a tap thereafter, and a course can set its units up in advance on Setup.
 
+A station recorded **without an attitude is not finished, and is not a dead
+end**. Plenty are deliberate at the time — a covered contact, float, a surface
+you could not reach — and plenty become measurable later, from the far side or
+on the way back down. Open one in **Stations** and it offers *Type one in* or
+*Read it now*; the second opens the clinometer pointed at that station, so
+holding a reading updates it instead of making a new one. Until there is a
+reading it is free to become either a plane or a line, and the symbol on the
+map changes from a bare ring to a strike-and-dip mark or an arrow as soon as
+there is one. Filling one in needs no GPS fix — the place was recorded when you
+were standing there, and only the reading is outstanding.
+
 **Stations** lists what you have, nearest reading first with its distance from
 you, and exports to **GeoJSON** (opens in QGIS or ArcGIS, carrying strike, dip
 and dip direction as fields), **CSV**, or a full **Backup**.

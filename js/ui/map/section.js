@@ -43,6 +43,10 @@ export class MapSection {
     this._started = false;
     this._clinoStarted = false;
     this.measureNode = null;
+    // When set, the clinometer writes into this station instead of making a
+    // new one — the way you fill in an attitude you could not take at the time.
+    this._measureTarget = null;
+    this._featureBeforeTarget = null;
     // Remembered per geometry, so flipping Plane/Line and back returns to the
     // feature that was being measured rather than resetting to the first one.
     this._lastFeature = { planar: 'bedding', linear: 'lineation' };
@@ -393,10 +397,16 @@ export class MapSection {
     const d = this.draft;
     const g = this.geo.state;
     const s = this.store.doc.settings;
-    if (g.status === 'denied') return 'Location is blocked, so a station has nowhere to go.';
-    if (!g.fix) return 'Waiting for a position.';
-    if (g.fix.accuracy > s.minAccuracy) {
-      return `The fix is ± ${Math.round(g.fix.accuracy)} m and the limit is ${s.minAccuracy} m. Wait for it to tighten, or change the limit on Setup.`;
+    // Filling in an attitude on a station that already exists needs no fix at
+    // all — the place was recorded when it was visited, and only the reading
+    // is outstanding. Gating this on the GPS would make it impossible to do
+    // the one thing it is for: finishing a station indoors, or in a canyon.
+    if (!this._measureTarget) {
+      if (g.status === 'denied') return 'Location is blocked, so a station has nowhere to go.';
+      if (!g.fix) return 'Waiting for a position.';
+      if (g.fix.accuracy > s.minAccuracy) {
+        return `The fix is ± ${Math.round(g.fix.accuracy)} m and the limit is ${s.minAccuracy} m. Wait for it to tighten, or change the limit on Setup.`;
+      }
     }
     if (d.noAttitude) return null;
     if (d.source === 'manual') return null;
@@ -461,7 +471,26 @@ export class MapSection {
   // The full-screen clinometer
   // -------------------------------------------------------------------------
 
-  openMeasure() {
+  openMeasure({ target = null } = {}) {
+    this._measureTarget = target;
+    // Open on what the station already says it is. Coming from a station
+    // marked as a slickenline and landing on whatever the last new reading
+    // happened to be would quietly record the wrong kind of measurement.
+    if (target) {
+      const st = this.store.doc.stations.find((x) => x.id === target);
+      if (st) {
+        // Borrowed, not taken. The draft is what you are about to record
+        // next, and going back to finish an old station should not silently
+        // change that.
+        this._featureBeforeTarget = this.draft.feature;
+        this.draft.feature = st.feature;
+        this._lastFeature[isLinearFeature(st.feature) ? 'linear' : 'planar'] = st.feature;
+        this.draft.held = false;
+        this.draft.strike = this.draft.dip = this.draft.trend = this.draft.plunge = null;
+        this.draft.scatter = null;
+        this.clino.reset();
+      }
+    }
     if (this.measureNode) return;
     // Nothing can be measured until the sensor has been allowed to run, and
     // asking here means the prompt arrives when the intent is obvious.
@@ -472,9 +501,17 @@ export class MapSection {
   }
 
   closeMeasure() {
+    if (this._measureTarget && this._featureBeforeTarget) {
+      this.draft.feature = this._featureBeforeTarget;
+    }
+    this._featureBeforeTarget = null;
+    this._measureTarget = null;
     if (!this.measureNode) return;
     this.measureNode.remove();
     this.measureNode = null;
+    // When set, the clinometer writes into this station instead of making a
+    // new one — the way you fill in an attitude you could not take at the time.
+    this._measureTarget = null;
     this.host.root.classList.remove('measuring');
     this.rebuild();
   }
@@ -493,14 +530,83 @@ export class MapSection {
       recordStation: () => this.recordStation(),
       setGeometry: (k) => this.setGeometry(k),
       setFeature: (id) => this.setFeature(id),
+      measureTarget: () => this.measureTarget(),
       close: () => this.closeMeasure(),
     };
   }
 
   recordStation() {
     if (this.blockingReason()) return;
+    if (this._measureTarget) { this.applyReadingTo(this._measureTarget); return; }
     const fix = this.geo.state.fix;
     this.placeStation(fix.lon, fix.lat, { fix });
+  }
+
+  /** Write the reading in hand onto a station that already exists. */
+  applyReadingTo(id) {
+    const d = this.draft;
+    const c = this.clino.state;
+    const linear = isLinearFeature(d.feature);
+    const strike = d.held ? d.strike : c.strike;
+    const dip = d.held ? d.dip : c.dip;
+    const trend = d.held ? d.trend : c.trend;
+    const plunge = d.held ? d.plunge : c.plunge;
+
+    this.store.edit((doc) => {
+      const st = doc.stations.find((x) => x.id === id);
+      if (!st) return;
+      st.feature = d.feature;
+      st.source = 'compass';
+      st.scatter = d.held ? d.scatter : (linear ? c.lineScatter : c.scatter);
+      st.declination = doc.settings.declination || 0;
+      if (linear) {
+        st.trend = trend; st.plunge = plunge;
+        st.strike = null; st.dip = null;
+      } else {
+        st.strike = strike; st.dip = dip;
+        st.trend = null; st.plunge = null;
+      }
+    }, { structural: true });
+
+    d.held = false;
+    d.scatter = null;
+    d.strike = d.dip = d.trend = d.plunge = null;
+    this.clino.reset();
+    this.selectedStationId = id;
+    this.closeMeasure();
+  }
+
+  /**
+   * Give a station somewhere to put an attitude it was recorded without.
+   *
+   * Seeded flat rather than left null, because the controls only appear once
+   * there is a value for them to hold, and a dial at zero you then drag is a
+   * clearer starting point than an empty one.
+   */
+  addAttitude(id) {
+    this.store.edit((doc) => {
+      const st = doc.stations.find((x) => x.id === id);
+      if (!st) return;
+      if (isLinearFeature(st.feature)) { st.trend = 0; st.plunge = 0; }
+      else { st.strike = 0; st.dip = 0; }
+      st.source = 'manual';
+      st.certainty = 'estimated';
+    }, { structural: true });
+  }
+
+  /** Take the attitude off again, back to a station with a place and no reading. */
+  clearAttitude(id) {
+    this.store.edit((doc) => {
+      const st = doc.stations.find((x) => x.id === id);
+      if (!st) return;
+      st.strike = st.dip = st.trend = st.plunge = st.scatter = null;
+    }, { structural: true });
+  }
+
+  /** Which station the clinometer is currently filling in, if any. */
+  measureTarget() {
+    if (!this._measureTarget) return null;
+    return this.store.doc.stations.find((s) => s.id === this._measureTarget) || null;
   }
 
   placeStation(lon, lat, { fix = null, source = null, bySight = false } = {}) {
@@ -572,6 +678,23 @@ export class MapSection {
     });
 
     this.rebuild();
+  }
+
+  /**
+   * Change what a station is a reading of.
+   *
+   * Moving between a plane and a line is only allowed while there is no
+   * reading to lose; the editor offers it on that basis, and this keeps the
+   * unused pair null either way.
+   */
+  setStationFeature(id, featureId) {
+    this.store.edit((doc) => {
+      const st = doc.stations.find((x) => x.id === id);
+      if (!st) return;
+      st.feature = featureId;
+      if (isLinearFeature(featureId)) { st.strike = null; st.dip = null; }
+      else { st.trend = null; st.plunge = null; }
+    }, { structural: true });
   }
 
   editStation(id, fn, coalesce) {
@@ -866,7 +989,10 @@ export class MapSection {
       clinoStarted: () => this.clinoStarted(),
       startClino: () => this.startClino(),
       captureCompass: () => this.captureCompass(),
-      openMeasure: () => this.openMeasure(),
+      openMeasure: (opts) => this.openMeasure(opts),
+      addAttitude: (id) => this.addAttitude(id),
+      clearAttitude: (id) => this.clearAttitude(id),
+      setStationFeature: (id, f) => this.setStationFeature(id, f),
       measureOpen: () => this.measureOpen(),
       setFeature: (id) => this.setFeature(id),
       setGeometry: (k) => this.setGeometry(k),

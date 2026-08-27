@@ -40,8 +40,13 @@ export function measureView(ctx) {
     makeMode('linear', 'Line'),
   ]);
 
+  // When the reading is destined for a station that already exists, say so —
+  // otherwise the only difference on screen is the wording of one button.
+  const forStation = el('div', { class: 'mf-target' });
+
   node.appendChild(el('div', { class: 'mf-head' }, [
     modeSwitch,
+    forStation,
     el('button', {
       class: 'mf-close', type: 'button', 'aria-label': 'Close',
       onclick: () => ctx.close(),
@@ -221,6 +226,10 @@ export function measureView(ctx) {
     holdBtn.textContent = held ? 'Take a new reading' : 'Hold the reading';
     holdBtn.classList.toggle('primary', !held);
 
+    const target = ctx.measureTarget?.() || null;
+    forStation.textContent = target ? `→ station ${target.name || '—'}` : '';
+    saveBtn.textContent = target ? `Update station ${target.name || ''}`.trim() : 'Save station';
+
     const reason = ctx.blockingReason();
     saveBtn.disabled = !!reason;
     why.textContent = reason || '';
@@ -230,9 +239,11 @@ export function measureView(ctx) {
     const fix = ctx.geoState().fix;
     const elev = ctx.groundElevation();
     foot.textContent = [
-      fix ? `± ${Math.round(fix.accuracy)} m` : 'no fix',
-      fix ? `${Math.round(fixAge(fix))}s old` : null,
-      elev == null ? null : `${Math.round(elev)} m`,
+      // A reading going onto an existing station does not need a fix, and
+      // showing one would imply it was about to be used.
+      target ? 'filling in an existing station' : (fix ? `± ${Math.round(fix.accuracy)} m` : 'no fix'),
+      target ? null : (fix ? `${Math.round(fixAge(fix))}s old` : null),
+      target ? null : (elev == null ? null : `${Math.round(elev)} m`),
       `declination ${formatDeclination(ctx.declination())}`,
       s.needsCalibration ? 'compass needs calibrating' : null,
     ].filter(Boolean).join('  ·  ');
