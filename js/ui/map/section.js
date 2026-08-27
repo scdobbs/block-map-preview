@@ -10,7 +10,8 @@ import { MapCanvas } from './canvas.js';
 import { measurePanel, stationsPanel, linesPanel, areasPanel, setupPanel } from './panels.js';
 import { measureView } from './measureView.js';
 import { niceScaleBar } from './symbols.js';
-import { FieldStore, loadFieldDoc } from '../../field/store.js';
+import { FieldStore, loadWorkspace, readProject, writeProject, writeIndex,
+  removeProject, projectMeta } from '../../field/store.js';
 import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea,
   nextStationName, toGeoJSON, toCSV, toKML, toLinesCSV, isLinearFeature, makeLine,
   lineKind, lineIsDrawable, lineLength, formatAttitude } from '../../field/model.js';
@@ -60,6 +61,8 @@ export class MapSection {
 
     this.draft = freshDraft();
 
+    this.projects = [];
+    this.projectId = null;
     this.store = new FieldStore(defaultFieldDocument());
     this.clino = new Clinometer({
       getDeclination: () => this.store.doc.settings.declination || 0,
@@ -71,12 +74,12 @@ export class MapSection {
 
     // The document loads asynchronously, so the map opens on defaults and
     // then jumps to wherever the notes left off.
-    loadFieldDoc().then((doc) => {
-      this.store.replace(doc, true);
-      this.store.undoStack.length = 0;
+    loadWorkspace().then(({ index, id, doc }) => {
+      this.projects = index.projects;
+      this.projectId = id;
+      this.store.projectId = id;
+      this._adoptDocument(doc);
       this.ready = true;
-      this.map.setView(doc.view.lon, doc.view.lat, doc.view.zoom);
-      this._syncMap();
       this.host.renderSectionPanel();
     });
 
@@ -165,6 +168,8 @@ export class MapSection {
   }
 
   deactivate() {
+    clearTimeout(this._indexTimer);
+    if (this.ready) this.store.flush().then(() => this._writeIndex());
     this.closeMeasure();
     // The block section has no full-screen mode and must never inherit one.
     this.host.root.classList.remove('map-full');
@@ -180,6 +185,154 @@ export class MapSection {
   doc() { return this.store.doc; }
 
   // -------------------------------------------------------------------------
+  // Projects
+  // -------------------------------------------------------------------------
+
+  /** Put a freshly loaded document on screen, with nothing carried over. */
+  _adoptDocument(doc) {
+    this.selectedStationId = null;
+    this.selectedLineId = null;
+    this.drawing = null;
+    this.map.draftLine = null;
+    this.map.activeVertex = null;
+    this.map.selectedLineId = null;
+    this.map.purge();
+    this.closeMeasure();
+    if (this.placeMode) this.togglePlace();
+    this.store.replace(doc, true);
+    // A project you have just opened has nothing to undo back into.
+    this.store.undoStack.length = 0;
+    this.store.redoStack.length = 0;
+    this.map.setView(doc.view.lon, doc.view.lat, doc.view.zoom);
+    this._syncMap();
+    this._syncDrawBar();
+  }
+
+  projectList() { return this.projects; }
+
+  currentProjectId() { return this.projectId; }
+
+  async switchProject(id) {
+    if (!id || id === this.projectId) return;
+    // The outgoing project is written and its counts recorded before anything
+    // points at the incoming one.
+    await this.store.flush();
+    await this._writeIndex();
+    const doc = await readProject(id);
+    if (!doc) return;
+    this.projectId = id;
+    this.store.projectId = id;
+    this._adoptDocument(doc);
+    await this._writeIndex({ currentId: id });
+    this.rebuild();
+  }
+
+  /**
+   * Start a new project.
+   *
+   * The declination and the accuracy limit come across, because they describe
+   * the phone and roughly where on Earth it is rather than the work; the map
+   * areas and every observation do not.
+   */
+  async newProject(name) {
+    await this.store.flush();
+    await this._writeIndex();
+    const prev = this.store.doc;
+    const doc = defaultFieldDocument();
+    doc.name = name || 'New project';
+    doc.settings = {
+      ...doc.settings,
+      declination: prev.settings.declination,
+      declinationSet: prev.settings.declinationSet,
+      declinationSource: prev.settings.declinationSource,
+      minAccuracy: prev.settings.minAccuracy,
+      baseLayer: prev.settings.baseLayer,
+    };
+    doc.view = { ...prev.view };
+    const id = newId('pr');
+    await writeProject(id, doc);
+    this.projects = [...this.projects, projectMeta(id, doc)];
+    this.projectId = id;
+    this.store.projectId = id;
+    this._adoptDocument(doc);
+    await this._writeIndex({ currentId: id });
+    this.rebuild();
+  }
+
+  renameProject(name) {
+    this.setDocName(name);
+    this._writeIndex();
+    this.rebuild();
+  }
+
+  /**
+   * Delete a project, and the map tiles only it was using.
+   *
+   * Tiles are shared across projects — two field areas can overlap, and a
+   * download is a fact about the device rather than about the work. So the
+   * areas of every OTHER project are gathered first and anything they still
+   * need is kept. Skipping that would punch holes in a map somebody else is
+   * about to walk into.
+   */
+  async deleteProject(id) {
+    const meta = this.projects.find((p) => p.id === id);
+    if (!meta || this.projects.length < 2) return;
+    const doomed = await readProject(id);
+    if (!confirm(`Delete the project "${meta.name}"?\n\n`
+      + `${plural(meta.stations, 'station')}, ${plural(meta.lines, 'line')}. `
+      + `Map areas only this project was using are deleted too; anything another project needs is kept.\n\n`
+      + 'This cannot be undone. Export a backup first if you want one.')) return;
+
+    const keep = [];
+    for (const p of this.projects) {
+      if (p.id === id) continue;
+      const other = await readProject(p.id);
+      if (other) keep.push(...(other.areas || []));
+    }
+    for (const area of doomed?.areas || []) await deleteArea(area, keep);
+
+    await removeProject(id);
+    this.projects = this.projects.filter((p) => p.id !== id);
+
+    if (this.projectId === id) {
+      const next = this.projects[0];
+      const doc = await readProject(next.id);
+      this.projectId = next.id;
+      this.store.projectId = next.id;
+      this._adoptDocument(doc || defaultFieldDocument());
+      await this._writeIndex({ currentId: next.id });
+    } else {
+      await this._writeIndex({});
+    }
+    this.rebuild();
+  }
+
+  /**
+   * The project list is written from here and nowhere else.
+   *
+   * Two writers on one key is how a list ends up disagreeing with the
+   * documents it describes, so the store no longer touches it. The open
+   * project's counts are refreshed from the live document on the way past,
+   * which is the only one that can have changed since the last write.
+   */
+  async _writeIndex(patch = {}) {
+    const i = this.projects.findIndex((p) => p.id === this.projectId);
+    if (i >= 0) {
+      this.projects[i] = {
+        ...this.projects[i],
+        ...projectMeta(this.projectId, this.store.doc),
+      };
+    }
+    await writeIndex({ currentId: this.projectId, projects: this.projects, ...patch });
+  }
+
+  /** Keep the counts current without a write per keystroke. */
+  _scheduleIndex() {
+    clearTimeout(this._indexTimer);
+    this._indexTimer = setTimeout(() => { if (this.ready) this._writeIndex(); }, 1200);
+  }
+
+  // -------------------------------------------------------------------------
   // Reacting to change
   // -------------------------------------------------------------------------
 
@@ -193,7 +346,7 @@ export class MapSection {
     if (this.selectedLineId && !doc.lines.some((l) => l.id === this.selectedLineId)) {
       this.selectedLineId = null;
     }
-    if (info.structural) this.host.renderSectionPanel();
+    if (info.structural) { this._scheduleIndex(); this.host.renderSectionPanel(); }
     else this._refreshPanel();
   }
 
@@ -1269,6 +1422,12 @@ export class MapSection {
 
       setSetting: (p) => this.setSetting(p),
       setDocName: (n) => this.setDocName(n),
+      projects: () => this.projectList(),
+      currentProjectId: () => this.currentProjectId(),
+      switchProject: (id) => this.switchProject(id),
+      newProject: (n) => this.newProject(n),
+      renameProject: (n) => this.renameProject(n),
+      deleteProject: (id) => this.deleteProject(id),
       fetchDeclination: () => this.fetchDeclination(),
       addUnit: (u) => this.addUnit(u),
       editUnit: (id, fn) => this.editUnit(id, fn),
@@ -1296,6 +1455,14 @@ export class MapSection {
 }
 
 // ---------------------------------------------------------------------------
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+let projectCounter = 0;
+function newId(prefix) {
+  projectCounter += 1;
+  return `${prefix}_${Date.now().toString(36)}${projectCounter.toString(36)}`;
+}
 
 function freshDraft() {
   return {

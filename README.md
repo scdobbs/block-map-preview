@@ -189,6 +189,25 @@ halves share the rock list and the conventions for strike and dip, and nothing
 else. A block is a thing you invent to understand a structure. This is a record
 of a place that exists.
 
+## Projects
+
+Two field areas have nothing to say to each other, and a notebook that mixes
+them is one nobody can hand in. **Setup → Project** keeps them apart: each
+project holds its own stations, lines, units, downloaded map areas, declination
+and remembered map view, and nothing crosses between them.
+
+Switching is one tap, and the map comes back where that project left it. A new
+project inherits the declination, the accuracy limit and the base layer —
+which describe the phone and roughly where on Earth it is — and nothing else.
+
+Deleting a project deletes the map tiles only it was using: the areas of every
+other project are gathered first and anything they still need is kept, because
+two field areas can overlap and a download is a fact about the device rather
+than about the work. The last project cannot be deleted.
+
+A notebook from before projects existed is carried into the first one rather
+than stranded.
+
 ## Before you leave, while you still have signal
 
 **Areas** → *Choose an area to download*. The box starts on whatever is on

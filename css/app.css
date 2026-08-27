@@ -1236,3 +1236,11 @@ html, body {
   flex: 0 0 auto; width: 26px; height: 4px; border-radius: 2px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .18);
 }
+
+/* Which project is open, and what is in the others. */
+.project-card .card-main:disabled { opacity: 1; cursor: default; }
+.project-dot {
+  flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--ink-faint); background: none;
+}
+.project-dot.on { border-color: var(--accent); background: var(--accent); }

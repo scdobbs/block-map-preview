@@ -11,12 +11,16 @@
 // database at all, which in practice means private browsing. Degraded is
 // better than refusing to take notes.
 
-import { defaultFieldDocument, migrateFieldDoc } from './model.js';
+import { defaultFieldDocument, migrateFieldDoc, newFieldId } from './model.js';
 
 const DB_NAME = 'blockdiagram-field';
 const DB_VERSION = 1;
 const STORE = 'documents';
-const DOC_KEY = 'current';
+// The single document the app used to have. Still read once, to carry an
+// existing notebook into the first project rather than stranding it.
+const LEGACY_KEY = 'current';
+const INDEX_KEY = 'projects';
+const docKey = (id) => `doc:${id}`;
 const FALLBACK_KEY = 'blockdiagram.field.v1';
 const COALESCE_MS = 900;
 const MAX_UNDO = 60;
@@ -81,17 +85,87 @@ async function idbPut(key, value) {
 
 // ---------------------------------------------------------------------------
 
-/** Read the saved notes, or a fresh document. Never throws. */
-export async function loadFieldDoc() {
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+// A project is a whole field document — its own stations, lines, units, map
+// areas, declination and remembered view. Two field areas have nothing to say
+// to each other, and a notebook that mixes them is one nobody can hand in.
+//
+// Keeping a project as a complete document rather than as a tag on every
+// record means nothing has to be filtered anywhere: the app goes on working
+// with one document, and switching projects swaps which one that is.
+
+export function projectMeta(id, doc) {
+  return {
+    id,
+    name: doc.name || 'Field notes',
+    stations: (doc.stations || []).length,
+    lines: (doc.lines || []).length,
+    areas: (doc.areas || []).length,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Open the workspace: the list of projects and whichever one was last open.
+ *
+ * Never throws, and never comes back with nothing — a first run, a failed
+ * database and an upgrade from the single-document version all end up with one
+ * project and a document in it.
+ */
+export async function loadWorkspace() {
+  let index = null;
+  try { index = await idbGet(INDEX_KEY); } catch { /* fall through */ }
+
+  if (!index || !Array.isArray(index.projects) || !index.projects.length) {
+    let legacy = null;
+    try { legacy = await idbGet(LEGACY_KEY); } catch { /* fall through */ }
+    if (!legacy) {
+      try {
+        const raw = localStorage.getItem(FALLBACK_KEY);
+        if (raw) legacy = JSON.parse(raw);
+      } catch { /* fall through */ }
+    }
+    const doc = legacy ? migrateFieldDoc(legacy) : defaultFieldDocument();
+    const id = newFieldId('pr');
+    await idbPut(docKey(id), doc);
+    index = { currentId: id, projects: [projectMeta(id, doc)] };
+    await idbPut(INDEX_KEY, index);
+    return { index, id, doc };
+  }
+
+  // A missing or unreadable current project falls back to the first one
+  // rather than to an empty screen with a list that says otherwise.
+  let id = index.currentId;
+  if (!index.projects.some((p) => p.id === id)) id = index.projects[0].id;
+  let stored = null;
+  try { stored = await idbGet(docKey(id)); } catch { /* fall through */ }
+  return { index, id, doc: migrateFieldDoc(stored || defaultFieldDocument()) };
+}
+
+export async function readProject(id) {
   try {
-    const stored = await idbGet(DOC_KEY);
-    if (stored) return migrateFieldDoc(stored);
-  } catch { /* fall through */ }
-  try {
-    const raw = localStorage.getItem(FALLBACK_KEY);
-    if (raw) return migrateFieldDoc(JSON.parse(raw));
-  } catch { /* fall through */ }
-  return defaultFieldDocument();
+    const stored = await idbGet(docKey(id));
+    return stored ? migrateFieldDoc(stored) : null;
+  } catch { return null; }
+}
+
+export async function writeProject(id, doc) { return idbPut(docKey(id), doc); }
+
+export async function writeIndex(index) { return idbPut(INDEX_KEY, index); }
+
+export async function removeProject(id) {
+  const db = await openDB();
+  if (!db) return false;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(docKey(id));
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch { resolve(false); }
+  });
 }
 
 /**
@@ -100,15 +174,16 @@ export async function loadFieldDoc() {
  * set of bugs.
  */
 export class FieldStore {
-  constructor(doc = defaultFieldDocument()) {
+  constructor(doc = defaultFieldDocument(), projectId = null) {
     this.doc = doc;
+    this.projectId = projectId;
     this.listeners = new Set();
     this.undoStack = [];
     this.redoStack = [];
     this._lastKey = null;
     this._lastAt = 0;
     this._saveTimer = null;
-    this._saving = false;
+    this._saving = null;
     this._dirty = false;
     this.lastSavedAt = null;
     this.saveError = null;
@@ -190,16 +265,32 @@ export class FieldStore {
   }
 
   /**
-   * Writes are serialised. Two overlapping transactions on the same key can
-   * land in either order, and the loser would be the newer note.
+   * Writes are serialised, and each one carries the project it belongs to.
+   *
+   * Two things went wrong here before. `save` returned early when another
+   * write was in flight, which meant `flush` could resolve having written
+   * nothing — so switching projects saved the outgoing one only by luck. And
+   * the project id was read at write time rather than captured with the
+   * snapshot, so a write still in flight when the project changed would land
+   * the old document under the new project's key.
+   *
+   * Now every call returns a promise that resolves when THAT state is on
+   * disk, and the id travels with the data.
    */
-  async save() {
-    if (this._saving) { this._scheduleSave(); return; }
-    this._saving = true;
+  save() {
+    const run = () => this._write();
+    const chained = this._saving ? this._saving.then(run, run) : run();
+    this._saving = chained;
+    chained.finally(() => { if (this._saving === chained) this._saving = null; });
+    return chained;
+  }
+
+  async _write() {
     this._dirty = false;
+    const id = this.projectId;
     const copy = snapshot(this.doc);
     try {
-      const ok = await idbPut(DOC_KEY, copy);
+      const ok = id ? await idbPut(docKey(id), copy) : false;
       if (!ok) localStorage.setItem(FALLBACK_KEY, JSON.stringify(copy));
       this.lastSavedAt = Date.now();
       this.saveError = null;
@@ -208,9 +299,6 @@ export class FieldStore {
       // in the app where a failed write means observations are gone.
       this.saveError = err.message || 'save failed';
       console.warn('field autosave failed', err);
-    } finally {
-      this._saving = false;
-      if (this._dirty) this._scheduleSave();
     }
   }
 

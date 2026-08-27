@@ -949,6 +949,62 @@ export function setupPanel(ctx) {
 
   node.appendChild(head('Setup', 'Set declination before you take a single reading.'));
 
+  // --- projects ------------------------------------------------------------
+  // First, because it decides what everything below applies to. Two field
+  // areas have nothing to say to each other, and a notebook that mixes them is
+  // one nobody can hand in.
+  const projects = ctx.projects();
+  const currentId = ctx.currentProjectId();
+
+  node.appendChild(el('div', { class: 'sub-head', text: `Project · ${projects.length}` }));
+
+  for (const pr of projects) {
+    const on = pr.id === currentId;
+    node.appendChild(el('div', { class: `card project-card ${on ? 'selected' : ''}` }, [
+      el('button', {
+        class: 'card-main', type: 'button', disabled: on,
+        onclick: () => ctx.switchProject(pr.id),
+      }, [
+        el('span', { class: `project-dot ${on ? 'on' : ''}` }),
+        el('span', { class: 'card-text' }, [
+          el('span', { class: 'card-title', text: pr.name || 'Untitled' }),
+          el('span', { class: 'card-sub', text: [
+            `${pr.stations} station${pr.stations === 1 ? '' : 's'}`,
+            `${pr.lines} line${pr.lines === 1 ? '' : 's'}`,
+            pr.areas ? `${pr.areas} area${pr.areas === 1 ? '' : 's'}` : null,
+          ].filter(Boolean).join(' · ') }),
+        ]),
+        on ? el('span', { class: 'pill good', text: 'open' }) : null,
+      ]),
+    ]));
+  }
+
+  node.appendChild(textRow({
+    label: 'Name of this project',
+    value: doc.name,
+    placeholder: 'e.g. Poleta folds, day 2',
+    onChange: (v) => ctx.renameProject(v.trim() || 'Field notes'),
+  }));
+
+  node.appendChild(el('div', { class: 'row-actions wrap' }, [
+    el('button', {
+      class: 'btn', type: 'button', text: 'New project',
+      onclick: () => {
+        const name = prompt('Name the new project', '');
+        if (name != null) ctx.newProject(name.trim() || 'New project');
+      },
+    }),
+    projects.length > 1 ? el('button', {
+      class: 'btn danger', type: 'button', text: 'Delete this project',
+      onclick: () => ctx.deleteProject(currentId),
+    }) : null,
+  ]));
+
+  node.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: projects.length > 1
+      ? 'Each project keeps its own stations, lines, units, downloaded areas and declination. Nothing crosses between them.'
+      : 'A project keeps its own stations, lines, units, downloaded areas and declination. Start a second one for a different field area and the two never mix.' }));
+
   // --- declination ---------------------------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: 'Magnetic declination' }));
 
@@ -1065,18 +1121,15 @@ export function setupPanel(ctx) {
   }));
 
   // --- data ----------------------------------------------------------------
-  node.appendChild(el('div', { class: 'sub-head', text: 'Field notes' }));
-  node.appendChild(textRow({
-    label: 'Name', value: doc.name, placeholder: 'Field notes',
-    onChange: (v) => ctx.setDocName(v.trim() || 'Field notes'),
-  }));
+  node.appendChild(el('div', { class: 'sub-head', text: 'This project’s notes' }));
   node.appendChild(el('div', { class: 'row-actions wrap' }, [
     el('button', { class: 'btn', type: 'button', text: 'Backup', onclick: () => ctx.exportBackup() }),
     el('button', { class: 'btn', type: 'button', text: 'Restore', onclick: () => ctx.importBackup() }),
     el('button', { class: 'btn', type: 'button', text: 'Google Earth', onclick: () => ctx.exportKML() }),
   ]));
   node.appendChild(el('button', {
-    class: 'btn wide danger', type: 'button', text: 'Delete all field notes',
+    class: 'btn wide danger', type: 'button', text: 'Empty this project',
+    title: 'Delete every station and line here, keeping the project and its map areas',
     onclick: () => ctx.clearAll(),
   }));
 
