@@ -291,8 +291,7 @@ there is one. Filling one in needs no GPS fix — the place was recorded when yo
 were standing there, and only the reading is outstanding.
 
 **Stations** lists what you have, nearest reading first with its distance from
-you, and exports to **GeoJSON** (opens in QGIS or ArcGIS, carrying strike, dip
-and dip direction as fields), **CSV**, or a full **Backup**.
+you.
 
 ## Drawing contacts and faults
 
@@ -329,8 +328,25 @@ an inferred contact will either not draw it or draw it as fact, and both are
 worse than a dashed line. Faults are drawn heavier and in red, the way a map
 prints them, and a contact can record the unit on each side.
 
-Lines export as GeoJSON `LineString` features alongside the stations, carrying
-kind, certainty, both unit names and their ground length.
+Deleting a line asks first, and says what it is about to lose — its name, how
+many points, how far it runs. So do deleting a station and removing a unit.
+
+## Getting the work out
+
+Four buttons, on both the Stations and the Lines tab, because they go to
+different places:
+
+| | |
+|---|---|
+| **Google Earth** | KML. Stations as placemarks labelled with their attitude, lines draped over the terrain in their map colors. Double-click it. |
+| **GeoJSON** | Stations as points and lines as LineStrings in one file, for QGIS or ArcGIS. Carries strike, dip and dip direction as fields, so a layer can be symbolised on `strike` directly. |
+| **CSV** | Stations one per row. The Lines tab exports lines instead, each as a WKT `LINESTRING` — which is what QGIS reads when you add a delimited text layer, so a spreadsheet of contacts comes in as real geometry rather than as a table nobody can map. |
+| **Backup** | The whole notebook, and the only one that can be read back in here. |
+
+Attributes go into KML's `ExtendedData` as well as the description bubble, so
+the same file opened in QGIS arrives with real fields rather than a blob of
+HTML. Lines are `clampToGround` and tessellated, so a contact follows the
+ridge it was walked along instead of cutting a straight chord through it.
 
 ## What the map is made of
 

@@ -109,6 +109,35 @@ function progressBlock() {
   return node;
 }
 
+/**
+ * Getting the work out.
+ *
+ * Four buttons rather than one because they go to different places: Google
+ * Earth wants KML, QGIS is happiest with GeoJSON, a marks spreadsheet wants
+ * CSV, and only the backup can be read back in here.
+ */
+function exportBlock(ctx, { lines = false } = {}) {
+  return el('div', {}, [
+    el('div', { class: 'sub-head', text: 'Take it with you' }),
+    el('div', { class: 'row-actions wrap' }, [
+      el('button', { class: 'btn', type: 'button', text: 'Google Earth',
+        title: 'KML — stations and lines, opens by double-clicking',
+        onclick: () => ctx.exportKML() }),
+      el('button', { class: 'btn', type: 'button', text: 'GeoJSON',
+        title: 'Stations and lines, for QGIS or ArcGIS',
+        onclick: () => ctx.exportGeoJSON() }),
+      el('button', { class: 'btn', type: 'button',
+        text: lines ? 'Lines CSV' : 'Stations CSV',
+        onclick: () => (lines ? ctx.exportLinesCSV() : ctx.exportCSV()) }),
+      el('button', { class: 'btn', type: 'button', text: 'Backup',
+        onclick: () => ctx.exportBackup() }),
+    ]),
+    el('div', { class: 'ctl-hint standalone', text: lines
+      ? 'KML and GeoJSON both carry the stations as well. The lines CSV holds each line as WKT, which is what QGIS reads when you add it as a delimited text layer.'
+      : 'KML opens in Google Earth by double-clicking it. GeoJSON opens in QGIS or ArcGIS and carries strike, dip and dip direction as fields. Backup is the whole notebook, and it is what restores it.' }),
+  ]);
+}
+
 function head(title, sub) {
   return el('div', { class: 'section-head' }, [
     el('h2', { text: title }),
@@ -441,15 +470,7 @@ export function stationsPanel(ctx) {
     node.appendChild(card);
   }
 
-  node.appendChild(el('div', { class: 'sub-head', text: 'Take it with you' }));
-  node.appendChild(el('div', { class: 'row-actions wrap' }, [
-    el('button', { class: 'btn', type: 'button', text: 'GeoJSON', onclick: () => ctx.exportGeoJSON() }),
-    el('button', { class: 'btn', type: 'button', text: 'CSV', onclick: () => ctx.exportCSV() }),
-    el('button', { class: 'btn', type: 'button', text: 'Backup', onclick: () => ctx.exportBackup() }),
-  ]));
-  node.appendChild(el('div', { class: 'ctl-hint standalone',
-    text: 'GeoJSON opens in QGIS or ArcGIS and carries strike, dip and dip direction as fields. Backup is the whole notebook, and it is what restores it.' }));
-
+  node.appendChild(exportBlock(ctx));
   return node;
 }
 
@@ -715,6 +736,7 @@ export function linesPanel(ctx) {
     node.appendChild(card);
   }
 
+  node.appendChild(exportBlock(ctx, { lines: true }));
   return node;
 }
 
@@ -1051,6 +1073,7 @@ export function setupPanel(ctx) {
   node.appendChild(el('div', { class: 'row-actions wrap' }, [
     el('button', { class: 'btn', type: 'button', text: 'Backup', onclick: () => ctx.exportBackup() }),
     el('button', { class: 'btn', type: 'button', text: 'Restore', onclick: () => ctx.importBackup() }),
+    el('button', { class: 'btn', type: 'button', text: 'Google Earth', onclick: () => ctx.exportKML() }),
   ]));
   node.appendChild(el('button', {
     class: 'btn wide danger', type: 'button', text: 'Delete all field notes',

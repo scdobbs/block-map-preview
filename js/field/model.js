@@ -483,16 +483,144 @@ export function toGeoJSON(doc) {
   };
 }
 
+/**
+ * KML, which is what opens in Google Earth by double-clicking it.
+ *
+ * GeoJSON is the better interchange format and QGIS prefers it, but Google
+ * Earth is the program most students already have and already know how to fly
+ * around in, and seeing your own contacts draped over the terrain you walked
+ * is worth a second exporter.
+ *
+ * Attributes go in ExtendedData rather than only in the description, so QGIS
+ * reads them as real fields if the same file is opened there instead.
+ */
+export function toKML(doc) {
+  const lines = [];
+  const push = (t) => lines.push(t);
+
+  push('<?xml version="1.0" encoding="UTF-8"?>');
+  push('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>');
+  push(`<name>${xml(doc.name || 'Field notes')}</name>`);
+
+  // One style per line kind, coloured to match the map.
+  for (const k of LINE_KINDS) {
+    push(`<Style id="line-${k.id}"><LineStyle>`
+      + `<color>${kmlColor(k.color)}</color>`
+      + `<width>${Math.round(k.weight + 1)}</width>`
+      + '</LineStyle></Style>');
+  }
+  push('<Style id="station"><IconStyle><scale>0.9</scale>'
+    + '<Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>'
+    + '</IconStyle></Style>');
+
+  push('<Folder><name>Stations</name>');
+  for (const st of doc.stations || []) {
+    const attitude = formatAttitude(st);
+    const rows = [
+      ['Feature', feature(st.feature).label],
+      [isLinearFeature(st.feature) ? 'Trend / plunge' : 'Strike / dip',
+        attitude === 'no attitude' ? '—' : attitude],
+      ['Unit', st.unitName || '—'],
+      ['Rock', st.rockId || '—'],
+      ['Elevation', st.elev == null ? '—' : `${elevOut(st.elev)} m`],
+      ['GPS accuracy', st.gpsAccuracy == null ? '—' : `± ${Math.round(st.gpsAccuracy)} m`],
+      ['Read with', st.source === 'compass' ? 'the phone' : 'by hand'],
+      ['Scatter', st.scatter == null ? '—' : `${st.scatter.toFixed(1)}°`],
+      ['Declination', st.declination == null ? '—' : `${st.declination}°`],
+      ['Time', st.at],
+      ['Note', st.note || '—'],
+    ];
+    push('<Placemark>');
+    push(`<name>${xml(`${st.name || ''} ${attitude === 'no attitude' ? '' : attitude}`.trim() || 'station')}</name>`);
+    push('<styleUrl>#station</styleUrl>');
+    push(`<description><![CDATA[<table>${rows
+      .map(([k, v]) => `<tr><td><b>${k}</b></td><td>${String(v)}</td></tr>`).join('')}</table>]]></description>`);
+    push('<ExtendedData>');
+    for (const [k, v] of [['station', st.name], ['feature', st.feature],
+      ['strike', st.strike], ['dip', st.dip], ['trend', st.trend], ['plunge', st.plunge],
+      ['unit', st.unitName], ['rock', st.rockId], ['certainty', st.certainty],
+      ['source', st.source], ['scatter_deg', st.scatter], ['declination', st.declination],
+      ['elevation_m', elevOut(st.elev)], ['gps_accuracy_m', st.gpsAccuracy], ['note', st.note]]) {
+      if (v == null || v === '') continue;
+      push(`<Data name="${k}"><value>${xml(String(v))}</value></Data>`);
+    }
+    push('</ExtendedData>');
+    push(`<Point><coordinates>${st.lon},${st.lat},${elevOut(st.elev) ?? 0}</coordinates></Point>`);
+    push('</Placemark>');
+  }
+  push('</Folder>');
+
+  push('<Folder><name>Lines</name>');
+  for (const l of (doc.lines || []).filter(lineIsDrawable)) {
+    const k = lineKind(l.kind);
+    push('<Placemark>');
+    push(`<name>${xml(l.name || k.label)}</name>`);
+    push(`<styleUrl>#line-${l.kind}</styleUrl>`);
+    push(`<description><![CDATA[${xml(k.label)}, ${xml(lineCertainty(l.certainty).label.toLowerCase())}`
+      + `${l.unitA || l.unitB ? `<br>${xml(l.unitA || '?')} / ${xml(l.unitB || '?')}` : ''}`
+      + `<br>${Math.round(lineLength(l))} m`
+      + `${l.note ? `<br>${xml(l.note)}` : ''}]]></description>`);
+    push('<ExtendedData>');
+    for (const [key, v] of [['kind', l.kind], ['certainty', l.certainty],
+      ['unit_a', l.unitA], ['unit_b', l.unitB], ['length_m', Math.round(lineLength(l))],
+      ['note', l.note]]) {
+      if (v == null || v === '') continue;
+      push(`<Data name="${key}"><value>${xml(String(v))}</value></Data>`);
+    }
+    push('</ExtendedData>');
+    // clampToGround with tessellate, so a contact follows the terrain in
+    // Google Earth instead of cutting a straight chord through a ridge.
+    push('<LineString><tessellate>1</tessellate><altitudeMode>clampToGround</altitudeMode>'
+      + `<coordinates>${l.points.map((pt) => `${pt[0]},${pt[1]},0`).join(' ')}</coordinates>`
+      + '</LineString>');
+    push('</Placemark>');
+  }
+  push('</Folder>');
+  push('</Document></kml>');
+  return lines.join('\n');
+}
+
+/** KML wants aabbggrr, which is the other way round from the web. */
+function kmlColor(hex) {
+  const h = hex.replace('#', '');
+  return `ff${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`.toLowerCase();
+}
+
+function xml(s) {
+  return String(s).replace(/[<>&'"]/g, (c) =>
+    ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+}
+
+/**
+ * Lines as a spreadsheet.
+ *
+ * One row per line, with the geometry as WKT — which is what QGIS's delimited
+ * text importer reads, so a CSV of contacts comes in as real lines rather than
+ * as a table nobody can map.
+ */
+export function toLinesCSV(doc) {
+  const cols = ['name', 'kind', 'certainty', 'unit_a', 'unit_b', 'length_m',
+    'vertices', 'note', 'time', 'wkt'];
+  const rows = (doc.lines || []).filter(lineIsDrawable).map((l) => [
+    l.name || '', l.kind, l.certainty, l.unitA || '', l.unitB || '',
+    Math.round(lineLength(l)), l.points.length, l.note || '', l.at,
+    `LINESTRING (${l.points.map((p) => `${p[0].toFixed(6)} ${p[1].toFixed(6)}`).join(', ')})`,
+  ].map(csvCell).join(','));
+  return [cols.join(','), ...rows].join('\n');
+}
+
+function csvCell(v) {
+  if (v == null) return '';
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 /** Comma-separated, for a spreadsheet — which is where marks get entered. */
 export function toCSV(doc) {
   const cols = ['station', 'latitude', 'longitude', 'elevation_m', 'feature', 'structure',
     'strike', 'dip', 'trend', 'plunge', 'certainty', 'source', 'scatter_deg', 'unit',
     'rock', 'gps_accuracy_m', 'declination', 'time', 'note'];
-  const esc = (v) => {
-    if (v == null) return '';
-    const s = String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
+  const esc = csvCell;
   const rows = (doc.stations || []).map((s) => [
     s.name, s.lat.toFixed(6), s.lon.toFixed(6), elevOut(s.elev) ?? '', s.feature,
     featureGeometry(s.feature),

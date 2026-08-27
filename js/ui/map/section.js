@@ -12,8 +12,8 @@ import { measureView } from './measureView.js';
 import { niceScaleBar } from './symbols.js';
 import { FieldStore, loadFieldDoc } from '../../field/store.js';
 import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea,
-  nextStationName, toGeoJSON, toCSV, isLinearFeature, makeLine, lineKind,
-  lineIsDrawable } from '../../field/model.js';
+  nextStationName, toGeoJSON, toCSV, toKML, toLinesCSV, isLinearFeature, makeLine,
+  lineKind, lineIsDrawable, lineLength, formatAttitude } from '../../field/model.js';
 import { Clinometer, GeoWatch, fixAge } from '../../field/sensors.js';
 import { fetchDeclination as lookupDeclination } from '../../field/declination.js';
 import { downloadArea, verifyArea, deleteArea, requestPersistence,
@@ -444,6 +444,10 @@ export class MapSection {
   }
 
   deleteLine(id) {
+    const line = this.store.doc.lines.find((l) => l.id === id);
+    if (!line) return;
+    const what = line.name || lineKind(line.kind).label.toLowerCase();
+    if (!confirm(`Delete "${what}"?\n\n${line.points.length} points, ${formatDistance(lineLength(line))}. This cannot be undone once the app is closed.`)) return;
     this.store.edit((doc) => { doc.lines = doc.lines.filter((l) => l.id !== id); },
       { structural: true });
     if (this.selectedLineId === id) this.selectLine(null);
@@ -915,6 +919,12 @@ export class MapSection {
   }
 
   deleteStation(id) {
+    const st = this.store.doc.stations.find((s) => s.id === id);
+    if (!st) return;
+    // Same hazard as a line: a station you have walked away from cannot be
+    // taken again, and the delete button sits in a list of taps.
+    const bits = [formatAttitude(st), st.unitName].filter((b) => b && b !== 'no attitude');
+    if (!confirm(`Delete station ${st.name || ''}?${bits.length ? `\n\n${bits.join(' · ')}` : ''}\n\nThis cannot be undone once the app is closed.`)) return;
     this.store.edit((doc) => {
       doc.stations = doc.stations.filter((s) => s.id !== id);
     }, { structural: true });
@@ -1134,6 +1144,10 @@ export class MapSection {
   }
 
   deleteUnit(id) {
+    const unit = this.store.doc.units.find((u) => u.id === id);
+    const used = this.store.doc.stations.filter((s) => s.unitId === id).length;
+    if (!confirm(`Remove "${unit?.name || 'this unit'}" from the list?`
+      + (used ? `\n\n${used} station${used === 1 ? '' : 's'} keep the name; only the link to the list goes.` : ''))) return;
     this.store.edit((doc) => {
       doc.units = doc.units.filter((u) => u.id !== id);
       // Stations keep the name they were given; only the link to the list
@@ -1148,7 +1162,17 @@ export class MapSection {
   }
 
   exportCSV() {
-    download(toCSV(this.store.doc), `${slug(this.store.doc.name)}.csv`, 'text/csv');
+    download(toCSV(this.store.doc), `${slug(this.store.doc.name)}-stations.csv`, 'text/csv');
+  }
+
+  exportLinesCSV() {
+    download(toLinesCSV(this.store.doc), `${slug(this.store.doc.name)}-lines.csv`, 'text/csv');
+  }
+
+  exportKML() {
+    download(toKML(this.store.doc),
+      `${slug(this.store.doc.name)}.kml`,
+      'application/vnd.google-earth.kml+xml');
   }
 
   exportBackup() {
@@ -1251,6 +1275,8 @@ export class MapSection {
       deleteUnit: (id) => this.deleteUnit(id),
       exportGeoJSON: () => this.exportGeoJSON(),
       exportCSV: () => this.exportCSV(),
+      exportLinesCSV: () => this.exportLinesCSV(),
+      exportKML: () => this.exportKML(),
       exportBackup: () => this.exportBackup(),
       importBackup: () => this.importBackup(),
       clearAll: () => this.clearAll(),
