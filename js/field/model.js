@@ -267,6 +267,7 @@ export function defaultFieldDocument() {
       contourInterval: 0,     // 0 means choose one from the relief on screen
       showStations: true,
       labelStations: true,
+      mapFull: false,
       follow: true,
       // Declination is the student's to set. Zero is not a guess at their
       // location, it is the honest statement that nothing has been applied

@@ -80,6 +80,7 @@ export class MapSection {
     this.locateBtn = hudBtn(locateIcon(), 'Center on me', () => this.locate());
     this.layerBtn = hudBtn(layersIcon(), 'Change layer', () => this.cycleLayer());
     this.placeBtn = hudBtn(plusIcon(), 'Place a station by hand', () => this.togglePlace());
+    this.fullBtn = hudBtn(expandIcon(), 'Full screen map', () => this.toggleFullMap());
 
     this.undoBtn = hudBtn(textSpan('↶'), 'Undo', () => this.store.undo());
     this.redoBtn = hudBtn(textSpan('↷'), 'Redo', () => this.store.redo());
@@ -101,7 +102,9 @@ export class MapSection {
     this.pane = el('div', { class: 'map-pane' }, [
       this.canvas,
       el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn]),
-      el('div', { class: 'hud hud-right' }, [this.locateBtn, this.layerBtn, this.placeBtn]),
+      el('div', { class: 'hud hud-right' }, [
+        this.locateBtn, this.layerBtn, this.fullBtn, this.placeBtn,
+      ]),
       this.scaleChip,
       this.attrib,
       this.bottomStack,
@@ -136,6 +139,7 @@ export class MapSection {
 
   activate() {
     this._started = true;
+    this.host.root.classList.toggle('map-full', this.fullMap());
     this.geo.start();
     // Persistence is worth asking for the moment the map is genuinely being
     // used, and not before — an unprompted permission on first launch is the
@@ -146,6 +150,8 @@ export class MapSection {
 
   deactivate() {
     this.closeMeasure();
+    // The block section has no full-screen mode and must never inherit one.
+    this.host.root.classList.remove('map-full');
     this._started = false;
     this.geo.stop();
     this.clino.stop();
@@ -190,6 +196,7 @@ export class MapSection {
     this.map.invalidate();
     this._syncChrome();
     this._syncFollowButton();
+    this._syncFullButton();
   }
 
   _syncChrome() {
@@ -317,6 +324,35 @@ export class MapSection {
     this.map.setView(fix.lon, fix.lat, Math.max(this.map.zoom, 16));
     this._syncFollowButton();
     if (this.activeTab === 'setup') this.rebuild();
+  }
+
+  /**
+   * Give the map the whole screen.
+   *
+   * The panel is where the work is written down, but reading a map is a
+   * different job from filling in a form, and on a phone the two do not fit at
+   * once. Same idea as the clinometer taking over the screen: whichever one
+   * you are using should have all of it.
+   */
+  toggleFullMap(on = null) {
+    const next = on == null ? !this.fullMap() : on;
+    this.store.edit((d) => { d.settings.mapFull = next; }, { silent: true, transient: true });
+    this.host.root.classList.toggle('map-full', next);
+    this._syncFullButton();
+    // The sheet has gone or come back, so the map has a different amount of
+    // screen. The canvas watches its own box, but the block's canvas does not.
+    requestAnimationFrame(() => this.host.scene?.resize?.());
+  }
+
+  fullMap() { return this.store.doc.settings.mapFull === true; }
+
+  _syncFullButton() {
+    const on = this.fullMap();
+    clear(this.fullBtn);
+    this.fullBtn.appendChild(on ? collapseIcon() : expandIcon());
+    this.fullBtn.classList.toggle('on', on);
+    this.fullBtn.title = on ? 'Show the panel' : 'Full screen map';
+    this.fullBtn.setAttribute('aria-label', this.fullBtn.title);
   }
 
   _syncFollowButton() {
@@ -925,6 +961,8 @@ function svgIcon(paths) {
   return s;
 }
 
+const expandIcon = () => svgIcon(['M4 9 V4 H9', 'M15 4 H20 V9', 'M20 15 V20 H15', 'M9 20 H4 V15']);
+const collapseIcon = () => svgIcon(['M9 4 V9 H4', 'M20 9 H15 V4', 'M15 20 V15 H20', 'M4 15 H9 V20']);
 const locateIcon = () => svgIcon(['M12 3 V6 M12 18 V21 M3 12 H6 M18 12 H21',
   'M12 8.2 A3.8 3.8 0 1 0 12 15.8 A3.8 3.8 0 1 0 12 8.2']);
 const layersIcon = () => svgIcon(['M12 3 L21 8 L12 13 L3 8 Z', 'M3 12.5 L12 17.5 L21 12.5',

@@ -209,6 +209,11 @@ a Brunton, east positive.
 
 ## On the outcrop
 
+The buttons down the right edge are **centre on me**, **change layer**, **full
+screen**, and **place a station by hand**. Full screen hides the panel entirely,
+the same way the clinometer hides the map: reading a map and filling in a form
+are different jobs and a phone has room for one of them at a time.
+
 The map **follows you until you touch it**. The first fix centres on you and
 the crosshair button lights up; the moment you drag the map it lets go, so you
 can look somewhere you are not standing — which is most of what the Areas tab

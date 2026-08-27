@@ -1189,3 +1189,17 @@ html, body {
 }
 
 .card-note { padding: 0 12px 12px; margin: 0; }
+
+/* --- map HUD layout ------------------------------------------------------- */
+
+/* The map's own buttons stack down the right edge instead of running along the
+   top. Three of them in a row, plus undo and redo on the left, left the
+   Block/Map switch nowhere to sit on a phone held upright — they overlapped.
+   A column is also what every other map puts there. The block section keeps
+   its compass in the corner and is untouched. */
+.map-pane .hud-right { flex-direction: column; }
+
+/* Full-screen map: the panel goes away entirely, the same way the map goes
+   away when the clinometer is open. Whichever one is being used gets the
+   screen. */
+.map-full .sheet { display: none; }
