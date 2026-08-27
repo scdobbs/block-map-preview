@@ -1,0 +1,324 @@
+// The field document: what was measured, where, in what, and how much to
+// believe it.
+//
+// Kept entirely separate from the block-diagram document. A block is an
+// invented thing a student builds to understand a structure; this is a record
+// of an actual outcrop, and the two should never be able to overwrite each
+// other. They share the rock list and nothing else.
+
+import { ROCKS, ROCK_BY_ID } from '../geo/model.js';
+
+export const FIELD_SCHEMA_VERSION = 1;
+
+export { ROCKS, ROCK_BY_ID };
+
+/** A rock type by id, always something. Named apart from the block's `rock`
+ * so a file importing both cannot get them confused. */
+export function rockOf(id) { return ROCK_BY_ID[id] || ROCK_BY_ID.sandstone; }
+
+// ---------------------------------------------------------------------------
+// What can be measured
+// ---------------------------------------------------------------------------
+// Typed, because a joint plotted as bedding is worse than a joint not plotted
+// at all: it goes on to the stereonet, joins the girdle fit, and moves the
+// fold axis. Naming the feature costs one tap and keeps the fit honest.
+
+export const FEATURES = [
+  {
+    id: 'bedding', label: 'Bedding', short: 'Bd',
+    hint: 'The depositional surface. This is what a fold axis is fitted from.',
+  },
+  {
+    id: 'foliation', label: 'Foliation', short: 'Fol',
+    hint: 'Cleavage or schistosity.',
+  },
+  {
+    id: 'joint', label: 'Joint', short: 'Jt',
+    hint: 'A fracture with no measurable offset.',
+  },
+  {
+    id: 'fault', label: 'Fault plane', short: 'Flt',
+    hint: 'A fracture the rock has moved along.',
+  },
+  {
+    id: 'contact', label: 'Contact', short: 'Ct',
+    hint: 'The surface between two units.',
+  },
+];
+
+export const FEATURE_BY_ID = Object.fromEntries(FEATURES.map((f) => [f.id, f]));
+
+export function feature(id) { return FEATURE_BY_ID[id] || FEATURE_BY_ID.bedding; }
+
+/** Only bedding is fitted for a fold axis. The rest are recorded, not folded. */
+export const FITTABLE = new Set(['bedding']);
+
+// ---------------------------------------------------------------------------
+// Confidence
+// ---------------------------------------------------------------------------
+// Field mapping has always distinguished what you stood on from what you
+// inferred across a covered slope, and the distinction survives into the
+// notebook rather than being flattened on the way in.
+
+export const CERTAINTIES = [
+  { id: 'measured', label: 'Measured', hint: 'Instrument on the surface.' },
+  { id: 'estimated', label: 'Estimated', hint: 'Eyeballed, or read from a distance.' },
+];
+
+let counter = 0;
+export function newFieldId(prefix = 'st') {
+  counter += 1;
+  return `${prefix}_${Date.now().toString(36)}${counter.toString(36)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Stations
+// ---------------------------------------------------------------------------
+
+/**
+ * One reading at one place.
+ *
+ * `strike` and `dip` are allowed to be null. A station with a rock description
+ * and no attitude is a perfectly ordinary field observation, and forcing a
+ * number into it would be inventing data.
+ *
+ * The provenance fields are not decoration. `scatter` and `gpsAccuracy` are
+ * what let a student look back at a reading that disagrees with its
+ * neighbours and find out whether it was the rock or the phone.
+ */
+export function makeStation(over = {}) {
+  return {
+    id: newFieldId('st'),
+    name: '',
+    lon: 0,
+    lat: 0,
+    elev: null,             // meters, from the cached terrain
+    gpsAccuracy: null,      // meters, the radius the browser reported
+    gpsAltitude: null,      // meters, kept but not trusted over the terrain
+    at: new Date().toISOString(),
+
+    feature: 'bedding',
+    strike: null,
+    dip: null,
+    certainty: 'measured',
+    source: 'manual',       // 'compass' | 'manual'
+    scatter: null,          // degrees of disagreement within the compass window
+    declination: null,      // what was applied, so a wrong one can be undone
+
+    unitId: null,
+    unitName: '',
+    rockId: null,
+    note: '',
+    ...over,
+  };
+}
+
+/**
+ * Stations are numbered in the order they were taken, which is how a field
+ * notebook is numbered and how a student will refer to them out loud.
+ */
+export function nextStationName(stations) {
+  let max = 0;
+  for (const s of stations) {
+    const n = parseInt(String(s.name || '').replace(/[^0-9]/g, ''), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return String(max + 1);
+}
+
+export function hasAttitude(st) {
+  return Number.isFinite(st.strike) && Number.isFinite(st.dip);
+}
+
+// ---------------------------------------------------------------------------
+// Map units
+// ---------------------------------------------------------------------------
+// Two ways in, because both happen. On a taught field course the units are
+// known before anyone leaves the van, and picking from a list beats typing
+// "Wingate Sandstone" with cold hands. On a reconnaissance day the whole point
+// is that you do not know yet, so a name typed once becomes available to tap
+// thereafter and can be promoted into the list later.
+
+export function makeUnit(over = {}) {
+  return {
+    id: newFieldId('un'),
+    name: '',
+    rockId: 'sandstone',
+    color: null,            // null means take the rock's own color
+    note: '',
+    ...over,
+  };
+}
+
+export function unitColor(unit) {
+  if (!unit) return '#9aa7b2';
+  if (unit.color) return unit.color;
+  return (ROCK_BY_ID[unit.rockId] || ROCK_BY_ID.sandstone).color;
+}
+
+/** Names already used, list or free text, for the autocomplete. */
+export function knownUnitNames(doc) {
+  const names = new Map();
+  for (const u of doc.units || []) {
+    if (u.name) names.set(u.name.toLowerCase(), { name: u.name, unit: u, count: 0 });
+  }
+  for (const s of doc.stations || []) {
+    const n = (s.unitName || '').trim();
+    if (!n) continue;
+    const key = n.toLowerCase();
+    if (names.has(key)) names.get(key).count++;
+    else names.set(key, { name: n, unit: null, count: 1 });
+  }
+  return [...names.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+// ---------------------------------------------------------------------------
+// Cached areas
+// ---------------------------------------------------------------------------
+
+export function makeArea(over = {}) {
+  return {
+    id: newFieldId('ar'),
+    name: '',
+    bbox: [0, 0, 0, 0],     // west, south, east, north
+    sources: ['topo', 'dem'],
+    minZoom: 10,
+    maxZoom: 16,
+    savedAt: null,
+    // Filled in by the verify pass, never by the download returning.
+    check: null,            // { total, present, missing, complete, at }
+    bytes: 0,
+    declination: null,      // fetched for this area's center while online
+    declinationInfo: null,
+    ...over,
+  };
+}
+
+export function areaComplete(area) {
+  return !!area.check?.complete;
+}
+
+// ---------------------------------------------------------------------------
+// The document
+// ---------------------------------------------------------------------------
+
+export function defaultFieldDocument() {
+  return {
+    version: FIELD_SCHEMA_VERSION,
+    name: 'Field notes',
+    createdAt: new Date().toISOString(),
+    stations: [],
+    units: [],
+    areas: [],
+    settings: {
+      baseLayer: 'topo',
+      showHillshade: false,
+      showContours: false,
+      contourInterval: 0,     // 0 means choose one from the relief on screen
+      showStations: true,
+      labelStations: true,
+      follow: true,
+      // Declination is the student's to set. Zero is not a guess at their
+      // location, it is the honest statement that nothing has been applied
+      // yet — and the UI says so rather than letting it pass for a reading.
+      declination: 0,
+      declinationSet: false,
+      declinationSource: null,   // 'manual' | 'noaa' | 'ios'
+      // A station placed on a fix worse than this is placed on a guess.
+      minAccuracy: 15,
+      units: 'metric',
+    },
+    view: { lon: -109.549, lat: 38.573, zoom: 13 },
+  };
+}
+
+/** Fill in anything an older saved document predates. */
+export function migrateFieldDoc(doc) {
+  const base = defaultFieldDocument();
+  if (!doc || typeof doc !== 'object') return base;
+  const out = {
+    ...base,
+    ...doc,
+    settings: { ...base.settings, ...(doc.settings || {}) },
+    view: { ...base.view, ...(doc.view || {}) },
+  };
+  // A hand-edited or truncated file must not be able to hand the map
+  // something that is not a station.
+  out.stations = (Array.isArray(doc.stations) ? doc.stations : [])
+    .filter((s) => s && Number.isFinite(s.lon) && Number.isFinite(s.lat))
+    .map((s) => ({ ...makeStation(), ...s }));
+  out.units = (Array.isArray(doc.units) ? doc.units : [])
+    .filter((u) => u && typeof u === 'object')
+    .map((u) => ({ ...makeUnit(), ...u }));
+  out.areas = (Array.isArray(doc.areas) ? doc.areas : [])
+    .filter((a) => a && Array.isArray(a.bbox) && a.bbox.length === 4)
+    .map((a) => ({ ...makeArea(), ...a }));
+  out.version = FIELD_SCHEMA_VERSION;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+/**
+ * GeoJSON, because field data that cannot leave the app is field data waiting
+ * to be lost. Strike and dip go in as plain properties so the file opens in
+ * QGIS or ArcGIS and can be symbolised on `strike` directly.
+ */
+// The terrain grid is about ten meters across a cell, so a station's height is
+// good to a meter at best. Writing it out to thirteen decimal places states a
+// precision the data does not have.
+function elevOut(v) { return v == null ? null : Math.round(v * 10) / 10; }
+
+export function toGeoJSON(doc) {
+  return {
+    type: 'FeatureCollection',
+    properties: {
+      name: doc.name,
+      exportedAt: new Date().toISOString(),
+      declination: doc.settings.declination,
+    },
+    features: (doc.stations || []).map((s) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: s.elev != null ? [s.lon, s.lat, elevOut(s.elev)] : [s.lon, s.lat] },
+      properties: {
+        id: s.id,
+        station: s.name,
+        feature: s.feature,
+        strike: s.strike,
+        dip: s.dip,
+        dip_direction: Number.isFinite(s.strike) ? (s.strike + 90) % 360 : null,
+        certainty: s.certainty,
+        source: s.source,
+        scatter_deg: s.scatter,
+        declination: s.declination,
+        unit: s.unitName || null,
+        rock: s.rockId || null,
+        note: s.note || null,
+        elevation_m: elevOut(s.elev),
+        gps_accuracy_m: s.gpsAccuracy,
+        time: s.at,
+      },
+    })),
+  };
+}
+
+/** Comma-separated, for a spreadsheet — which is where marks get entered. */
+export function toCSV(doc) {
+  const cols = ['station', 'latitude', 'longitude', 'elevation_m', 'feature', 'strike',
+    'dip', 'certainty', 'source', 'scatter_deg', 'unit', 'rock', 'gps_accuracy_m',
+    'declination', 'time', 'note'];
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const rows = (doc.stations || []).map((s) => [
+    s.name, s.lat.toFixed(6), s.lon.toFixed(6), elevOut(s.elev) ?? '', s.feature,
+    s.strike ?? '', s.dip ?? '', s.certainty, s.source, s.scatter != null ? s.scatter.toFixed(1) : '',
+    s.unitName || '', s.rockId || '', s.gpsAccuracy != null ? Math.round(s.gpsAccuracy) : '',
+    s.declination ?? '', s.at, s.note || '',
+  ].map(esc).join(','));
+  return [cols.join(','), ...rows].join('\n');
+}

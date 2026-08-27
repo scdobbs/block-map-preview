@@ -1,0 +1,1057 @@
+/* Field-first styling: dark so the screen is readable in bright sun without
+   burning battery, big enough targets to use with cold or gloved hands, and
+   laid out for a phone held in one hand before anything else. */
+
+:root {
+  --bg: #0f1418;
+  --bg-2: #161d23;
+  --bg-3: #1e272f;
+  --line: #2b3742;
+  --ink: #e8eef2;
+  --ink-dim: #93a3af;
+  --ink-faint: #647585;
+  --accent: #ffc857;
+  --accent-ink: #2a1f05;
+  --danger: #ff6b6b;
+  --radius: 14px;
+  --sheet-peek: calc(96px + env(safe-area-inset-bottom));
+  --tap: 44px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+#app { display: flex; flex-direction: column; height: 100%; }
+
+.boot, .fatal {
+  display: grid; place-content: center; height: 100%;
+  color: var(--ink-dim); text-align: center; padding: 24px; gap: 12px;
+}
+.fatal pre {
+  text-align: left; font-size: 12px; color: var(--ink-faint);
+  max-width: 90vw; overflow: auto; background: var(--bg-2); padding: 12px; border-radius: 8px;
+}
+
+/* --- stage ---------------------------------------------------------------- */
+
+/* The stage holds the block and, when it is up, the stereonet beside it.
+   Which way "beside" runs depends on the shape of the screen, not its size: a
+   phone in portrait stacks them, everything wider than it is tall sets them
+   side by side. */
+.stage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* Clipped, so that pulling the stereonet up over the whole stage takes the
+   compass and the undo buttons with it rather than leaving them floating on
+   top of the net. */
+.block-pane {
+  position: relative; flex: 1 1 auto; min-width: 0; min-height: 0;
+  overflow: hidden;
+}
+.viewport { display: block; width: 100%; height: 100%; touch-action: none; }
+
+.hud {
+  position: absolute; top: calc(10px + env(safe-area-inset-top));
+  display: flex; gap: 8px; z-index: 5;
+}
+.hud-left { left: calc(10px + env(safe-area-inset-left)); }
+.hud-right { right: calc(10px + env(safe-area-inset-right)); }
+
+.icon-btn {
+  width: var(--tap); height: var(--tap);
+  display: grid; place-items: center;
+  font-size: 20px; color: var(--ink);
+  background: rgba(22, 29, 35, .82); border: 1px solid var(--line);
+  border-radius: 12px; cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.icon-btn:disabled { opacity: .32; cursor: default; }
+.icon-btn:active:not(:disabled) { background: var(--bg-3); }
+
+.compass { width: 56px; height: 56px; }
+.compass-face { fill: rgba(22, 29, 35, .82); stroke: var(--line); }
+.needle-n { fill: var(--danger); }
+.needle-s { fill: #7d8a95; }
+.compass-n { fill: var(--ink); font-size: 10px; font-weight: 700; }
+
+.scale-chip {
+  position: absolute; z-index: 5;
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  font-size: 11.5px; color: var(--ink-faint); font-variant-numeric: tabular-nums;
+  padding: 4px 9px; border-radius: 8px;
+  background: rgba(15, 20, 24, .6); pointer-events: none;
+}
+
+/* --- identify readout ----------------------------------------------------- */
+
+.readout {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: 14px; z-index: 6;
+  display: flex; align-items: flex-start; gap: 10px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 10px 12px;
+  background: rgba(15, 20, 24, .93); border: 1px solid var(--line);
+  border-radius: var(--radius); backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+.readout.hidden { display: none; }
+.readout-text { min-width: 0; }
+.readout-name { font-weight: 650; }
+.readout-sub { color: var(--ink-dim); font-size: 12.5px; }
+.readout-orient { margin-top: 4px; font-size: 13.5px; color: var(--accent); }
+.readout-orient strong { font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+.readout-orient span { color: var(--ink-dim); }
+.readout-orient.dim { color: var(--ink-faint); }
+.readout-xyz {
+  margin-top: 2px; font-size: 11.5px; color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.readout-close {
+  margin-left: auto; background: none; border: 0; color: var(--ink-faint);
+  font-size: 22px; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+
+/* --- bottom sheet --------------------------------------------------------- */
+
+.sheet {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -12px 34px rgba(0, 0, 0, .45);
+  transition: height .22s cubic-bezier(.2, .8, .3, 1);
+  min-height: 0;
+}
+.sheet.peek { height: var(--sheet-peek); }
+.sheet.half { height: 48vh; }
+.sheet.full { height: 86vh; }
+
+.sheet-handle {
+  flex: 0 0 auto; height: 24px; border: 0; background: none; cursor: pointer;
+  display: grid; place-items: center; padding: 0;
+}
+.sheet-handle::before {
+  content: ''; width: 42px; height: 4px; border-radius: 2px; background: var(--line);
+}
+
+.tabbar {
+  flex: 0 0 auto;
+  /* Auto columns rather than a fixed count, so adding a tab never needs the
+     stylesheet edited to match. */
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  border-bottom: 1px solid var(--line);
+  padding: 0 4px;
+}
+.tab {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  padding: 8px 4px 10px; color: var(--ink-faint);
+  display: grid; gap: 2px; justify-items: center;
+  border-bottom: 2px solid transparent;
+  font-size: 11px; font-weight: 600; letter-spacing: -.1px;
+}
+.tab-icon { display: grid; place-items: center; }
+.tabicon { width: 21px; height: 21px; display: block; }
+.tabicon-fill { fill: currentColor; stroke: none; }
+.tabicon-line {
+  fill: none; stroke: currentColor; stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.sheet-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 4px 14px calc(28px + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+}
+
+/* --- generic panel furniture ---------------------------------------------- */
+
+.section-head { padding: 14px 0 8px; }
+.section-head h2 { margin: 0; font-size: 15px; letter-spacing: .01em; }
+.section-head p { margin: 3px 0 0; font-size: 12.5px; color: var(--ink-dim); }
+
+.sub-head {
+  margin: 20px 0 6px; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint);
+  font-weight: 700;
+}
+
+.ctl { margin: 12px 0; }
+.ctl-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ctl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ctl-label { font-size: 13px; color: var(--ink-dim); font-weight: 600; }
+.ctl-value { display: flex; align-items: baseline; gap: 3px; }
+.ctl-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
+.ctl-hint.standalone { margin: 0 0 10px; }
+.ctl-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+
+.num {
+  width: 62px; text-align: right;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--ink); padding: 5px 7px; font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.num-wide { width: 70px; }
+.num::-webkit-outer-spin-button, .num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.num[type=number] { -moz-appearance: textfield; }
+.unit { color: var(--ink-faint); font-size: 12px; }
+
+/* The track must contrast with BOTH panel backgrounds — event and layer cards
+   sit on --bg-3, so the track cannot also be --bg-3 or it vanishes. */
+.range {
+  --p: 0;                       /* 0..1, set from JS */
+  --thumb: 22px;
+  --fill: calc(var(--thumb) / 2 + var(--p) * (100% - var(--thumb)));
+  --track: #0a0e12;
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 30px; margin: 2px 0 0; background: none; cursor: pointer;
+}
+.range::-webkit-slider-runnable-track {
+  height: 7px; border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  background: linear-gradient(to right,
+    var(--accent) 0 var(--fill), var(--track) var(--fill) 100%);
+}
+.range::-moz-range-track {
+  height: 7px; border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  background: linear-gradient(to right,
+    var(--accent) 0 var(--fill), var(--track) var(--fill) 100%);
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8.5px;
+  border-radius: 50%; background: var(--accent); border: 2px solid var(--bg-2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+.range::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--bg-2); box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+
+.select, .name-input {
+  width: 100%; margin-top: 5px;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 9px;
+  color: var(--ink); padding: 9px 10px; font-size: 14px;
+}
+
+.toggle {
+  flex: 0 0 auto; width: 50px; height: 30px; border-radius: 15px;
+  background: var(--bg-3); border: 1px solid var(--line); cursor: pointer;
+  position: relative; padding: 0; transition: background .15s;
+}
+.toggle .knob {
+  position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--ink-faint); transition: transform .15s, background .15s;
+}
+.toggle.on { background: rgba(255, 200, 87, .22); border-color: var(--accent); }
+.toggle.on .knob { transform: translateX(20px); background: var(--accent); }
+
+.btn {
+  appearance: none; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--ink); padding: 10px 14px; font-size: 13.5px; font-weight: 600;
+  min-height: var(--tap);
+}
+.btn:active:not(:disabled) { background: #26323b; }
+.btn:disabled { opacity: .35; cursor: default; }
+.btn.small { padding: 7px 11px; font-size: 12.5px; min-height: 38px; }
+.btn.wide { width: 100%; margin-top: 8px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.danger { color: var(--danger); border-color: rgba(255, 107, 107, .4); }
+
+.row-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: nowrap; }
+.row-actions.wrap { flex-wrap: wrap; }
+.row-actions .btn { flex: 1 1 auto; }
+
+.panel-foot {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 14px; flex-wrap: wrap;
+}
+.foot-note { font-size: 12px; color: var(--ink-faint); }
+
+.empty { padding: 24px 6px; text-align: center; color: var(--ink-dim); }
+.empty p { margin: 0 0 6px; }
+.empty .dim { font-size: 12.5px; color: var(--ink-faint); }
+
+.about { margin-top: 22px; font-size: 12px; color: var(--ink-faint); line-height: 1.55; }
+.about p { margin: 0 0 7px; }
+.about-rule { height: 1px; background: var(--line); margin: 16px 0 12px; }
+.about-title { color: var(--ink-dim); font-weight: 650; }
+.about strong { color: var(--ink-dim); font-weight: 650; }
+.about a { color: var(--accent); text-decoration: none; }
+.about a:hover { text-decoration: underline; }
+.about-link {
+  display: inline-block; margin-top: 2px;
+  padding: 7px 12px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--bg-3);
+}
+.about-dim { color: #4f5f6d; margin-top: 10px; }
+
+/* --- layer list ------------------------------------------------------------ */
+
+.layer-list { display: flex; flex-direction: column; gap: 6px; }
+
+.layer-row, .event-row {
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+}
+.layer-head, .event-head {
+  width: 100%; display: flex; align-items: center; gap: 11px;
+  background: none; border: 0; color: inherit; text-align: left;
+  padding: 9px 11px; cursor: pointer; min-height: 56px;
+}
+.layer-head.static { cursor: default; }
+.layer-head.open, .event-head.open { background: rgba(255, 200, 87, .07); }
+.layer-title, .event-title { flex: 1 1 auto; min-width: 0; }
+.layer-name, .event-name {
+  font-size: 14px; font-weight: 620;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.layer-sub, .event-sub {
+  font-size: 11.5px; color: var(--ink-dim); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chev { color: var(--ink-faint); font-size: 13px; }
+.layer-body, .event-body { padding: 4px 12px 14px; border-top: 1px solid var(--line); }
+.layer-row.basement { opacity: .72; }
+
+.swatch {
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 8px; display: block;
+}
+.swatch.small { width: 32px; height: 32px; }
+
+.unc-divider { display: flex; align-items: center; }
+.unc-grip {
+  flex: 0 0 auto; width: 30px; border: 0; padding: 0;
+  background: none; color: var(--ink-faint); cursor: grab;
+  font-size: 15px; line-height: 1; touch-action: none;
+}
+.unc-grip:active { cursor: grabbing; color: var(--accent); }
+.unc-body {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: 0; cursor: pointer;
+  padding: 2px 4px; color: var(--ink-dim);
+}
+.unc-wave { flex: 1 1 auto; height: 15px; }
+.unc-wave path { stroke: var(--ink-faint); stroke-width: 1.6; }
+.unc-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-faint); white-space: nowrap;
+}
+.unc-divider.dragging { position: relative; z-index: 3; }
+.unc-divider.dragging .unc-wave path { stroke: var(--accent); }
+.unc-divider.dragging .unc-label,
+.unc-divider.dragging .unc-grip { color: var(--accent); }
+
+/* Which units ended up on each side of an unconformity. */
+.unc-split {
+  margin: 10px 0 2px; padding: 9px 11px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.unc-split-row { display: flex; gap: 10px; align-items: baseline; }
+.unc-split-key {
+  flex: 0 0 106px; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .03em; color: var(--ink-faint);
+}
+.unc-split-val { flex: 1 1 auto; font-size: 12.5px; color: var(--ink); }
+
+.rock-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+  gap: 6px; margin-top: 8px;
+}
+.rock-group {
+  grid-column: 1 / -1; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--ink-faint); margin-top: 6px; font-weight: 700;
+}
+.rock-strip { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.rock-strip .rock-btn { width: 76px; }
+.rock-btn {
+  display: grid; justify-items: center; gap: 4px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 9px;
+  padding: 6px 4px; cursor: pointer; color: var(--ink-dim); font-size: 10.5px;
+}
+.rock-btn.active { border-color: var(--accent); color: var(--ink); background: rgba(255, 200, 87, .1); }
+.rock-swatch { width: 100%; height: 30px; border-radius: 5px; display: block; }
+
+.color-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.color-dot {
+  width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; padding: 0;
+}
+.color-dot.active { border-color: var(--ink); }
+.color-input {
+  width: 34px; height: 30px; padding: 0; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--bg-3); cursor: pointer;
+}
+
+/* --- history -------------------------------------------------------------- */
+
+.add-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px; margin-bottom: 14px;
+}
+.add-btn {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--ink); padding: 9px 10px; cursor: pointer; font-size: 12.5px;
+  font-weight: 600; min-height: 42px; text-align: left;
+}
+.add-btn:disabled { opacity: .35; }
+.add-icon { color: var(--accent); font-size: 15px; }
+
+.timeline { position: relative; padding-left: 14px; }
+.timeline::before {
+  content: ''; position: absolute; left: 4px; top: 16px; bottom: 16px;
+  width: 2px; background: linear-gradient(var(--accent), var(--line));
+  border-radius: 1px; opacity: .5;
+}
+.time-cap {
+  display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--ink-faint); padding: 2px 0;
+}
+.event-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.event-icon {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px;
+  display: grid; place-items: center;
+  background: var(--bg-2); border: 1px solid var(--line);
+}
+.evicon { width: 24px; height: 24px; display: block; }
+.evicon-frame { fill: none; stroke: var(--ink-faint); stroke-width: 1.2; opacity: .75; }
+.evicon-line {
+  fill: none; stroke: var(--accent); stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.evicon-line.strong { stroke-width: 2.1; }
+.evicon-fill { fill: var(--accent); opacity: .8; stroke: none; }
+.add-icon { display: grid; place-items: center; }
+.add-icon .evicon { width: 20px; height: 20px; }
+.event-head.off { opacity: .45; }
+.event-head.off .event-name { text-decoration: line-through; }
+
+.sense-note {
+  font-size: 12.5px; color: var(--accent); font-weight: 600;
+  margin: -4px 0 4px; font-variant-numeric: tabular-nums;
+}
+
+/* Fault type picker */
+.segmented {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 6px;
+}
+.seg {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 9px;
+  color: var(--ink-dim); padding: 9px 8px; font-size: 12.5px; font-weight: 650;
+  cursor: pointer; min-height: 40px;
+}
+.seg.active {
+  border-color: var(--accent); color: var(--accent);
+  background: rgba(255, 200, 87, .12);
+}
+
+.ctl-ends {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--ink-faint); margin-top: -2px;
+}
+
+/* Drag-to-reorder — the timeline and the stratigraphic column share this. */
+.event-main, .layer-main { display: flex; align-items: stretch; }
+.event-grip, .layer-grip {
+  flex: 0 0 auto; width: 30px; border: 0; padding: 0;
+  background: none; color: var(--ink-faint); cursor: grab;
+  font-size: 15px; line-height: 1; touch-action: none;
+  border-right: 1px solid var(--line);
+}
+.event-grip:active, .layer-grip:active { cursor: grabbing; color: var(--accent); }
+.layer-grip.spacer { cursor: default; }
+.event-main .event-head, .layer-main .layer-head { flex: 1 1 auto; min-width: 0; }
+.event-row.dragging, .layer-row.dragging {
+  position: relative; z-index: 3; opacity: .92;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .55);
+  border-color: var(--accent);
+}
+.drop-line {
+  height: 3px; border-radius: 2px; background: var(--accent);
+  margin: 2px 0; box-shadow: 0 0 8px rgba(255, 200, 87, .5);
+}
+
+/* --- dials ---------------------------------------------------------------- */
+
+.dial { display: flex; align-items: center; gap: 14px; margin: 14px 0; }
+.dial-svg { width: 108px; height: 108px; flex: 0 0 auto; touch-action: none; cursor: grab; }
+.prot-svg { width: 112px; height: 88px; flex: 0 0 auto; touch-action: none; cursor: grab; }
+.dial-side { min-width: 0; }
+.dial-readout { font-size: 12px; color: var(--ink-faint); margin-top: 3px; }
+
+.dial-face { fill: var(--bg-3); stroke: var(--line); stroke-width: 1.5; }
+.tick { stroke: var(--ink-faint); stroke-width: 1; }
+.tick.major { stroke: var(--ink-dim); stroke-width: 1.6; }
+.dial-card { fill: var(--ink-faint); font-size: 11px; font-weight: 700; }
+.dial-strike { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+.dial-dip { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; opacity: .85; }
+.dial-knob { fill: var(--accent); stroke: var(--bg-2); stroke-width: 2; }
+
+.prot-horizon { stroke: var(--ink-faint); stroke-width: 1.5; }
+.prot-arc { fill: none; stroke: var(--ink-faint); stroke-width: 1.2; opacity: .55; }
+.prot-wedge { fill: rgba(255, 200, 87, .16); }
+.prot-ray { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+
+/* --- presets & view -------------------------------------------------------- */
+
+.preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 7px; }
+.preset-btn {
+  display: grid; gap: 3px; text-align: left; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 11px; padding: 11px;
+}
+.preset-name { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.preset-blurb { font-size: 11.5px; color: var(--ink-dim); line-height: 1.35; }
+
+.view-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+
+.update-banner {
+  position: fixed; z-index: 50;
+  left: 50%; transform: translateX(-50%);
+  /* Below the section switch, not over it. An update notice is worth showing
+     and is never worth burying the control that changes what the app is. */
+  top: calc(58px + env(safe-area-inset-top));
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 10px 9px 15px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 13px; font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+.update-banner button {
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--accent-ink); color: var(--accent);
+  padding: 6px 14px; font-size: 13px; font-weight: 700;
+}
+
+/* --- wide screens ---------------------------------------------------------- */
+
+@media (min-width: 900px) {
+  #app { flex-direction: row; }
+  .stage { flex: 1 1 auto; }
+  .sheet {
+    flex: 0 0 400px; height: 100% !important;
+    border-radius: 0; border-top: 0; border-left: 1px solid var(--line);
+    box-shadow: none;
+  }
+  .sheet-handle { display: none; }
+  .sheet-body { padding-bottom: 32px; }
+  .readout { bottom: 20px; }
+}
+
+/* --- strike and dip markers ----------------------------------------------- */
+
+/* Live reading for the selected marker. Sits under the HUD row rather than at
+   the bottom, so it never fights the identify readout for the same strip. */
+.marker-chip {
+  position: absolute; z-index: 6;
+  top: calc(10px + env(safe-area-inset-top) + var(--tap) + 8px);
+  left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px;
+  max-width: calc(100% - 24px);
+  padding: 6px 6px 6px 11px; border-radius: 999px;
+  background: rgba(15, 20, 24, .93); border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  font-size: 13px; white-space: nowrap;
+}
+.marker-chip.hidden { display: none; }
+.marker-chip strong {
+  color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: .3px;
+}
+.marker-chip span { color: var(--ink-dim); font-size: 12px; }
+.chip-close {
+  background: none; border: 0; color: var(--ink-faint);
+  font-size: 19px; line-height: 1; cursor: pointer; padding: 0 5px;
+}
+
+/* Armed-placement banner: hard to miss, because a mode that silently stays on
+   is a mode students get lost in. */
+.mode-banner {
+  position: absolute; z-index: 6;
+  bottom: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 24px);
+  padding: 7px 7px 7px 14px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 13px; font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+.mode-banner.hidden { display: none; }
+.banner-done {
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: rgba(42, 31, 5, .16); color: inherit;
+  font: inherit; padding: 5px 12px; min-height: 30px;
+}
+
+.marker-list { display: grid; gap: 6px; margin-top: 10px; }
+.marker-row {
+  display: flex; align-items: stretch; gap: 4px;
+  background: var(--bg-3); border: 1px solid transparent; border-radius: 10px;
+}
+.marker-row.selected { border-color: var(--accent); }
+.marker-main {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  background: none; border: 0; color: inherit; font: inherit; text-align: left;
+  padding: 8px 4px 8px 10px; min-height: var(--tap); cursor: pointer;
+}
+.marker-mark { flex: 0 0 auto; display: grid; place-items: center; }
+.sd-mark { width: 26px; height: 26px; display: block; color: var(--ink); }
+.sd-line {
+  fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round;
+}
+.marker-row.selected .sd-mark { color: var(--accent); }
+.marker-text { min-width: 0; }
+.marker-value {
+  font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: .3px;
+}
+.marker-sub {
+  font-size: 11.5px; color: var(--ink-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.marker-del {
+  flex: 0 0 auto; width: 38px;
+  background: none; border: 0; color: var(--ink-faint);
+  font-size: 21px; line-height: 1; cursor: pointer;
+}
+.marker-del:active { color: var(--danger); }
+
+/* Map-view escape hatch, parked beside undo/redo. */
+.map-chip {
+  display: flex; align-items: center; gap: 6px;
+  height: var(--tap); padding: 0 12px;
+  border-radius: 999px; border: 1px solid var(--accent);
+  background: rgba(255, 200, 87, .14); color: var(--accent);
+  font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
+  white-space: nowrap;
+}
+.map-chip.hidden { display: none; }
+.map-chip .chip-x { font-size: 17px; line-height: 1; opacity: .8; }
+
+.btn.armed {
+  background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 200, 87, .18);
+}
+.empty-note { color: var(--ink-faint); font-size: 13px; margin: 12px 2px; }
+
+/* --- stereonet ------------------------------------------------------------ */
+
+/* A pane, not a page. It shares the stage with the block so that a change to
+   the geology and its effect on the net can be watched at the same time. */
+.stereo-panel {
+  flex: 0 0 var(--net-split, 46%); min-height: 0; min-width: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.stereo-panel.hidden { display: none; }
+
+/* Same pill as the bottom sheet's handle, because it does the same job. */
+.stereo-grip {
+  flex: 0 0 auto; height: 22px; padding: 0;
+  border: 0; background: none; cursor: ns-resize; touch-action: none;
+  display: grid; place-items: center;
+}
+.stereo-grip::before {
+  content: ''; width: 42px; height: 4px; border-radius: 2px; background: var(--line);
+}
+.stereo-grip:active::before { background: var(--accent); }
+
+@media (min-aspect-ratio: 4/3) {
+  .stage { flex-direction: row; }
+  .stereo-panel {
+    /* Side by side there is room for both, so the split is fixed and the grip
+       has nothing to do. */
+    flex: 0 0 clamp(300px, 40%, 470px);
+    border-top: 0; border-left: 1px solid var(--line);
+  }
+  .stereo-grip { display: none; }
+  .stereo-head { padding-top: calc(10px + env(safe-area-inset-top)); }
+}
+
+.stereo-head {
+  flex: 0 0 auto; display: flex; align-items: baseline; gap: 9px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.stereo-head h2 { margin: 0; font-size: 16px; }
+.stereo-sub { font-size: 12px; color: var(--ink-faint); }
+.stereo-close {
+  margin-left: auto; width: var(--tap); height: 34px;
+  background: none; border: 0; color: var(--ink-dim);
+  font-size: 26px; line-height: 1; cursor: pointer;
+}
+
+.stereo-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px 20px;
+  padding: 12px 14px calc(20px + env(safe-area-inset-bottom));
+}
+.stereo-figure {
+  flex: 1 1 260px; min-width: 200px; display: grid; place-items: start center;
+}
+/* Bounded by the viewport height as well as its width, so that on a phone in
+   landscape the net shrinks and the answer comes up beside it rather than a
+   screen further down. */
+.stereo-net { width: 100%; max-width: min(430px, 52vh); height: auto; display: block; }
+.stereo-side { flex: 1 1 240px; min-width: 200px; }
+
+/* --- the plot ------------------------------------------------------------- */
+
+.net-face { fill: var(--bg-2); }
+.net-grid path { fill: none; stroke: rgba(232, 238, 242, .075); stroke-width: 1; }
+.net-ticks line { stroke: var(--ink-faint); stroke-width: 1; }
+.net-ticks line.major { stroke: var(--ink-dim); stroke-width: 2; }
+.net-rim { fill: none; stroke: var(--ink-dim); stroke-width: 1.5; }
+.net-card { fill: var(--ink-dim); font-size: 13px; font-weight: 700; }
+
+.net-planes path { fill: none; stroke: rgba(232, 238, 242, .3); stroke-width: 1.2; }
+.net-planes path.selected { stroke: var(--accent); stroke-width: 2; }
+
+.net-girdle {
+  fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-dasharray: 7 4;
+}
+.net-girdle.map { stroke: #8ecae6; stroke-width: 1.8; stroke-dasharray: 2 5; }
+
+.net-pole { fill: var(--ink); stroke: var(--bg); stroke-width: 1.5; }
+.net-pole.selected { fill: var(--accent); stroke-width: 2; }
+.net-hit { fill: transparent; cursor: pointer; }
+
+.net-axis path { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.net-axis .dot { fill: var(--accent); stroke: none; }
+.net-axis.map path { stroke: #8ecae6; stroke-width: 2; }
+.net-axis.map .dot { fill: #8ecae6; }
+.net-mean { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.net-cone {
+  fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-dasharray: 7 4;
+}
+
+/* --- the readout ---------------------------------------------------------- */
+
+.stereo-verdict {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 13px; background: var(--bg-2);
+}
+.stereo-verdict.girdle { border-color: rgba(255, 200, 87, .45); }
+.stereo-verdict p { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-dim); }
+.stereo-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-faint);
+}
+.stereo-answer { margin-top: 3px; }
+.stereo-answer strong {
+  font-size: 25px; font-variant-numeric: tabular-nums; letter-spacing: .5px;
+  color: var(--accent);
+}
+.stereo-answer span { font-size: 12px; color: var(--ink-faint); margin-left: 7px; }
+.stereo-check {
+  margin-top: 10px !important; padding-top: 9px; border-top: 1px solid var(--line);
+}
+.stereo-check strong {
+  color: #8ecae6; font-variant-numeric: tabular-nums; letter-spacing: .4px;
+}
+
+.stereo-count { margin: 10px 2px 0; font-size: 12px; color: var(--ink-faint); }
+.stereo-legend { margin: 10px 2px 0; display: grid; gap: 5px; }
+.legend-row {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 12px; color: var(--ink-dim);
+}
+.legend-mark { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; }
+.legend-mark.pole { background: var(--ink); box-shadow: 0 0 0 1.5px var(--bg); }
+.legend-mark.girdle {
+  border-radius: 0; height: 0; border-top: 2px dashed var(--accent);
+}
+.legend-mark.axis {
+  border-radius: 2px; border: 2px solid var(--accent); transform: rotate(45deg);
+  width: 11px; height: 11px;
+}
+.legend-mark.mean { border: 2.5px solid var(--accent); background: none; }
+.legend-mark.cone {
+  border: 2px dashed var(--accent); background: none;
+}
+.legend-mark.map {
+  border-radius: 2px; border: 2px solid #8ecae6; transform: rotate(45deg);
+  width: 11px; height: 11px;
+}
+
+/* Text sitting on the net beside a mark. Painted stroke-first so the numbers
+   stay readable wherever they land — over the graticule, over a pole, or over
+   another curve. */
+.net-label {
+  fill: var(--accent); font-size: 15px; font-weight: 700;
+  font-variant-numeric: tabular-nums; letter-spacing: .3px;
+  paint-order: stroke;
+  stroke: rgba(12, 16, 20, .92); stroke-width: 4px; stroke-linejoin: round;
+}
+
+/* The same finding, out in the Field panel where it outlives the overlay. */
+.net-summary {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 9px;
+  margin-top: 10px; padding: 10px 12px;
+  background: var(--bg-3); border-radius: 10px;
+  border-left: 3px solid var(--accent);
+}
+.net-summary.scattered, .net-summary.cluster, .net-summary.conical {
+  border-left-color: var(--line);
+}
+.net-summary .kind {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-faint); flex: 1 0 100%;
+}
+.net-summary strong {
+  font-size: 19px; color: var(--accent);
+  font-variant-numeric: tabular-nums; letter-spacing: .4px;
+}
+.net-summary.scattered strong, .net-summary.cluster strong,
+.net-summary.conical strong { color: var(--ink); }
+.net-summary .note { font-size: 11.5px; color: var(--ink-faint); }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.chip {
+  border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+  background: var(--bg-3); color: var(--ink-dim);
+  font: inherit; font-size: 12.5px; padding: 8px 13px; min-height: 38px;
+}
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.stereo-numbers { margin-top: 14px; font-size: 12px; color: var(--ink-faint); }
+.stereo-numbers summary { cursor: pointer; color: var(--ink-dim); }
+.stereo-numbers p { margin: 7px 0 0; font-variant-numeric: tabular-nums; }
+.stereo-numbers p.dim { color: var(--ink-faint); font-variant-numeric: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet { transition: none; }
+}
+
+/* --- sections: block vs map ---------------------------------------------- */
+
+/* Two whole sections sharing one shell. The switch sits over the stage rather
+   than in the sheet, because the sheet is where the work happens and a control
+   that changes the entire screen should not be in among the ones that change a
+   dip by two degrees. */
+.mode-switch {
+  position: absolute; z-index: 7;
+  top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  display: flex; gap: 2px; padding: 3px;
+  background: rgba(22, 29, 35, .86); border: 1px solid var(--line);
+  border-radius: 12px; backdrop-filter: blur(8px);
+}
+.mode-btn {
+  appearance: none; border: 0; cursor: pointer;
+  background: none; color: var(--ink-dim);
+  padding: 6px 15px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 650; letter-spacing: .01em;
+  min-height: 32px;
+}
+.mode-btn.on { background: var(--accent); color: var(--accent-ink); }
+
+.map-pane {
+  position: relative; flex: 1 1 auto; min-width: 0; min-height: 0;
+  overflow: hidden; display: none;
+}
+.mode-map .map-pane { display: block; }
+.mode-map .block-pane, .mode-map .stereo-panel { display: none !important; }
+
+.mapview { display: block; width: 100%; height: 100%; touch-action: none; }
+
+.hud-icon { width: 22px; height: 22px; display: block; }
+.icon-btn.on { background: var(--accent); border-color: var(--accent); }
+.icon-btn.on .hud-icon .tabicon-line { stroke: var(--accent-ink); }
+
+/* Scale bar: a drawn rule with a round number under it, because a bar with no
+   rule is just a number floating over a photograph. */
+.map-scale { display: flex; align-items: center; gap: 7px; pointer-events: none; }
+.scale-rule {
+  height: 7px; border: 1px solid var(--ink-dim); border-top: 0;
+  display: inline-block;
+}
+.map-attrib {
+  position: absolute; z-index: 5;
+  right: calc(10px + env(safe-area-inset-right));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  font-size: 10.5px; color: var(--ink-faint);
+  background: rgba(15, 20, 24, .55); padding: 3px 7px; border-radius: 6px;
+  pointer-events: none; max-width: 55%; text-align: right;
+}
+
+/* Everything transient along the bottom of the map, in one column, clear of
+   the scale bar and the attribution in the corners. */
+.map-bottom {
+  position: absolute; z-index: 6; left: 50%; transform: translateX(-50%);
+  bottom: calc(38px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  max-width: calc(100% - 24px); pointer-events: none;
+}
+.map-bottom > * { pointer-events: auto; }
+.map-bottom .map-status,
+.map-bottom .map-readout,
+.map-bottom .mode-banner {
+  position: static; transform: none; left: auto; right: auto; top: auto; bottom: auto;
+}
+
+/* The message the whole feature exists to be able to show. */
+.map-status {
+  font-size: 12px; font-weight: 600;
+  padding: 6px 11px; border-radius: 9px;
+  background: rgba(15, 20, 24, .9); border: 1px solid var(--line);
+  color: var(--ink-dim); backdrop-filter: blur(8px); pointer-events: none;
+  max-width: calc(100% - 32px); text-align: center;
+}
+.map-status.hidden { display: none; }
+.map-status.bad { color: #ffb08a; border-color: rgba(255, 140, 90, .45); }
+
+.map-readout {
+  display: flex; align-items: center; gap: 8px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 8px 12px; font-size: 13.5px;
+  background: rgba(15, 20, 24, .93); border: 1px solid var(--line);
+  border-radius: var(--radius); backdrop-filter: blur(10px);
+}
+.map-readout.hidden { display: none; }
+.map-readout strong { color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+.map-readout span { color: var(--ink-dim); }
+
+/* --- field panels --------------------------------------------------------- */
+
+.stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px;
+  margin: 10px 0 4px;
+}
+.stat { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.stat-label { font-size: 12px; color: var(--ink-faint); }
+.stat-value {
+  font-size: 13.5px; font-weight: 650; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.stat-value.good { color: #7fd39b; }
+.stat-value.warn { color: #ffc857; }
+.stat-value.bad { color: var(--danger); }
+.stat-value.dim { color: var(--ink-faint); font-weight: 500; }
+
+.coord-line {
+  font-size: 11.5px; color: var(--ink-faint);
+  font-variant-numeric: tabular-nums; white-space: pre-line;
+  margin: 4px 0 2px;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip {
+  appearance: none; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 999px;
+  color: var(--ink-dim); padding: 8px 13px; font-size: 12.5px; font-weight: 600;
+  min-height: 38px;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.note-input { resize: vertical; min-height: 64px; font-family: inherit; line-height: 1.4; }
+
+/* The live compass reading. Big, because it is read at arm's length with the
+   phone lying on a rock. */
+.live { margin: 10px 0 4px; }
+.reading {
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; text-align: center;
+}
+.reading-big {
+  font-size: 34px; font-weight: 700; letter-spacing: .5px;
+  font-variant-numeric: tabular-nums; color: var(--accent); line-height: 1.1;
+}
+.reading-sub { font-size: 13px; color: var(--ink-dim); margin-top: 2px; }
+.reading-scatter { font-size: 12px; color: var(--ink-faint); margin-top: 6px; }
+.reading-scatter.good { color: #7fd39b; }
+.reading-scatter.warn { color: #ffc857; }
+
+/* "Hold still" as something you watch happen rather than a word on a screen. */
+.steady {
+  height: 5px; border-radius: 3px; background: #0a0e12;
+  margin-top: 10px; overflow: hidden;
+}
+.steady-fill {
+  display: block; height: 100%; width: 0;
+  background: var(--accent); transition: width .12s linear;
+}
+.steady.ready .steady-fill { background: #7fd39b; }
+
+.notice {
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 14px; margin: 10px 0;
+}
+.notice p { margin: 0 0 5px; font-size: 13px; }
+.notice p:last-child { margin: 0; }
+.notice .dim { color: var(--ink-faint); font-size: 12.5px; }
+.notice.warn { border-color: rgba(255, 200, 87, .4); }
+
+.card {
+  background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: var(--radius); margin: 8px 0; overflow: hidden;
+}
+.card.selected { border-color: var(--accent); }
+.card-main {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 11px 12px; background: none; border: 0; cursor: pointer;
+  color: var(--ink); text-align: left; font: inherit; min-height: var(--tap);
+}
+.card-main.static { cursor: default; }
+.card-swatch { flex: 0 0 auto; display: grid; place-items: center; }
+.card-swatch .swatch.small { width: 26px; height: 26px; border-radius: 6px; }
+.card-text { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.card-title {
+  font-size: 14px; font-weight: 650;
+  font-variant-numeric: tabular-nums; letter-spacing: .2px;
+}
+.card-sub {
+  font-size: 12px; color: var(--ink-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-body { padding: 2px 12px 12px; border-top: 1px solid var(--line); }
+
+.pill {
+  flex: 0 0 auto; font-size: 11px; font-weight: 700;
+  padding: 4px 9px; border-radius: 999px;
+  background: rgba(255, 255, 255, .06); color: var(--ink-dim);
+}
+.pill.good { background: rgba(127, 211, 155, .16); color: #7fd39b; }
+.pill.warn { background: rgba(255, 200, 87, .16); color: var(--accent); }
+.pill.bad { background: rgba(255, 107, 107, .16); color: var(--danger); }
+.pill.dim { color: var(--ink-faint); }
+
+.area-card .row-actions, .unit-card .row-actions { padding: 0 12px 12px; margin-top: 0; }
+
+.progress { margin: 12px 0 8px; }
+.progress-bar {
+  height: 7px; border-radius: 4px; background: #0a0e12;
+  border: 1px solid rgba(255, 255, 255, .07); overflow: hidden;
+}
+.progress-bar span {
+  display: block; height: 100%; width: 0; background: var(--accent);
+  transition: width .2s linear;
+}
+.progress-text {
+  margin-top: 6px; font-size: 12px; color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Where a reading came from and how much to trust it, kept with the reading. */
+.provenance {
+  font-size: 11.5px; color: var(--ink-faint); line-height: 1.5;
+  margin: 10px 0 2px; padding-top: 8px; border-top: 1px solid var(--line);
+}
+
+/* On a wide screen the sheet moves beside the map rather than under it, the
+   same way the stereonet does. */
+@media (min-aspect-ratio: 1/1) and (min-width: 760px) {
+  .stats { grid-template-columns: 1fr 1fr 1fr 1fr; }
+}
