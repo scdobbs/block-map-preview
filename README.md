@@ -249,6 +249,13 @@ phone records the fault plane and the slip line together, and flipping between
 Plane and Line afterwards shows two real measurements rather than blanking one
 of them.
 
+With the phone's long edge laid straight down the dip, the two readings are
+the same measurement: the trend comes out exactly the strike plus ninety and
+the plunge exactly the dip. Lay the edge anywhere else on the surface and the
+line is a different line in the same plane — which is the point, and is what
+records a slickenline. Both forms are shown at once, so neither has to be
+worked out on paper.
+
 A station stores one pair or the other, never both, and the feature type says
 which. A line is written **trend / plunge** and always labelled, because
 `020/15` on its own reads exactly like the strike and dip of a plane — the same
@@ -573,9 +580,16 @@ fragment uniform budget of older mobile GPUs.
   is working.
 - Some browsers give tilt with no compass reference at all, and there the dip
   is real and the strike is withheld rather than invented.
-- Reconstructing an absolute frame from `webkitCompassHeading` degrades as the
-  phone gets further from level, so a reading on a very steep bed is the least
-  trustworthy one the compass gives.
+- **A compass heading is not an Euler angle.** There are two defensible ways to
+  give a tilted phone a bearing: drop its long axis straight down onto the
+  horizontal plane, which is what the Euler `alpha` encodes, or stand the phone
+  level first and then read the azimuth, which is what a compass does and what
+  CoreLocation returns. They agree only when the tilt is square to the phone —
+  dipping away from you, or off to the side — and diverge at anything oblique,
+  by 4° on a 30° dip and 20° on a 60° one. Substituting the heading into
+  `alpha` therefore made the strike swing as the phone was turned on the rock.
+  The frame is now rebuilt by levelling instead, which makes the answer depend
+  on the surface and not on how the phone was laid on it.
 - **Lines are measured with the phone's long edge**, which is a coarser gesture
   than laying its whole back on a surface — there is less of the phone touching
   less of the rock. Expect a linear reading to be the less trustworthy of the

@@ -15,6 +15,7 @@ import { el, svg, clear } from '../widgets.js';
 import { quadrantBearing } from '../../geo/math.js';
 import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, feature, isLinearFeature }
   from '../../field/model.js';
+import { vecToTrendPlunge } from '../../geo/stereonet.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
 
@@ -68,12 +69,23 @@ export function measureView(ctx) {
   face.appendChild(spin);
   face.appendChild(svg('circle', { cx: C, cy: C, r: 4, class: 'mf-hub' }));
 
-  node.appendChild(el('div', { class: 'mf-dial-wrap' }, [face]));
+  // Tapping the face holds the reading. The button below does the same thing,
+  // but the face is where you are already looking and it is a much larger
+  // target than a button when the phone is flat on a rock at arm's length.
+  const dialWrap = el('div', { class: 'mf-dial-wrap', role: 'button', tabindex: '0',
+    title: 'Tap to hold the reading' }, [face]);
+  dialWrap.addEventListener('click', () => ctx.captureCompass());
+  node.appendChild(dialWrap);
 
   // --- readout ------------------------------------------------------------
   const big = el('div', { class: 'mf-big', text: '—' });
   const sub = el('div', { class: 'mf-sub', text: '' });
   const units = el('div', { class: 'mf-units', text: '' });
+  // The same measurement stated the other way round. A plane's dip line is a
+  // line, and the line the phone's edge reads lies in a plane, and both are
+  // held by the same capture — so there is no reason to make anyone flip modes
+  // to see the number they were about to ask for.
+  const derived = el('div', { class: 'mf-derived', text: '' });
 
   // A plan-view dial cannot show an inclination, so the tilt gets its own
   // small side elevation: a horizon, and the surface leaning off it.
@@ -84,7 +96,7 @@ export function measureView(ctx) {
   incl.append(inclArc, inclRay);
 
   node.appendChild(el('div', { class: 'mf-readout' }, [
-    el('div', { class: 'mf-numbers' }, [big, sub, units]),
+    el('div', { class: 'mf-numbers' }, [big, sub, units, derived]),
     el('div', { class: 'mf-incl-wrap' }, [incl]),
   ]));
 
@@ -156,6 +168,7 @@ export function measureView(ctx) {
       big.textContent = '—';
       sub.textContent = s.settling ? 'settling…' : 'waiting for the sensor…';
       units.textContent = '';
+      derived.textContent = '';
       spin.style.opacity = '.25';
       setBar(0, false);
       steadyText.textContent = '';
@@ -182,6 +195,21 @@ export function measureView(ctx) {
         : `${quadrantBearing(az)} · ${linear ? 'plunges' : 'dips'} ${Math.round(inc)}°`;
 
       drawIncl(inclRay, inclArc, inc);
+
+      // In Plane mode: the dip line, which is the strike turned 90 degrees and
+      // is what a trend/plunge of the same surface would read if the phone's
+      // edge were laid straight down the dip.
+      // In Line mode: the plane the phone's back is on, which for slickenlines
+      // is the fault the striae are on.
+      if (linear) {
+        const ps = held ? d.strike : s.strike;
+        const pd = held ? d.dip : s.dip;
+        derived.textContent = ps == null || pd == null ? ''
+          : `on a plane  ${pad3(ps)}/${Math.round(pd)}  strike / dip`;
+      } else {
+        derived.textContent = az == null ? ''
+          : `dip line  ${pad3((az + 90) % 360)}/${Math.round(inc)}  trend / plunge`;
+      }
 
       const fill = Math.max(0, Math.min(1, 1 - ((scatter ?? 0) / 6)));
       setBar(held ? 1 : fill, held || s.still);

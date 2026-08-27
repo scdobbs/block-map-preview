@@ -4,7 +4,8 @@
 // each of them will happily hand back a confident-looking number that is
 // wrong, and the wrapper's job is to know when that is happening and say so.
 
-import { normalToStrikeDip, normalize, dot, clamp } from '../geo/math.js';
+import { normalToStrikeDip, normalize, dot, clamp, cross, rotateAbout,
+  rotateAboutVertical, wrap360, RAD } from '../geo/math.js';
 import { vecToTrendPlunge } from '../geo/stereonet.js';
 import { applyDeclination } from './declination.js';
 
@@ -63,6 +64,61 @@ export function deviceAxis(alphaDeg, betaDeg, gammaDeg) {
 /** Angle between two unit vectors, in degrees, ignoring sign. */
 export function angleBetween(a, b) {
   return Math.acos(clamp(Math.abs(dot(normalize(a), normalize(b))), -1, 1)) * 180 / Math.PI;
+}
+
+/**
+ * The heading a tilt-compensated compass reports for a device in this
+ * orientation.
+ *
+ * There are two defensible ways to give a tilted phone a bearing, and they
+ * disagree:
+ *
+ *   - drop the phone's long axis straight down onto the horizontal plane and
+ *     read its azimuth. This is what the Euler `alpha` encodes.
+ *   - stand the phone up first — rotate it level about the horizontal axis it
+ *     is tilted around — and then read the azimuth. This is what a compass
+ *     does, and what CoreLocation returns.
+ *
+ * They agree only when the tilt is square to the phone: dipping away from you,
+ * or off to the side. At anything oblique they diverge, by a few degrees on a
+ * gentle dip and by tens of degrees on a steep one. Treating one as the other
+ * is what made the strike swing when the phone was turned on the rock.
+ */
+export function tiltCompensatedHeading(normal, axis) {
+  const up = [0, 0, 1];
+  const lean = Math.hypot(normal[0], normal[1]);
+  // Lying flat: the long axis is already horizontal and its azimuth is the
+  // heading, with no levelling to do and no tilt axis to do it about.
+  if (lean < 1e-9) return wrap360(Math.atan2(axis[0], axis[1]) * RAD);
+  const tiltAxis = normalize(cross(up, normal));
+  const tilt = Math.acos(clamp(dot(normal, up), -1, 1)) * RAD;
+  const levelled = rotateAbout(axis, tiltAxis, -tilt);
+  return wrap360(Math.atan2(levelled[0], levelled[1]) * RAD);
+}
+
+/**
+ * Recover a true-north device frame from a compass heading and the two tilt
+ * angles.
+ *
+ * iOS reports `alpha` against an arbitrary reference and hands the absolute
+ * direction over separately as `webkitCompassHeading`, so the frame has to be
+ * rebuilt. Substituting the heading into `alpha` looks like it does that and
+ * does not: it silently assumes the first of the two conventions above.
+ *
+ * Instead: build the frame with `alpha` at zero, ask what heading a compass
+ * would report for it, and turn the whole frame about the vertical by the
+ * difference. Whatever the phone is doing, the answer then depends only on
+ * the surface — turning the phone on the spot moves the long axis and the
+ * heading together and leaves the plane where it was.
+ */
+export function orientationFromHeading(headingDeg, betaDeg, gammaDeg) {
+  const n = deviceNormal(0, betaDeg, gammaDeg);
+  const y = deviceAxis(0, betaDeg, gammaDeg);
+  const turn = headingDeg - tiltCompensatedHeading(n, y);
+  return {
+    normal: rotateAboutVertical(n, turn),
+    axis: rotateAboutVertical(y, turn),
+  };
 }
 
 export function orientationSupported() {
@@ -156,16 +212,21 @@ export class Clinometer {
   _onEvent(e) {
     if (e.alpha == null && e.webkitCompassHeading == null) return;
 
-    // iOS reports an absolute heading but an `alpha` measured from wherever
-    // the phone happened to be switched on, so the heading is substituted back
-    // in. Azimuth runs clockwise from north and alpha runs the other way,
-    // hence the subtraction.
     const iosHeading = Number.isFinite(e.webkitCompassHeading) ? e.webkitCompassHeading : null;
-    const alpha = iosHeading != null ? 360 - iosHeading : (e.alpha || 0);
     const absolute = iosHeading != null || e.absolute === true;
+    const beta = e.beta || 0, gamma = e.gamma || 0;
 
-    let n = deviceNormal(alpha, e.beta || 0, e.gamma || 0);
-    let y = deviceAxis(alpha, e.beta || 0, e.gamma || 0);
+    // Two different sources, two different reconstructions. Android's absolute
+    // events carry a real Euler alpha already referenced to north, so the
+    // frame comes straight out of the three angles. iOS carries an arbitrary
+    // alpha plus a compass heading, and that has to be rebuilt.
+    let n, y;
+    if (iosHeading != null) {
+      ({ normal: n, axis: y } = orientationFromHeading(iosHeading, beta, gamma));
+    } else {
+      n = deviceNormal(e.alpha || 0, beta, gamma);
+      y = deviceAxis(e.alpha || 0, beta, gamma);
+    }
     // Every platform reports against MAGNETIC north, so the correction is
     // always ours to make.
     //

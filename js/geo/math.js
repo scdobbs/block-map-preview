@@ -110,6 +110,20 @@ export function normalToStrikeDip(n) {
   return { strike, dip };
 }
 
+/**
+ * Turn a vector's azimuth by `deg`, leaving its inclination alone.
+ *
+ * Used both for the magnetic-to-true correction and for aligning a device
+ * frame with a compass heading, which are the same operation on a sphere.
+ */
+export function rotateAboutVertical(v, deg) {
+  const d = deg * DEG;
+  if (!d) return v;
+  const c = Math.cos(d), s = Math.sin(d);
+  const [e, n, u] = v;
+  return [e * c + n * s, n * c - e * s, u];
+}
+
 export function wrap360(a) { return ((a % 360) + 360) % 360; }
 
 export function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }

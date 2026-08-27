@@ -1176,3 +1176,14 @@ html, body {
   .mf-hold, .mf-save, .mf-why, .mf-foot { grid-column: 2; }
   .mf-readout { align-self: end; }
 }
+
+/* The dial is a tap target as well as a picture. */
+.mf-dial-wrap { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mf-dial-wrap:active .mf-face { fill: #121a20; }
+
+/* The same reading stated the other way round: a plane's dip line, or the
+   plane a measured line is lying in. */
+.mf-derived {
+  font-size: 11.5px; color: var(--ink-faint); margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}

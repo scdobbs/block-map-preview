@@ -16,6 +16,8 @@
 //     for the declination at that area's center and offers it as a suggestion.
 //     If that fails, nothing breaks: the field is still there.
 
+import { rotateAboutVertical } from '../geo/math.js';
+
 export const DECL_UNSET = null;
 
 /**
@@ -26,11 +28,7 @@ export const DECL_UNSET = null;
  * declination, so the whole horizontal plane turns by that angle.
  */
 export function applyDeclination(v, declDeg) {
-  const d = (declDeg || 0) * Math.PI / 180;
-  if (!d) return v;
-  const c = Math.cos(d), s = Math.sin(d);
-  const [e, n, u] = v;
-  return [e * c + n * s, n * c - e * s, u];
+  return rotateAboutVertical(v, declDeg || 0);
 }
 
 /** The same correction applied to a bare azimuth. */
