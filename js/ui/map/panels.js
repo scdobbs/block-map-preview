@@ -10,8 +10,9 @@
 import { el, clear, numberRow, selectRow, toggleRow, compassDial, protractor } from '../widgets.js';
 import { swatchEl } from '../swatch.js';
 import { quadrantBearing } from '../../geo/math.js';
-import { FEATURES, CERTAINTIES, ROCKS, rockOf, unitColor, knownUnitNames,
-  makeUnit, hasAttitude } from '../../field/model.js';
+import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, CERTAINTIES, ROCKS, rockOf,
+  unitColor, knownUnitNames, makeUnit, hasAttitude, isLinearFeature,
+  formatAttitude } from '../../field/model.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
 import { SOURCES, BASE_SOURCES, estimateArea, storageReport } from '../../field/tiles.js';
@@ -98,12 +99,6 @@ function head(title, sub) {
 
 const pad3 = (v) => String(Math.round(v)).padStart(3, '0');
 
-/** Strike and dip the way it is written in a notebook. */
-export function formatAttitude(st) {
-  if (!hasAttitude(st)) return 'no attitude';
-  return `${pad3(st.strike)}/${Math.round(st.dip)}`;
-}
-
 // ---------------------------------------------------------------------------
 // Measure
 // ---------------------------------------------------------------------------
@@ -132,7 +127,29 @@ export function measurePanel(ctx) {
   // --- what --------------------------------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: 'Attitude' }));
 
+  const linear = isLinearFeature(draft.feature);
+
+  // Plane or line first, because it decides what every control below means.
+  node.appendChild(chipsRow({
+    label: 'Measuring',
+    value: linear ? 'linear' : 'planar',
+    options: [
+      { id: 'planar', label: 'A plane', hint: 'Bedding, foliation, a joint, a fault surface, a contact.' },
+      { id: 'linear', label: 'A line', hint: 'A lineation, a fold hinge, slickenlines.' },
+    ],
+    onChange: (v) => ctx.setGeometry(v),
+  }));
+
+  node.appendChild(chipsRow({
+    label: 'Feature',
+    value: draft.feature,
+    options: (linear ? LINEAR_FEATURES : PLANAR_FEATURES)
+      .map((f) => ({ id: f.id, label: f.label, hint: f.hint })),
+    onChange: (v) => ctx.setFeature(v),
+  }));
+
   const sourceChips = chipsRow({
+    label: 'Read it with',
     value: draft.source,
     options: [
       { id: 'compass', label: 'Phone compass', hint: 'Lay the phone on the surface.' },
@@ -145,41 +162,41 @@ export function measurePanel(ctx) {
   const liveWrap = el('div', { class: 'live' });
   node.appendChild(liveWrap);
 
-  let compassBits = null;
+  let heldLine = null;
   if (draft.source === 'compass') {
-    compassBits = buildCompass(ctx, draft, liveWrap);
+    heldLine = buildCompassLauncher(ctx, draft, liveWrap, linear);
   } else {
+    // Typed by hand. The two controls are the same ones the History tab uses;
+    // only what they are called changes with the geometry.
+    const azKey = linear ? 'trend' : 'strike';
+    const incKey = linear ? 'plunge' : 'dip';
+    if (draft[azKey] == null) draft[azKey] = 0;
+    if (draft[incKey] == null) draft[incKey] = 0;
     const dial = compassDial({
-      value: draft.strike ?? 0, dip: draft.dip ?? 0, label: 'Strike',
-      onChange: (v) => { draft.strike = v; ctx.touchDraft(); },
+      value: draft[azKey], dip: draft[incKey], label: linear ? 'Trend' : 'Strike',
+      onChange: (v) => { draft[azKey] = v; ctx.touchDraft(); },
     });
     const prot = protractor({
-      value: draft.dip ?? 0, label: 'Dip', max: 90,
-      onChange: (v) => { draft.dip = v; dial.setDip(v); ctx.touchDraft(); },
+      value: draft[incKey], label: linear ? 'Plunge' : 'Dip', max: 90,
+      onChange: (v) => { draft[incKey] = v; dial.setDip(v); ctx.touchDraft(); },
     });
-    // A reading typed in has no attitude until it is typed, so seed it.
-    if (draft.strike == null) draft.strike = 0;
-    if (draft.dip == null) draft.dip = 0;
     liveWrap.append(dial, prot);
+    liveWrap.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: linear
+        ? 'Trend is the compass direction the line runs toward, down-plunge.'
+        : 'Strike follows the right-hand rule: with the strike direction ahead of you, the beds dip to your right.' }));
   }
 
   const noAttitude = toggleRow({
     label: 'No attitude here',
     value: draft.noAttitude,
-    hint: 'Record the rock and the place without a strike and dip — scree, float, a covered contact.',
+    hint: 'Record the rock and the place without a measurement — scree, float, a covered contact.',
     onChange: (v) => { draft.noAttitude = v; ctx.rebuild(); },
   });
   node.appendChild(noAttitude);
 
   // --- which rock ---------------------------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: 'What it is' }));
-
-  node.appendChild(chipsRow({
-    label: 'Feature',
-    value: draft.feature,
-    options: FEATURES.map((f) => ({ id: f.id, label: f.label, hint: f.hint })),
-    onChange: (v) => { draft.feature = v; ctx.touchDraft(); },
-  }));
 
   const known = knownUnitNames(doc);
   const listId = 'field-unit-names';
@@ -286,7 +303,7 @@ export function measurePanel(ctx) {
       gpsNote.textContent = '';
     }
 
-    compassBits?.refresh();
+    heldLine?.refresh();
 
     // The record button states its own objection rather than being mutely
     // disabled — the commonest reason to be stuck here is one the student can
@@ -300,8 +317,15 @@ export function measurePanel(ctx) {
   return node;
 }
 
-/** The live compass block, including its permission gate. */
-function buildCompass(ctx, draft, wrap) {
+/**
+ * The way into the full-screen clinometer, and its permission gate.
+ *
+ * The reading itself is not taken here. A panel sharing the screen with a map
+ * is the wrong place to hold a phone flat on a rock and watch a number settle,
+ * so this is a door rather than an instrument — and it shows what came back
+ * through it.
+ */
+function buildCompassLauncher(ctx, draft, wrap, linear) {
   const c = ctx.clinoState();
 
   if (c.error === 'denied') {
@@ -318,73 +342,31 @@ function buildCompass(ctx, draft, wrap) {
     ]));
     return null;
   }
-  if (!ctx.clinoStarted()) {
-    wrap.appendChild(el('button', {
-      class: 'btn primary wide', type: 'button', text: 'Turn on the compass',
-      onclick: () => ctx.startClino(),
-    }));
-    wrap.appendChild(el('div', { class: 'ctl-hint standalone',
-      text: 'iOS asks permission before any app can read the compass.' }));
-    return null;
-  }
 
-  const big = el('div', { class: 'reading-big', text: '—' });
-  const sub = el('div', { class: 'reading-sub', text: '' });
-  const scatter = el('div', { class: 'reading-scatter' });
-  const bar = el('div', { class: 'steady' }, [el('span', { class: 'steady-fill' })]);
-  const warn = el('div', { class: 'ctl-hint standalone' });
+  const held = el('div', { class: 'held-reading' });
+  wrap.appendChild(held);
 
-  const capture = el('button', {
-    class: 'btn wide', type: 'button', text: 'Hold the reading',
-    onclick: () => ctx.captureCompass(),
-  });
-
-  wrap.append(el('div', { class: 'reading' }, [big, sub, scatter, bar]), warn, capture);
+  wrap.appendChild(el('button', {
+    class: 'btn primary wide', type: 'button',
+    text: draft.held ? 'Open the compass again' : 'Open the compass',
+    onclick: () => ctx.openMeasure(),
+  }));
+  wrap.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: 'Opens full screen. Lay the phone flat on the surface and hold it still.' }));
 
   const refresh = () => {
-    const s = ctx.clinoState();
-    if (draft.held) {
-      big.textContent = `${pad3(draft.strike)}/${Math.round(draft.dip)}`;
-      sub.textContent = `${quadrantBearing(draft.strike)} · held`;
-      scatter.textContent = draft.scatter != null
-        ? `captured with ${draft.scatter.toFixed(1)}° of scatter` : '';
-      bar.querySelector('.steady-fill').style.width = '100%';
-      capture.textContent = 'Take a new reading';
-      warn.textContent = '';
-      return;
-    }
-    capture.textContent = 'Hold the reading';
-
-    if (!s.ready) {
-      big.textContent = '—';
-      sub.textContent = s.settling ? 'settling…' : 'waiting for the sensor…';
-      scatter.textContent = '';
-      bar.querySelector('.steady-fill').style.width = '0%';
-      return;
-    }
-
-    big.textContent = s.strike == null
-      ? `dip ${Math.round(s.dip)}` : `${pad3(s.strike)}/${Math.round(s.dip)}`;
-    sub.textContent = s.strike == null
-      ? 'no compass reference — dip only' : quadrantBearing(s.strike);
-    scatter.textContent = `${s.scatter.toFixed(1)}° scatter`;
-    scatter.className = `reading-scatter ${s.still ? 'good' : 'warn'}`;
-    // The bar fills as the phone settles, so "hold still" is something the
-    // student can watch happen rather than a word on a screen.
-    const fill = Math.max(0, Math.min(1, 1 - (s.scatter / 6)));
-    bar.querySelector('.steady-fill').style.width = `${fill * 100}%`;
-    bar.classList.toggle('ready', s.still);
-
-    const bits = [];
-    if (s.needsCalibration) bits.push('The magnetometer wants calibrating — wave the phone in a figure of eight.');
-    if (!s.absolute) bits.push('This browser is not giving a compass heading, so only the dip is real.');
-    if (!ctx.declinationSet()) {
-      bits.push('Declination is not set, so every strike is a magnetic bearing. Set it on the Setup tab.');
-    }
-    if (!s.still) bits.push('Still moving. Rest the phone on the rock and wait for the bar to fill.');
-    warn.textContent = bits.join(' ');
+    clear(held);
+    if (!draft.held) { held.classList.add('empty'); return; }
+    held.classList.remove('empty');
+    const az = linear ? draft.trend : draft.strike;
+    const inc = linear ? draft.plunge : draft.dip;
+    held.append(
+      el('strong', { text: az == null ? `${Math.round(inc)}°` : `${pad3(az)}/${Math.round(inc)}` }),
+      el('span', { text: ` ${linear ? 'trend / plunge' : 'strike / dip'}` }),
+      el('span', { class: 'held-scatter',
+        text: draft.scatter != null ? ` · ${draft.scatter.toFixed(1)}° scatter` : '' }),
+    );
   };
-
   refresh();
   return { refresh };
 }
@@ -463,21 +445,29 @@ function stationEditor(ctx, st) {
     onChange: (v) => edit((s) => { s.name = v.trim(); }),
   }));
 
+  const linear = isLinearFeature(st.feature);
   if (hasAttitude(st)) {
+    const azKey = linear ? 'trend' : 'strike';
+    const incKey = linear ? 'plunge' : 'dip';
     const dial = compassDial({
-      value: st.strike, dip: st.dip, label: 'Strike',
-      onChange: (v) => edit((s) => { s.strike = v; }, `st-strike:${st.id}`),
+      value: st[azKey], dip: st[incKey], label: linear ? 'Trend' : 'Strike',
+      onChange: (v) => edit((s) => { s[azKey] = v; }, `st-az:${st.id}`),
     });
     const prot = protractor({
-      value: st.dip, label: 'Dip', max: 90,
-      onChange: (v) => { dial.setDip(v); edit((s) => { s.dip = v; }, `st-dip:${st.id}`); },
+      value: st[incKey], label: linear ? 'Plunge' : 'Dip', max: 90,
+      onChange: (v) => { dial.setDip(v); edit((s) => { s[incKey] = v; }, `st-inc:${st.id}`); },
     });
     box.append(dial, prot);
   }
 
+  // Only features of the same kind are offered. Correcting bedding to a joint
+  // is an everyday mis-tap; turning a plane into a line is not a correction,
+  // it is a different measurement, and quietly blanking the numbers to allow
+  // it would lose the reading.
   box.appendChild(chipsRow({
     label: 'Feature', value: st.feature,
-    options: FEATURES.map((f) => ({ id: f.id, label: f.label, hint: f.hint })),
+    options: (linear ? LINEAR_FEATURES : PLANAR_FEATURES)
+      .map((f) => ({ id: f.id, label: f.label, hint: f.hint })),
     onChange: (v) => edit((s) => { s.feature = v; }),
   }));
 

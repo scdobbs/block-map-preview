@@ -5,6 +5,7 @@
 // wrong, and the wrapper's job is to know when that is happening and say so.
 
 import { normalToStrikeDip, normalize, dot, clamp } from '../geo/math.js';
+import { vecToTrendPlunge } from '../geo/stereonet.js';
 import { applyDeclination } from './declination.js';
 
 // ---------------------------------------------------------------------------
@@ -34,6 +35,28 @@ export function deviceNormal(alphaDeg, betaDeg, gammaDeg) {
     cA * sG + cG * sA * sB,   // East
     sA * sG - cA * cG * sB,   // North
     cB * cG,                  // Up
+  ];
+}
+
+/**
+ * The device's +Y axis — the one running up the long edge, out of the top of
+ * the phone — expressed in East-North-Up.
+ *
+ * This is what reads a LINE rather than a plane. Lay the top edge of the phone
+ * along a lineation, a slickenline or a fold hinge and point it down-plunge,
+ * and that axis is the structure. It is the second column of the same
+ * rotation matrix `deviceNormal` takes its third column from, so the two
+ * measurements come from one reading of the sensors and cannot disagree.
+ */
+export function deviceAxis(alphaDeg, betaDeg, gammaDeg) {
+  const D = Math.PI / 180;
+  const a = alphaDeg * D, b = betaDeg * D, g = gammaDeg * D;
+  const cA = Math.cos(a), sA = Math.sin(a);
+  const cB = Math.cos(b), sB = Math.sin(b);
+  return [
+    -cB * sA,   // East
+    cA * cB,    // North
+    sB,         // Up
   ];
 }
 
@@ -142,6 +165,7 @@ export class Clinometer {
     const absolute = iosHeading != null || e.absolute === true;
 
     let n = deviceNormal(alpha, e.beta || 0, e.gamma || 0);
+    let y = deviceAxis(alpha, e.beta || 0, e.gamma || 0);
     // Every platform reports against MAGNETIC north, so the correction is
     // always ours to make.
     //
@@ -152,10 +176,12 @@ export class Clinometer {
     // `magneticHeading` and never from `trueHeading`, because `trueHeading`
     // is only valid while location updates are running and a web page has no
     // way to guarantee that. See WebCoreMotionManager.mm.
-    n = applyDeclination(n, this.getDeclination());
+    const decl = this.getDeclination();
+    n = applyDeclination(n, decl);
+    y = applyDeclination(y, decl);
 
     const now = performance.now();
-    this.samples.push({ t: now, n, absolute,
+    this.samples.push({ t: now, n, y, absolute,
       accuracy: Number.isFinite(e.webkitCompassAccuracy) ? e.webkitCompassAccuracy : null });
     while (this.samples.length && now - this.samples[0].t > SAMPLE_MS) this.samples.shift();
 
@@ -169,22 +195,23 @@ export class Clinometer {
       return { ...emptyState(), settling: true, samples: s.length };
     }
 
-    let sum = [0, 0, 0];
-    for (const k of s) {
-      // Poles are sign-blind: a normal and its opposite are the same plane.
-      // Summing without this check would cancel a reading taken on an
-      // overhang against one taken on the floor of the same bed.
-      const sign = dot(k.n, s[0].n) < 0 ? -1 : 1;
-      sum = [sum[0] + k.n[0] * sign, sum[1] + k.n[1] * sign, sum[2] + k.n[2] * sign];
-    }
-    const mean = normalize(sum);
+    // Both the pole and the long axis are averaged, so switching between
+    // measuring a plane and measuring a line is a change of which number is
+    // read out and not a change of what the sensors are doing.
+    const mean = meanAxis(s, 'n');
+    const meanLine = meanAxis(s, 'y');
 
     let scatter = 0;
-    for (const k of s) scatter = Math.max(scatter, angleBetween(k.n, mean));
+    let lineScatter = 0;
+    for (const k of s) {
+      scatter = Math.max(scatter, angleBetween(k.n, mean));
+      lineScatter = Math.max(lineScatter, angleBetween(k.y, meanLine));
+    }
 
     const absolute = s.every((k) => k.absolute);
     const acc = s[s.length - 1].accuracy;
     const { strike, dip } = normalToStrikeDip(mean);
+    const { trend, plunge } = vecToTrendPlunge(meanLine);
 
     return {
       ready: true,
@@ -195,8 +222,15 @@ export class Clinometer {
       // comes from gravity — but the strike is not, so it is not offered.
       strike: absolute ? strike : null,
       dip,
+      // The same reading seen as a line, for lineations, slickenlines and
+      // fold hinges. Plunge comes from gravity, trend from the compass, so
+      // trend is withheld on the same terms the strike is.
+      axis: meanLine,
+      trend: absolute ? trend : null,
+      plunge,
       scatter,
-      still: scatter <= STILL_DEG,
+      lineScatter,
+      still: Math.max(scatter, lineScatter) <= STILL_DEG,
       absolute,
       // iOS reports this as a plus-or-minus in degrees, and negative means
       // the magnetometer is not calibrated at all.
@@ -212,11 +246,30 @@ export class Clinometer {
   }
 }
 
+/**
+ * Mean direction of a set of samples, ignoring sign.
+ *
+ * A pole and its opposite are the same plane, and a lineation has no arrow —
+ * so summing the raw vectors would cancel a reading taken on an overhang
+ * against one taken on the floor of the same bed.
+ */
+function meanAxis(samples, key) {
+  let sum = [0, 0, 0];
+  const ref = samples[0][key];
+  for (const k of samples) {
+    const v = k[key];
+    const sign = dot(v, ref) < 0 ? -1 : 1;
+    sum = [sum[0] + v[0] * sign, sum[1] + v[1] * sign, sum[2] + v[2] * sign];
+  }
+  return normalize(sum);
+}
+
 function emptyState() {
   return {
     ready: false, settling: false, samples: 0,
     normal: null, strike: null, dip: null,
-    scatter: null, still: false,
+    axis: null, trend: null, plunge: null,
+    scatter: null, lineScatter: null, still: false,
     absolute: false,
     compassAccuracy: null, needsCalibration: false,
     error: null,

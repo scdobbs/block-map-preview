@@ -214,10 +214,20 @@ old it is, and the ground elevation read from the cached terrain. A station
 cannot be recorded on a fix worse than the limit you set, and when the button
 is disabled it says why rather than sitting there greyed out.
 
-For the attitude, either lay the phone flat on the bedding and use **Phone
-compass**, or **Type it** — the same compass dial and protractor the History
-tab uses. Neither is the fallback. A phone magnetometer is worth a few degrees
-at best and worse beside a truck, so a Brunton reading typed in is the better
+**Open the compass** goes full screen. A reading is taken with the phone flat
+on rock and read at arm's length, and at that moment nothing else on the screen
+is any use — least of all half a map. The dial is a fixed 0–360 card with the
+strike-and-dip symbol turning inside it, rather than a compass card spinning
+under a fixed mark: a card that turns is right for walking a bearing, but for
+reading a structure the useful thing is to see the symbol in the orientation it
+will have on the map, so you can check at a glance that the app is describing
+the surface actually under the phone. Beside the numbers is a small side
+elevation showing how far the surface leans off horizontal, because a plan view
+cannot show a dip.
+
+Or **Type it** — the same compass dial and protractor the History tab uses.
+Neither is the fallback. A phone magnetometer is worth a few degrees at best
+and worse beside a truck, so a Brunton reading typed in is the better
 measurement and the app treats it that way.
 
 The compass averages a second of samples and reports how far they disagreed.
@@ -225,6 +235,26 @@ That **scatter** is the number to watch: a phone resting on rock settles to a
 few tenths of a degree, and a bar fills as it settles so holding still is
 something you watch happen. The scatter is stored with the reading, so a bad
 one stays visibly bad in the notebook weeks later.
+
+## Planes and lines
+
+Not every structure is a plane. Switch the instrument to **Line** and it reads
+**trend and plunge** instead: lay the long edge of the phone along a lineation,
+a fold hinge or a set of slickenlines, point it down-plunge, and read it off.
+
+The two come from the same instant of the same sensors. The phone's back lies
+on the surface while its long edge lies *in* that surface, so holding a reading
+captures both — which means that on a slickensided fault one placement of the
+phone records the fault plane and the slip line together, and flipping between
+Plane and Line afterwards shows two real measurements rather than blanking one
+of them.
+
+A station stores one pair or the other, never both, and the feature type says
+which. A line is written **trend / plunge** and always labelled, because
+`020/15` on its own reads exactly like the strike and dip of a plane — the same
+rule the stereonet readout follows. On the map a line is drawn as an arrow
+pointing down-plunge, so the two families of symbol never have to be told
+apart by their numbers.
 
 Name the feature — bedding, foliation, joint, fault plane, contact. It costs a
 tap and it keeps a joint from quietly joining a fold-axis fit. Name the unit by
@@ -420,6 +450,7 @@ js/
     map/
       section.js      the Map section: sensors, recording, areas, files
       canvas.js       the slippy map — tiles, overlays, gestures
+      measureView.js  the full-screen clinometer
       panels.js       measure / stations / areas / setup panels
       symbols.js      station symbols and the position marker, on canvas
 ```
@@ -545,8 +576,13 @@ fragment uniform budget of older mobile GPUs.
 - Reconstructing an absolute frame from `webkitCompassHeading` degrades as the
   phone gets further from level, so a reading on a very steep bed is the least
   trustworthy one the compass gives.
-- **No line drawing yet.** Contacts, faults and traverses as mapped lines are
-  the obvious next thing; this version records stations only.
+- **Lines are measured with the phone's long edge**, which is a coarser gesture
+  than laying its whole back on a surface — there is less of the phone touching
+  less of the rock. Expect a linear reading to be the less trustworthy of the
+  two, and check the scatter.
+- **No line drawing yet.** Contacts, faults and traverses as *mapped* lines
+  (as opposed to measured linear structures, which are supported) are the
+  obvious next thing; this version records stations only.
 - Readings do not yet reach the stereonet. `geo/stereonet.js` fits a girdle to
   any bag of readings and does not care where they came from, so wiring the
   bedding stations into it is small — it is left out of this version rather

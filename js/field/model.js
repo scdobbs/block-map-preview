@@ -25,30 +25,56 @@ export function rockOf(id) { return ROCK_BY_ID[id] || ROCK_BY_ID.sandstone; }
 
 export const FEATURES = [
   {
-    id: 'bedding', label: 'Bedding', short: 'Bd',
+    id: 'bedding', label: 'Bedding', short: 'Bd', geometry: 'planar',
     hint: 'The depositional surface. This is what a fold axis is fitted from.',
   },
   {
-    id: 'foliation', label: 'Foliation', short: 'Fol',
+    id: 'foliation', label: 'Foliation', short: 'Fol', geometry: 'planar',
     hint: 'Cleavage or schistosity.',
   },
   {
-    id: 'joint', label: 'Joint', short: 'Jt',
+    id: 'joint', label: 'Joint', short: 'Jt', geometry: 'planar',
     hint: 'A fracture with no measurable offset.',
   },
   {
-    id: 'fault', label: 'Fault plane', short: 'Flt',
+    id: 'fault', label: 'Fault plane', short: 'Flt', geometry: 'planar',
     hint: 'A fracture the rock has moved along.',
   },
   {
-    id: 'contact', label: 'Contact', short: 'Ct',
+    id: 'contact', label: 'Contact', short: 'Ct', geometry: 'planar',
     hint: 'The surface between two units.',
+  },
+  // Lines, not planes. Measured by laying the long edge of the phone along the
+  // structure and pointing it down-plunge, and recorded as trend and plunge.
+  {
+    id: 'lineation', label: 'Lineation', short: 'Ln', geometry: 'linear',
+    hint: 'A mineral or stretching lineation on a surface.',
+  },
+  {
+    id: 'hinge', label: 'Fold hinge', short: 'Hng', geometry: 'linear',
+    hint: 'A hinge line measured directly, rather than fitted from bedding.',
+  },
+  {
+    id: 'slickenline', label: 'Slickenline', short: 'Slk', geometry: 'linear',
+    hint: 'Slip striae on a fault surface. Lay the phone on the fault with its edge along the striae and it records both.',
+  },
+  {
+    id: 'axis', label: 'Other line', short: 'Ln', geometry: 'linear',
+    hint: 'Any other linear structure.',
   },
 ];
 
 export const FEATURE_BY_ID = Object.fromEntries(FEATURES.map((f) => [f.id, f]));
 
 export function feature(id) { return FEATURE_BY_ID[id] || FEATURE_BY_ID.bedding; }
+
+/** 'planar' or 'linear' — which pair of numbers this feature is recorded as. */
+export function featureGeometry(id) { return feature(id).geometry; }
+
+export function isLinearFeature(id) { return feature(id).geometry === 'linear'; }
+
+export const PLANAR_FEATURES = FEATURES.filter((f) => f.geometry === 'planar');
+export const LINEAR_FEATURES = FEATURES.filter((f) => f.geometry === 'linear');
 
 /** Only bedding is fitted for a fold axis. The rest are recorded, not folded. */
 export const FITTABLE = new Set(['bedding']);
@@ -98,8 +124,13 @@ export function makeStation(over = {}) {
     at: new Date().toISOString(),
 
     feature: 'bedding',
+    // A station carries one pair or the other, never both: `feature` says
+    // which, and the unused pair stays null rather than holding a stale
+    // number from before the mode was switched.
     strike: null,
     dip: null,
+    trend: null,
+    plunge: null,
     certainty: 'measured',
     source: 'manual',       // 'compass' | 'manual'
     scatter: null,          // degrees of disagreement within the compass window
@@ -127,8 +158,27 @@ export function nextStationName(stations) {
 }
 
 export function hasAttitude(st) {
-  return Number.isFinite(st.strike) && Number.isFinite(st.dip);
+  return isLinearFeature(st.feature)
+    ? Number.isFinite(st.trend) && Number.isFinite(st.plunge)
+    : Number.isFinite(st.strike) && Number.isFinite(st.dip);
 }
+
+/**
+ * The reading as written in a notebook.
+ *
+ * A line is labelled and a plane is not, because `020/15` on its own reads
+ * exactly like the strike and dip of a plane — the same rule the stereonet
+ * readout follows.
+ */
+export function formatAttitude(st) {
+  if (!hasAttitude(st)) return 'no attitude';
+  if (isLinearFeature(st.feature)) {
+    return `${pad3(st.trend)}/${Math.round(st.plunge)} t/p`;
+  }
+  return `${pad3(st.strike)}/${Math.round(st.dip)}`;
+}
+
+function pad3(v) { return String(Math.round(v) % 360).padStart(3, '0'); }
 
 // ---------------------------------------------------------------------------
 // Map units
@@ -286,9 +336,12 @@ export function toGeoJSON(doc) {
         id: s.id,
         station: s.name,
         feature: s.feature,
+        structure: featureGeometry(s.feature),
         strike: s.strike,
         dip: s.dip,
         dip_direction: Number.isFinite(s.strike) ? (s.strike + 90) % 360 : null,
+        trend: s.trend,
+        plunge: s.plunge,
         certainty: s.certainty,
         source: s.source,
         scatter_deg: s.scatter,
@@ -306,9 +359,9 @@ export function toGeoJSON(doc) {
 
 /** Comma-separated, for a spreadsheet — which is where marks get entered. */
 export function toCSV(doc) {
-  const cols = ['station', 'latitude', 'longitude', 'elevation_m', 'feature', 'strike',
-    'dip', 'certainty', 'source', 'scatter_deg', 'unit', 'rock', 'gps_accuracy_m',
-    'declination', 'time', 'note'];
+  const cols = ['station', 'latitude', 'longitude', 'elevation_m', 'feature', 'structure',
+    'strike', 'dip', 'trend', 'plunge', 'certainty', 'source', 'scatter_deg', 'unit',
+    'rock', 'gps_accuracy_m', 'declination', 'time', 'note'];
   const esc = (v) => {
     if (v == null) return '';
     const s = String(v);
@@ -316,7 +369,9 @@ export function toCSV(doc) {
   };
   const rows = (doc.stations || []).map((s) => [
     s.name, s.lat.toFixed(6), s.lon.toFixed(6), elevOut(s.elev) ?? '', s.feature,
-    s.strike ?? '', s.dip ?? '', s.certainty, s.source, s.scatter != null ? s.scatter.toFixed(1) : '',
+    featureGeometry(s.feature),
+    s.strike ?? '', s.dip ?? '', s.trend ?? '', s.plunge ?? '',
+    s.certainty, s.source, s.scatter != null ? s.scatter.toFixed(1) : '',
     s.unitName || '', s.rockId || '', s.gpsAccuracy != null ? Math.round(s.gpsAccuracy) : '',
     s.declination ?? '', s.at, s.note || '',
   ].map(esc).join(','));

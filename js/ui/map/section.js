@@ -8,10 +8,11 @@
 import { el, clear } from '../widgets.js';
 import { MapCanvas } from './canvas.js';
 import { measurePanel, stationsPanel, areasPanel, setupPanel } from './panels.js';
+import { measureView } from './measureView.js';
 import { niceScaleBar } from './symbols.js';
 import { FieldStore, loadFieldDoc } from '../../field/store.js';
 import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea,
-  nextStationName, toGeoJSON, toCSV } from '../../field/model.js';
+  nextStationName, toGeoJSON, toCSV, isLinearFeature } from '../../field/model.js';
 import { Clinometer, GeoWatch, fixAge } from '../../field/sensors.js';
 import { fetchDeclination as lookupDeclination } from '../../field/declination.js';
 import { downloadArea, verifyArea, deleteArea, requestPersistence,
@@ -41,6 +42,10 @@ export class MapSection {
     this._elevAt = null;
     this._started = false;
     this._clinoStarted = false;
+    this.measureNode = null;
+    // Remembered per geometry, so flipping Plane/Line and back returns to the
+    // feature that was being measured rather than resetting to the first one.
+    this._lastFeature = { planar: 'bedding', linear: 'lineation' };
 
     this.draft = freshDraft();
 
@@ -139,6 +144,7 @@ export class MapSection {
   }
 
   deactivate() {
+    this.closeMeasure();
     this._started = false;
     this.geo.stop();
     this.clino.stop();
@@ -229,6 +235,7 @@ export class MapSection {
 
   _refreshPanel() {
     this.host.sectionPanel?.refreshReadings?.();
+    this.measureNode?.refresh?.();
   }
 
   /** Rebuild the open panel — for changes that alter what controls exist. */
@@ -340,16 +347,86 @@ export class MapSection {
 
   clinoStarted() { return this._clinoStarted; }
 
+  /**
+   * Freeze the current reading.
+   *
+   * Both the plane and the line are kept, because they come from the same
+   * instant of the same sensors — the phone's back is on the surface and its
+   * long edge lies in that surface at the same time. Holding both means
+   * flipping between Plane and Line after the capture still shows a real
+   * measurement instead of blanking, and on a slickensided fault it records
+   * the plane and the slip line from one placement of the phone.
+   */
   captureCompass() {
     const d = this.draft;
-    if (d.held) { d.held = false; d.strike = null; d.dip = null; d.scatter = null; this.clino.reset(); this._refreshPanel(); return; }
+    if (d.held) {
+      d.held = false;
+      d.strike = d.dip = d.trend = d.plunge = d.scatter = null;
+      this.clino.reset();
+      this._refreshPanel();
+      return;
+    }
     const c = this.clino.state;
     if (!c.ready) return;
     d.strike = c.strike;
     d.dip = c.dip;
-    d.scatter = c.scatter;
+    d.trend = c.trend;
+    d.plunge = c.plunge;
+    d.scatter = isLinearFeature(d.feature) ? c.lineScatter : c.scatter;
     d.held = true;
     this._refreshPanel();
+  }
+
+  /** Switch between measuring a plane and measuring a line. */
+  setGeometry(kind) {
+    this.setFeature(this._lastFeature[kind] || (kind === 'linear' ? 'lineation' : 'bedding'));
+  }
+
+  setFeature(id) {
+    this.draft.feature = id;
+    this._lastFeature[isLinearFeature(id) ? 'linear' : 'planar'] = id;
+    this._refreshPanel();
+    this.rebuild();
+  }
+
+  // -------------------------------------------------------------------------
+  // The full-screen clinometer
+  // -------------------------------------------------------------------------
+
+  openMeasure() {
+    if (this.measureNode) return;
+    // Nothing can be measured until the sensor has been allowed to run, and
+    // asking here means the prompt arrives when the intent is obvious.
+    if (!this._clinoStarted) this.startClino();
+    this.measureNode = measureView(this.measureContext());
+    this.host.root.appendChild(this.measureNode);
+    this.host.root.classList.add('measuring');
+  }
+
+  closeMeasure() {
+    if (!this.measureNode) return;
+    this.measureNode.remove();
+    this.measureNode = null;
+    this.host.root.classList.remove('measuring');
+    this.rebuild();
+  }
+
+  measureOpen() { return !!this.measureNode; }
+
+  measureContext() {
+    return {
+      draft: this.draft,
+      clinoState: () => this.clino.state,
+      geoState: () => this.geo.state,
+      groundElevation: () => this.groundElevation(),
+      blockingReason: () => this.blockingReason(),
+      declination: () => this.store.doc.settings.declination || 0,
+      captureCompass: () => this.captureCompass(),
+      recordStation: () => this.recordStation(),
+      setGeometry: (k) => this.setGeometry(k),
+      setFeature: (id) => this.setFeature(id),
+      close: () => this.closeMeasure(),
+    };
   }
 
   recordStation() {
@@ -363,16 +440,25 @@ export class MapSection {
     const doc = this.store.doc;
     const c = this.clino.state;
 
-    let strike = null, dip = null, scatter = null, src = source || d.source;
+    const linear = isLinearFeature(d.feature);
+    let strike = null, dip = null, trend = null, plunge = null;
+    let scatter = null, src = source || d.source;
     if (!d.noAttitude && !bySight) {
       if (d.source === 'compass') {
         strike = d.held ? d.strike : c.strike;
         dip = d.held ? d.dip : c.dip;
-        scatter = d.held ? d.scatter : c.scatter;
+        trend = d.held ? d.trend : c.trend;
+        plunge = d.held ? d.plunge : c.plunge;
+        scatter = d.held ? d.scatter : (linear ? c.lineScatter : c.scatter);
         src = 'compass';
       } else {
-        strike = d.strike; dip = d.dip; src = 'manual';
+        strike = d.strike; dip = d.dip;
+        trend = d.trend; plunge = d.plunge;
+        src = 'manual';
       }
+      // A station carries one pair or the other, never both, so the file can
+      // never imply a measurement that was not the one being taken.
+      if (linear) { strike = null; dip = null; } else { trend = null; plunge = null; }
     }
 
     const st = makeStation({
@@ -382,7 +468,7 @@ export class MapSection {
       gpsAccuracy: fix ? fix.accuracy : null,
       gpsAltitude: fix ? fix.altitude : null,
       feature: d.feature,
-      strike, dip, scatter,
+      strike, dip, trend, plunge, scatter,
       source: src,
       certainty: bySight ? 'estimated' : d.certainty,
       declination: doc.settings.declination || 0,
@@ -404,7 +490,7 @@ export class MapSection {
     // notebook ends up with the unit left blank.
     d.held = false;
     d.scatter = null;
-    if (d.source === 'compass') { d.strike = null; d.dip = null; }
+    if (d.source === 'compass') { d.strike = d.dip = d.trend = d.plunge = null; }
     d.note = '';
     this.clino.reset();
 
@@ -712,6 +798,10 @@ export class MapSection {
       clinoStarted: () => this.clinoStarted(),
       startClino: () => this.startClino(),
       captureCompass: () => this.captureCompass(),
+      openMeasure: () => this.openMeasure(),
+      measureOpen: () => this.measureOpen(),
+      setFeature: (id) => this.setFeature(id),
+      setGeometry: (k) => this.setGeometry(k),
       groundElevation: () => this.groundElevation(),
       blockingReason: () => this.blockingReason(),
       declinationSet: () => this.declinationSet(),
@@ -769,7 +859,9 @@ export class MapSection {
 function freshDraft() {
   return {
     source: 'compass',
-    strike: null, dip: null, scatter: null, held: false,
+    strike: null, dip: null,
+    trend: null, plunge: null,
+    scatter: null, held: false,
     noAttitude: false,
     feature: 'bedding',
     unitId: null, unitName: '',

@@ -1055,3 +1055,124 @@ html, body {
 @media (min-aspect-ratio: 1/1) and (min-width: 760px) {
   .stats { grid-template-columns: 1fr 1fr 1fr 1fr; }
 }
+
+/* --- the full-screen clinometer ------------------------------------------- */
+
+/* Covers everything, including the sheet and the map. A reading is taken with
+   the phone flat on rock and read at arm's length; nothing else on screen is
+   useful at that moment, and the map underneath was actively in the way. */
+.measure-full {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  padding: calc(8px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
+           calc(10px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+  gap: 6px;
+  overflow: hidden;
+}
+
+.mf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mode-switch.inline {
+  position: static; transform: none; backdrop-filter: none;
+  background: var(--bg-2);
+}
+.mf-close {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 12px;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--ink-dim);
+  font-size: 26px; line-height: 1; cursor: pointer; padding: 0;
+}
+
+/* The dial takes whatever room the controls do not. The SVG letterboxes
+   itself, so this works from a small phone to a tablet without breakpoints. */
+.mf-dial-wrap {
+  flex: 1 1 auto; min-height: 140px;
+  display: grid; place-items: center;
+}
+.mf-dial { width: 100%; height: 100%; display: block; }
+
+.mf-face { fill: #0c1216; stroke: var(--line); stroke-width: 1.5; }
+.mf-inner { fill: none; stroke: rgba(255, 255, 255, .06); stroke-width: 1; }
+.mf-tick { stroke: #46545f; stroke-width: 1; }
+.mf-tick.mid { stroke: #5d6d79; stroke-width: 1.3; }
+.mf-tick.major { stroke: var(--ink-dim); stroke-width: 2; }
+.mf-card { fill: var(--ink); font-size: 13px; font-weight: 800; }
+.mf-deg { fill: var(--ink-faint); font-size: 9px; font-weight: 600; }
+.mf-hub { fill: var(--accent); }
+
+.mf-spin { transition: opacity .15s; }
+.mf-strike { stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+.mf-dip { stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+.mf-arrow {
+  fill: none; stroke: var(--accent); stroke-width: 4;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.mf-diplabel { fill: var(--accent); font-size: 13px; font-weight: 700; }
+
+.mf-readout { display: flex; align-items: center; gap: 14px; }
+.mf-numbers { flex: 1 1 auto; min-width: 0; }
+.mf-big {
+  font-size: 40px; font-weight: 700; letter-spacing: .5px; line-height: 1.05;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.mf-sub { font-size: 13px; color: var(--ink-dim); margin-top: 1px; }
+.mf-units {
+  font-size: 10.5px; color: var(--ink-faint); text-transform: uppercase;
+  letter-spacing: .09em; font-weight: 700; margin-top: 2px;
+}
+
+/* A plan view cannot show a dip, so the tilt gets a side elevation of its own. */
+.mf-incl-wrap { flex: 0 0 auto; width: 118px; }
+.mf-incl { width: 100%; height: auto; display: block; }
+.mf-horizon { stroke: #46545f; stroke-width: 1.5; stroke-dasharray: 3 3; }
+.mf-ray { stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; }
+.mf-arc { fill: rgba(255, 200, 87, .18); stroke: none; }
+
+.mf-steady {
+  flex: 0 0 auto; height: 6px; border-radius: 3px; background: #0a0e12; overflow: hidden;
+}
+.mf-steady-fill {
+  display: block; height: 100%; width: 0;
+  background: var(--accent); transition: width .12s linear;
+}
+.mf-steady.ready .mf-steady-fill { background: #7fd39b; }
+.mf-steady-text {
+  font-size: 11.5px; color: var(--ink-faint); text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.mf-chips { justify-content: center; margin: 0; }
+.mf-chips .chip { padding: 7px 11px; font-size: 12px; min-height: 34px; }
+
+.mf-hold, .mf-save { flex: 0 0 auto; margin-top: 0; }
+.mf-why { font-size: 11.5px; color: var(--accent); text-align: center; min-height: 0; }
+.mf-foot {
+  font-size: 11px; color: var(--ink-faint); text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.mf-foot.warn { color: var(--accent); }
+
+/* What came back through the door, shown on the Measure panel. */
+.held-reading {
+  font-size: 15px; color: var(--accent); margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.held-reading.empty { display: none; }
+.held-reading strong { font-size: 19px; letter-spacing: .3px; }
+.held-reading span { color: var(--ink-dim); font-size: 12.5px; }
+.held-reading .held-scatter { color: var(--ink-faint); }
+
+/* Landscape, or a tablet: the dial goes beside the controls rather than
+   shrinking to a coin above them. */
+@media (min-aspect-ratio: 1/1) {
+  .measure-full {
+    display: grid; gap: 6px 22px;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+    grid-template-rows: auto 1fr;
+    align-content: start;
+  }
+  .mf-head { grid-column: 1 / -1; }
+  .mf-dial-wrap { grid-row: 2; grid-column: 1; }
+  .mf-readout, .mf-steady, .mf-steady-text, .mf-chips,
+  .mf-hold, .mf-save, .mf-why, .mf-foot { grid-column: 2; }
+  .mf-readout { align-self: end; }
+}

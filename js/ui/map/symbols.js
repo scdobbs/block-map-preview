@@ -6,7 +6,7 @@
 // geo/math.js, which is what keeps the two views from ever disagreeing.
 
 import { FLAT_DIP, VERTICAL_DIP } from '../../geo/math.js';
-import { feature } from '../../field/model.js';
+import { feature, isLinearFeature } from '../../field/model.js';
 
 const DEG = Math.PI / 180;
 
@@ -48,7 +48,10 @@ export function drawStation(ctx, x, y, st, {
     path();
   };
 
-  const hasAttitude = Number.isFinite(st.strike) && Number.isFinite(st.dip);
+  const linear = isLinearFeature(st.feature);
+  const hasAttitude = linear
+    ? Number.isFinite(st.trend) && Number.isFinite(st.plunge)
+    : Number.isFinite(st.strike) && Number.isFinite(st.dip);
 
   // Anything that is not bedding is tagged, because the symbol alone cannot
   // say so and a joint mistaken for bedding is a fold axis that never was.
@@ -57,7 +60,27 @@ export function drawStation(ctx, x, y, st, {
   const tag = st.feature && st.feature !== 'bedding' ? feature(st.feature).short : null;
   const annot = [tag, label].filter(Boolean).join(' ');
 
-  if (!hasAttitude) {
+  if (linear && hasAttitude) {
+    // A lineation is an arrow lying along its trend, pointing down-plunge.
+    // Steeper lines get a shorter shaft, so a near-vertical one reads as a
+    // point rather than pretending to a map direction it barely has.
+    const [tx, ty] = azVec(st.trend);
+    const len = s * (1 - 0.55 * (st.plunge / 90));
+    const head = s * 0.34;
+    const [px, py] = azVec(st.trend + 90);
+    stroke(() => {
+      ctx.beginPath();
+      ctx.moveTo(-tx * len, -ty * len);
+      ctx.lineTo(tx * len, ty * len);
+      ctx.moveTo(tx * len - tx * head + px * head * 0.5, ty * len - ty * head + py * head * 0.5);
+      ctx.lineTo(tx * len, ty * len);
+      ctx.lineTo(tx * len - tx * head - px * head * 0.5, ty * len - ty * head - py * head * 0.5);
+      ctx.stroke();
+    }, lw, color);
+    drawText(ctx, `${Math.round(st.plunge)}`, -tx * (len + 9 * scale), -ty * (len + 9 * scale), {
+      color, scale, weight: 600,
+    });
+  } else if (!hasAttitude) {
     // A station with no attitude: a plain ring. It is a real observation and
     // it says so, rather than borrowing a symbol that claims a measurement.
     stroke(() => {
@@ -116,7 +139,13 @@ export function drawStation(ctx, x, y, st, {
   // an unreadable "8&2". Hanging it off the dip direction means the two are
   // always half a symbol apart whichever way the rock faces.
   if (annot) {
-    if (hasAttitude && st.dip >= FLAT_DIP) {
+    if (linear && hasAttitude) {
+      // Down-plunge end; the plunge number is at the tail.
+      const [ux, uy] = azVec(st.trend + 90);
+      drawText(ctx, annot, ux * s * 0.7, uy * s * 0.7, {
+        color: '#dce8f0', scale, size: 10, weight: 650, align: 'center',
+      });
+    } else if (hasAttitude && !linear && st.dip >= FLAT_DIP) {
       const [ux, uy] = azVec(st.strike - 90);
       drawText(ctx, annot, ux * s * 0.62, uy * s * 0.62, {
         color: '#dce8f0', scale, size: 10, weight: 650, align: 'center',
