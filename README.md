@@ -711,6 +711,34 @@ python3 dev-server.py 8777
 then open <http://127.0.0.1:8777/>. Any static file server works; the included
 one just disables caching so edits show up on reload.
 
+⚠️ **The service worker will serve you yesterday's code.** It is cache-first by
+design, and that design does not care that you are the one editing the files.
+The dev server's no-cache headers do not help, because the request never
+reaches it. Symptoms are edits that appear to do nothing, or a fix that works
+in one file and not the next.
+
+Before an editing session, in the console:
+
+```js
+for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+for (const k of await caches.keys()) if (k !== 'field-tiles') await caches.delete(k);
+location.reload();
+```
+
+Keep `field-tiles` unless you want to download your test area again — it is the
+one cache that is expensive to rebuild, and it is deliberately not versioned.
+The worker re-registers on the next load, so this is a per-session ritual, not
+a one-off.
+
+## Testing without a browser
+
+There is no Node here, so the checks run under JavaScriptCore via `osascript`.
+The orientation maths in particular is worth testing that way rather than by
+holding a phone: the compass bug that put every strike out by the local
+declination, and the one that made the strike swing as the phone was turned on
+the rock, were both found and fixed against a numerical model of what the
+sensors report, before either was seen on a device.
+
 ## Deploying
 
 GitHub Pages serves `main` from the repository root, so **pushing to `main`
