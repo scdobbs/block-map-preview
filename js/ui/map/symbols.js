@@ -6,7 +6,7 @@
 // geo/math.js, which is what keeps the two views from ever disagreeing.
 
 import { FLAT_DIP, VERTICAL_DIP } from '../../geo/math.js';
-import { feature, isLinearFeature } from '../../field/model.js';
+import { feature, isLinearFeature, lineKind, lineCertainty } from '../../field/model.js';
 
 const DEG = Math.PI / 180;
 
@@ -236,6 +236,80 @@ export function drawPosition(ctx, x, y, { accuracyPx = 0, heading = null, scale 
     ctx.stroke();
   }
   ctx.restore();
+}
+
+/**
+ * A mapped line — a contact, a fault, a traverse.
+ *
+ * Drawn the way a published map draws it: weight by what it is, dash pattern
+ * by how well it is known. The pale halo underneath is not decoration; these
+ * are dark lines and the basemaps are pale topo sheets and tan desert, so a
+ * dark line over a shadowed cliff would otherwise vanish exactly where the
+ * geology is most interesting.
+ */
+export function drawLine(ctx, pts, line, { selected = false, scale = 1, drawing = false } = {}) {
+  if (pts.length < 2) return;
+  const kind = lineKind(line.kind);
+  const dash = lineCertainty(line.certainty).dash.map((d) => d * scale);
+  const w = kind.weight * scale;
+
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  };
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.setLineDash([]);
+  ctx.lineWidth = w + 3.5 * scale;
+  ctx.strokeStyle = 'rgba(255, 255, 255, .8)';
+  path(); ctx.stroke();
+
+  ctx.setLineDash(dash);
+  ctx.lineWidth = w;
+  ctx.strokeStyle = kind.color;
+  path(); ctx.stroke();
+
+  if (selected) {
+    ctx.setLineDash([]);
+    ctx.lineWidth = w + 7 * scale;
+    ctx.strokeStyle = 'rgba(255, 200, 87, .45)';
+    path(); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Vertices are shown only while the line is being built or is selected.
+  // On a finished map they would turn every contact into a string of beads.
+  if (drawing || selected) {
+    for (let i = 0; i < pts.length; i++) {
+      const last = drawing && i === pts.length - 1;
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y, (last ? 6 : 4) * scale, 0, Math.PI * 2);
+      ctx.fillStyle = last ? '#ffc857' : '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(8, 12, 15, .75)';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+/** Distance in pixels from a point to a polyline, for tapping one. */
+export function distanceToLine(pts, x, y) {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1,
+      ((x - a.x) * dx + (y - a.y) * dy) / len2));
+    best = Math.min(best, Math.hypot(x - (a.x + t * dx), y - (a.y + t * dy)));
+  }
+  return best;
 }
 
 /** The box being drawn for a download, plus its own handles. */

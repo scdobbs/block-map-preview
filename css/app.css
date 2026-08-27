@@ -1209,3 +1209,30 @@ html, body {
   font-size: 12px; font-weight: 650; color: var(--accent);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* --- drawing a line ------------------------------------------------------- */
+
+.draw-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px 6px 14px; border-radius: 999px;
+  background: rgba(15, 20, 24, .94); border: 1px solid var(--line);
+  backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+.draw-bar.hidden { display: none; }
+.draw-count {
+  font-size: 12.5px; font-weight: 650; color: var(--ink-dim);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.draw-btn {
+  appearance: none; cursor: pointer; border: 1px solid var(--line);
+  background: var(--bg-3); color: var(--ink);
+  border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 600;
+  min-height: 34px;
+}
+.draw-btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.draw-btn:disabled { opacity: .35; cursor: default; }
+
+.line-swatch {
+  flex: 0 0 auto; width: 26px; height: 4px; border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .18);
+}

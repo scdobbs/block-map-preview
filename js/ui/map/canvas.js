@@ -19,7 +19,8 @@ import { TILE, lonToWorld, latToWorld, worldToLon, worldToLat,
   metersPerPixel } from '../../field/geo.js';
 import { readTileBitmap, source } from '../../field/tiles.js';
 import { renderDemTile } from '../../field/dem.js';
-import { drawStation, drawPosition, drawSelection, drawAreaOutline } from './symbols.js';
+import { drawStation, drawPosition, drawSelection, drawAreaOutline, drawLine,
+  distanceToLine } from './symbols.js';
 import { unitColor } from '../../field/model.js';
 
 const MIN_ZOOM = 4;
@@ -51,6 +52,9 @@ export class MapCanvas {
     this.showContours = false;
     this.contourInterval = 0;
     this.stations = [];
+    this.lines = [];
+    this.selectedLineId = null;
+    this.draftLine = null;      // the one being drawn right now
     this.units = [];
     this.areas = [];
     this.selectedId = null;
@@ -221,6 +225,9 @@ export class MapCanvas {
     this._drawBase(ctx, cov);
     if (this.showHillshade || this.showContours) this._drawTerrain(ctx);
     this._drawAreas(ctx);
+    // Lines go under the stations: a contact is context for a reading, and a
+    // reading should never be hidden by the line it helped place.
+    this._drawLines(ctx);
     if (this.showStations) this._drawStations(ctx);
     if (this.fix) this._drawFix(ctx);
     if (this.selection) this._drawSelection(ctx);
@@ -397,6 +404,39 @@ export class MapCanvas {
       if (p1.x < -40 || p0.x > this.width + 40 || p1.y < -40 || p0.y > this.height + 40) continue;
       drawAreaOutline(ctx, p0.x, p0.y, p1.x, p1.y, { complete: !!a.check?.complete });
     }
+  }
+
+  _drawLines(ctx) {
+    const project = (line) => line.points.map((p) => this.lonLatToScreen(p[0], p[1]));
+    for (const line of this.lines) {
+      if (!line.points || line.points.length < 2) continue;
+      drawLine(ctx, project(line), line, { selected: line.id === this.selectedLineId });
+    }
+    if (this.draftLine && this.draftLine.points.length) {
+      const pts = project(this.draftLine);
+      if (pts.length === 1) {
+        ctx.beginPath();
+        ctx.arc(pts[0].x, pts[0].y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffc857';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(8,12,15,.75)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        drawLine(ctx, pts, this.draftLine, { drawing: true });
+      }
+    }
+  }
+
+  /** The line nearest a tap, within a finger's width. */
+  lineAt(px, py, slop = 18) {
+    let best = null, bestD = slop;
+    for (const line of this.lines) {
+      if (!line.points || line.points.length < 2) continue;
+      const d = distanceToLine(line.points.map((p) => this.lonLatToScreen(p[0], p[1])), px, py);
+      if (d < bestD) { bestD = d; best = line; }
+    }
+    return best;
   }
 
   _drawStations(ctx) {

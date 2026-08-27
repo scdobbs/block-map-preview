@@ -91,6 +91,64 @@ export const CERTAINTIES = [
   { id: 'estimated', label: 'Estimated', hint: 'Eyeballed, or read from a distance.' },
 ];
 
+// ---------------------------------------------------------------------------
+// Mapped lines
+// ---------------------------------------------------------------------------
+// Contacts and faults drawn on the map, as opposed to the linear structures a
+// station measures. A geologic map is mostly these: the stations say what the
+// rock is doing, and the lines say where one thing stops and another starts.
+
+export const LINE_KINDS = [
+  {
+    id: 'contact', label: 'Contact', color: '#16232b', weight: 2.2,
+    hint: 'Where one unit gives way to another.',
+  },
+  {
+    id: 'fault', label: 'Fault', color: '#c0392b', weight: 3.4,
+    hint: 'A surface the rock has moved along. Drawn heavier, the way a map prints it.',
+  },
+  {
+    id: 'unconformity', label: 'Unconformity', color: '#b5651d', weight: 2.8,
+    hint: 'A contact with time missing across it.',
+  },
+  {
+    id: 'dike', label: 'Dike', color: '#7d3c98', weight: 2.4,
+    hint: 'An intrusive sheet cutting the units it crosses.',
+  },
+  {
+    id: 'traverse', label: 'Traverse', color: '#1f7a8c', weight: 1.8,
+    hint: 'Where you walked. Not a geologic boundary.',
+  },
+  {
+    id: 'other', label: 'Other', color: '#2f3a42', weight: 2.2,
+    hint: 'Anything else worth a line.',
+  },
+];
+
+export const LINE_KIND_BY_ID = Object.fromEntries(LINE_KINDS.map((k) => [k.id, k]));
+export function lineKind(id) { return LINE_KIND_BY_ID[id] || LINE_KIND_BY_ID.contact; }
+
+/**
+ * How well the line is known, drawn the way a published map draws it: solid
+ * where it was walked, dashed where it was approximated, long-dashed where it
+ * was inferred between exposures, dotted where it is under cover.
+ *
+ * This distinction is the whole honesty of a geologic map — a student who
+ * cannot draw an inferred contact will either not draw it or draw it as fact,
+ * and both are worse.
+ */
+export const LINE_CERTAINTY = [
+  { id: 'certain', label: 'Certain', dash: [], hint: 'Walked, or clearly exposed.' },
+  { id: 'approximate', label: 'Approximate', dash: [9, 6], hint: 'Located to within a stride or two.' },
+  { id: 'inferred', label: 'Inferred', dash: [18, 7], hint: 'Interpolated between exposures.' },
+  { id: 'concealed', label: 'Concealed', dash: [2.5, 5], hint: 'Under cover — soil, scree, alluvium.' },
+];
+
+export const LINE_CERTAINTY_BY_ID = Object.fromEntries(LINE_CERTAINTY.map((c) => [c.id, c]));
+export function lineCertainty(id) {
+  return LINE_CERTAINTY_BY_ID[id] || LINE_CERTAINTY_BY_ID.certain;
+}
+
 let counter = 0;
 export function newFieldId(prefix = 'st') {
   counter += 1;
@@ -222,6 +280,48 @@ export function knownUnitNames(doc) {
   return [...names.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
+export function makeLine(over = {}) {
+  return {
+    id: newFieldId('ln'),
+    name: '',
+    kind: 'contact',
+    certainty: 'certain',
+    // [[lon, lat], ...] — a line only, never a ring. Closing an area is a
+    // different job and would need a fill and a unit to fill it with.
+    points: [],
+    unitA: '',
+    unitB: '',
+    note: '',
+    at: new Date().toISOString(),
+    ...over,
+  };
+}
+
+/** Ground length of a line, in meters. */
+export function lineLength(line) {
+  const p = line.points || [];
+  let m = 0;
+  for (let i = 1; i < p.length; i++) {
+    m += haversine(p[i - 1][0], p[i - 1][1], p[i][0], p[i][1]);
+  }
+  return m;
+}
+
+// Kept here rather than imported from field/geo.js so the model stays free of
+// anything but itself. Same formula, same mean radius.
+function haversine(lon1, lat1, lon2, lat2) {
+  const d = Math.PI / 180;
+  const a1 = lat1 * d, a2 = lat2 * d;
+  const h = Math.sin((lat2 - lat1) * d / 2) ** 2
+    + Math.cos(a1) * Math.cos(a2) * Math.sin((lon2 - lon1) * d / 2) ** 2;
+  return 2 * 6371008.8 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** A line worth keeping has somewhere to go. */
+export function lineIsDrawable(line) {
+  return !!line && Array.isArray(line.points) && line.points.length >= 2;
+}
+
 // ---------------------------------------------------------------------------
 // Cached areas
 // ---------------------------------------------------------------------------
@@ -258,6 +358,7 @@ export function defaultFieldDocument() {
     name: 'Field notes',
     createdAt: new Date().toISOString(),
     stations: [],
+    lines: [],
     units: [],
     areas: [],
     settings: {
@@ -298,6 +399,15 @@ export function migrateFieldDoc(doc) {
   out.stations = (Array.isArray(doc.stations) ? doc.stations : [])
     .filter((s) => s && Number.isFinite(s.lon) && Number.isFinite(s.lat))
     .map((s) => ({ ...makeStation(), ...s }));
+  out.lines = (Array.isArray(doc.lines) ? doc.lines : [])
+    .filter((l) => l && Array.isArray(l.points))
+    .map((l) => ({
+      ...makeLine(),
+      ...l,
+      points: l.points
+        .filter((pt) => Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1]))
+        .map((pt) => [pt[0], pt[1]]),
+    }));
   out.units = (Array.isArray(doc.units) ? doc.units : [])
     .filter((u) => u && typeof u === 'object')
     .map((u) => ({ ...makeUnit(), ...u }));
@@ -330,7 +440,7 @@ export function toGeoJSON(doc) {
       exportedAt: new Date().toISOString(),
       declination: doc.settings.declination,
     },
-    features: (doc.stations || []).map((s) => ({
+    features: [...(doc.stations || []).map((s) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: s.elev != null ? [s.lon, s.lat, elevOut(s.elev)] : [s.lon, s.lat] },
       properties: {
@@ -354,7 +464,22 @@ export function toGeoJSON(doc) {
         gps_accuracy_m: s.gpsAccuracy,
         time: s.at,
       },
-    })),
+    })), ...(doc.lines || []).filter(lineIsDrawable).map((l) => ({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: l.points.map((p) => [p[0], p[1]]) },
+      properties: {
+        id: l.id,
+        name: l.name || null,
+        kind: l.kind,
+        certainty: l.certainty,
+        unit_a: l.unitA || null,
+        unit_b: l.unitB || null,
+        length_m: Math.round(lineLength(l)),
+        vertices: l.points.length,
+        note: l.note || null,
+        time: l.at,
+      },
+    }))],
   };
 }
 

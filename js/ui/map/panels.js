@@ -12,7 +12,8 @@ import { swatchEl } from '../swatch.js';
 import { quadrantBearing } from '../../geo/math.js';
 import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, CERTAINTIES, ROCKS, rockOf,
   unitColor, knownUnitNames, makeUnit, hasAttitude, isLinearFeature,
-  formatAttitude } from '../../field/model.js';
+  formatAttitude, LINE_KINDS, LINE_CERTAINTY, lineKind, lineCertainty,
+  lineLength } from '../../field/model.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
 import { SOURCES, BASE_SOURCES, estimateArea, storageReport } from '../../field/tiles.js';
@@ -571,6 +572,132 @@ function stationEditor(ctx, st) {
   ]));
 
   return box;
+}
+
+// ---------------------------------------------------------------------------
+// Lines
+// ---------------------------------------------------------------------------
+
+export function linesPanel(ctx) {
+  const doc = ctx.doc();
+  const node = el('div', { class: 'panel' });
+  const drawing = ctx.drawingLine();
+
+  if (drawing) {
+    node.appendChild(head('Drawing a line',
+      'Tap the map for each point, or press Here to drop one where you are standing.'));
+    node.appendChild(chipsRow({
+      label: 'What it is',
+      value: drawing.kind,
+      options: LINE_KINDS.map((k) => ({ id: k.id, label: k.label, hint: k.hint })),
+      onChange: (v) => { drawing.kind = v; ctx.rebuild(); },
+    }));
+    node.appendChild(chipsRow({
+      label: 'How well you know it',
+      value: drawing.certainty,
+      options: LINE_CERTAINTY.map((c) => ({ id: c.id, label: c.label, hint: c.hint })),
+      onChange: (v) => { drawing.certainty = v; ctx.rebuild(); },
+    }));
+    node.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'A line you walked is certain; one you traced across a covered slope is not. Drawing the difference is most of what makes a map honest, and both of these can be changed afterwards.' }));
+    return node;
+  }
+
+  node.appendChild(head(`Lines · ${doc.lines.length}`,
+    'Contacts, faults and traverses drawn on the map.'));
+
+  node.appendChild(el('div', { class: 'ctl' }, [
+    el('div', { class: 'ctl-head' }, [el('label', { class: 'ctl-label', text: 'Draw a new one' })]),
+    el('div', { class: 'chips' }, LINE_KINDS.map((k) => el('button', {
+      class: 'chip', type: 'button', title: k.hint,
+      onclick: () => ctx.startLine(k.id),
+    }, [el('span', { text: k.label })]))),
+  ]));
+
+  if (!doc.lines.length) {
+    node.appendChild(el('div', { class: 'empty' }, [
+      el('p', { class: 'dim', text: 'Nothing drawn yet. Pick a kind above to start.' }),
+    ]));
+    return node;
+  }
+
+  for (const line of doc.lines) {
+    const k = lineKind(line.kind);
+    const selected = line.id === ctx.selectedLineId();
+    const card = el('div', { class: `card line-card ${selected ? 'selected' : ''}` });
+
+    card.appendChild(el('button', {
+      class: 'card-main', type: 'button',
+      onclick: () => ctx.selectLine(selected ? null : line.id),
+    }, [
+      el('span', { class: 'line-swatch', style: { background: k.color } }),
+      el('span', { class: 'card-text' }, [
+        el('span', { class: 'card-title', text: line.name || k.label }),
+        el('span', { class: 'card-sub', text: [
+          line.name ? k.label : null,
+          lineCertainty(line.certainty).label.toLowerCase(),
+          formatDistance(lineLength(line)),
+          `${line.points.length} points`,
+        ].filter(Boolean).join(' · ') }),
+      ]),
+    ]));
+
+    if (selected) {
+      const box = el('div', { class: 'card-body' });
+      box.appendChild(textRow({
+        label: 'Name', value: line.name, placeholder: 'e.g. Poleta–Campito contact',
+        onChange: (v) => ctx.editLine(line.id, (l) => { l.name = v.trim(); }),
+      }));
+      box.appendChild(chipsRow({
+        label: 'What it is', value: line.kind,
+        options: LINE_KINDS.map((x) => ({ id: x.id, label: x.label, hint: x.hint })),
+        onChange: (v) => ctx.editLine(line.id, (l) => { l.kind = v; }),
+      }));
+      box.appendChild(chipsRow({
+        label: 'How well you know it', value: line.certainty,
+        options: LINE_CERTAINTY.map((c) => ({ id: c.id, label: c.label, hint: c.hint })),
+        onChange: (v) => ctx.editLine(line.id, (l) => { l.certainty = v; }),
+      }));
+
+      const known = knownUnitNames(doc);
+      if (line.kind === 'contact' || line.kind === 'unconformity') {
+        box.appendChild(el('div', { class: 'ctl-pair' }, [
+          textRow({
+            label: 'Unit on one side', value: line.unitA, placeholder: 'e.g. Poleta Fm',
+            list: known.length ? 'field-unit-names' : null,
+            onChange: (v) => ctx.editLine(line.id, (l) => { l.unitA = v.trim(); }),
+          }),
+          textRow({
+            label: 'and on the other', value: line.unitB, placeholder: 'e.g. Campito Fm',
+            list: known.length ? 'field-unit-names' : null,
+            onChange: (v) => ctx.editLine(line.id, (l) => { l.unitB = v.trim(); }),
+          }),
+        ]));
+        if (known.length) {
+          box.appendChild(el('datalist', { id: 'field-unit-names' },
+            known.map((u) => el('option', { value: u.name }))));
+        }
+      }
+
+      box.appendChild(noteRow({
+        label: 'Note', value: line.note, placeholder: 'What you saw along it.',
+        onChange: (v) => ctx.editLine(line.id, (l) => { l.note = v; }),
+      }));
+
+      box.appendChild(el('div', { class: 'row-actions wrap' }, [
+        el('button', { class: 'btn small', type: 'button', text: 'Go to', onclick: () => ctx.goToLine(line.id) }),
+        el('button', { class: 'btn small', type: 'button', text: 'Keep drawing',
+          title: 'Add more points to the end of this line',
+          onclick: () => ctx.extendLine(line.id) }),
+        el('button', { class: 'btn small danger', type: 'button', text: 'Delete',
+          onclick: () => ctx.deleteLine(line.id) }),
+      ]));
+      card.appendChild(box);
+    }
+    node.appendChild(card);
+  }
+
+  return node;
 }
 
 // ---------------------------------------------------------------------------

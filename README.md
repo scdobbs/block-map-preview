@@ -294,6 +294,36 @@ were standing there, and only the reading is outstanding.
 you, and exports to **GeoJSON** (opens in QGIS or ArcGIS, carrying strike, dip
 and dip direction as fields), **CSV**, or a full **Backup**.
 
+## Drawing contacts and faults
+
+A geologic map is mostly lines. The stations say what the rock is doing; the
+lines say where one thing stops and another starts.
+
+**Lines** → pick a kind — contact, fault, unconformity, dike, traverse — and
+put points down two ways. **Tap the map** where you can see the trace going, or
+press **Here** to drop a point where you are standing, which is what you do
+when the contact is under your feet and invisible from any distance. Undo takes
+back the last point; Done keeps the line; the × throws it away. **Keep drawing**
+picks an existing line back up and adds to its end.
+
+Every line carries **how well you know it**, and is drawn the way a published
+map draws it:
+
+| | |
+|---|---|
+| **Certain** | solid — walked, or clearly exposed |
+| **Approximate** | dashed — located to within a stride or two |
+| **Inferred** | long-dashed — interpolated between exposures |
+| **Concealed** | dotted — under soil, scree or alluvium |
+
+That distinction is most of what makes a map honest. A student who cannot draw
+an inferred contact will either not draw it or draw it as fact, and both are
+worse than a dashed line. Faults are drawn heavier and in red, the way a map
+prints them, and a contact can record the unit on each side.
+
+Lines export as GeoJSON `LineString` features alongside the stations, carrying
+kind, certainty, both unit names and their ground length.
+
 ## What the map is made of
 
 All of it is US federal, public domain, and free of any restriction on caching

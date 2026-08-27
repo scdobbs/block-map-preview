@@ -138,6 +138,12 @@ export const TAB_ICONS = {
     svg('circle', { cx: 16.5, cy: 6, r: 1.5, class: 'tabicon-fill' }),
   ]),
 
+  // A contact and a fault crossing it — the two marks a geologic map is made of.
+  lines: tab(() => [
+    svg('path', { d: 'M3 17 Q 8 8 13 12 T 21 6', class: 'tabicon-line' }),
+    svg('path', { d: 'M7 3 L15 21', class: 'tabicon-line', 'stroke-dasharray': '4 3' }),
+  ]),
+
   // A folded map sheet.
   areas: tab(() => [
     svg('path', { d: 'M3 6.5 L9 4 L15 6.5 L21 4 V17.5 L15 20 L9 17.5 L3 20 Z', class: 'tabicon-line' }),

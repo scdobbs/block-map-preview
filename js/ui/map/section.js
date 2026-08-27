@@ -7,12 +7,13 @@
 
 import { el, clear } from '../widgets.js';
 import { MapCanvas } from './canvas.js';
-import { measurePanel, stationsPanel, areasPanel, setupPanel } from './panels.js';
+import { measurePanel, stationsPanel, linesPanel, areasPanel, setupPanel } from './panels.js';
 import { measureView } from './measureView.js';
 import { niceScaleBar } from './symbols.js';
 import { FieldStore, loadFieldDoc } from '../../field/store.js';
 import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea,
-  nextStationName, toGeoJSON, toCSV, isLinearFeature } from '../../field/model.js';
+  nextStationName, toGeoJSON, toCSV, isLinearFeature, makeLine, lineKind,
+  lineIsDrawable } from '../../field/model.js';
 import { Clinometer, GeoWatch, fixAge } from '../../field/sensors.js';
 import { fetchDeclination as lookupDeclination } from '../../field/declination.js';
 import { downloadArea, verifyArea, deleteArea, requestPersistence,
@@ -23,6 +24,7 @@ import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
 const TABS = [
   { id: 'measure', label: 'Measure', build: measurePanel },
   { id: 'stations', label: 'Stations', build: stationsPanel },
+  { id: 'lines', label: 'Lines', build: linesPanel },
   { id: 'areas', label: 'Areas', build: areasPanel },
   { id: 'setup', label: 'Setup', build: setupPanel },
 ];
@@ -34,7 +36,12 @@ export class MapSection {
     this.activeTab = 'measure';
     this.ready = false;
     this.selectedStationId = null;
+    this.selectedLineId = null;
     this.placeMode = false;
+    // The line being drawn. Held outside the document until it is finished,
+    // so an abandoned line leaves nothing behind and every tap does not land
+    // on the undo stack.
+    this.drawing = null;
     this._verifying = null;
     this._download = null;
     this._draftArea = null;
@@ -99,8 +106,10 @@ export class MapSection {
     // selected station, and the placement banner — and any two of them can be
     // up at once. Stacking them in one column beats giving each a magic
     // offset and hoping they never meet.
+    this.drawBar = el('div', { class: 'draw-bar hidden' });
+
     this.bottomStack = el('div', { class: 'map-bottom' }, [
-      this.statusChip, this.readout, this.modeBanner,
+      this.statusChip, this.readout, this.modeBanner, this.drawBar,
     ]);
 
     this.pane = el('div', { class: 'map-pane' }, [
@@ -132,6 +141,7 @@ export class MapSection {
       }
       this.map.invalidate();
       this._refreshElevation(fix);
+      if (this.drawing) this._syncDrawBar();
       this._refreshPanel();
     });
     this.clino.subscribe(() => this._refreshPanel());
@@ -178,6 +188,9 @@ export class MapSection {
     if (this.selectedStationId && !doc.stations.some((s) => s.id === this.selectedStationId)) {
       this.selectedStationId = null;
     }
+    if (this.selectedLineId && !doc.lines.some((l) => l.id === this.selectedLineId)) {
+      this.selectedLineId = null;
+    }
     if (info.structural) this.host.renderSectionPanel();
     else this._refreshPanel();
   }
@@ -193,6 +206,8 @@ export class MapSection {
     this.map.labelStations = s.labelStations;
     this.map.showStations = s.showStations;
     this.map.stations = doc.stations;
+    this.map.lines = doc.lines;
+    this.map.selectedLineId = this.selectedLineId;
     this.map.units = doc.units;
     this.map.areas = doc.areas;
     this.map.selectedId = this.selectedStationId;
@@ -261,6 +276,7 @@ export class MapSection {
   // -------------------------------------------------------------------------
 
   onTap({ lon, lat }, screen) {
+    if (this.drawing) { this.addVertex(lon, lat); return; }
     if (this.placeMode) {
       this.placeStation(lon, lat, { source: 'manual', bySight: true });
       return;
@@ -272,7 +288,148 @@ export class MapSection {
       const d = Math.hypot(p.x - screen.x, p.y - screen.y);
       if (d < bestD) { bestD = d; best = st; }
     }
-    this.selectStation(best ? best.id : null);
+    if (best) { this.selectStation(best.id); return; }
+    // Stations win ties: they are smaller targets and a line under one is
+    // still reachable by tapping any other part of it.
+    const line = this.map.lineAt(screen.x, screen.y);
+    this.selectStation(null);
+    this.selectLine(line ? line.id : null);
+  }
+
+  // -------------------------------------------------------------------------
+  // Mapped lines
+  // -------------------------------------------------------------------------
+
+  selectLine(id) {
+    this.selectedLineId = id;
+    this.map.selectedLineId = id;
+    this.map.invalidate();
+    if (this.activeTab === 'lines') this.host.renderSectionPanel();
+  }
+
+  /**
+   * Start drawing.
+   *
+   * Two ways to put a point down, because there are two ways to map a
+   * contact: tap where you can see it going, or walk it and press "Here" at
+   * every bend. The second is what you do when the contact is under your feet
+   * and you cannot see its trace at all.
+   */
+  startLine(kind = 'contact', existing = null) {
+    if (this.placeMode) this.togglePlace();
+    this.drawing = existing
+      ? { ...existing, points: [...existing.points] }
+      : makeLine({ kind });
+    this._extendingId = existing ? existing.id : null;
+    this.map.draftLine = this.drawing;
+    this.map.invalidate();
+    this._syncDrawBar();
+    this.rebuild();
+  }
+
+  addVertex(lon, lat) {
+    if (!this.drawing) return;
+    this.drawing.points.push([lon, lat]);
+    this.map.invalidate();
+    this._syncDrawBar();
+  }
+
+  /** Drop a point where you are standing. */
+  addVertexHere() {
+    const fix = this.geo.state.fix;
+    if (!fix || !this.drawing) return;
+    this.addVertex(fix.lon, fix.lat);
+  }
+
+  undoVertex() {
+    if (!this.drawing || !this.drawing.points.length) return;
+    this.drawing.points.pop();
+    this.map.invalidate();
+    this._syncDrawBar();
+  }
+
+  finishLine() {
+    const line = this.drawing;
+    if (!line) return;
+    if (!lineIsDrawable(line)) { this.cancelLine(); return; }
+    const extending = this._extendingId;
+    this.store.edit((doc) => {
+      if (extending) {
+        const i = doc.lines.findIndex((l) => l.id === extending);
+        if (i >= 0) { doc.lines[i] = line; return; }
+      }
+      doc.lines.push(line);
+    }, { structural: true });
+    this.selectedLineId = line.id;
+    this.map.selectedLineId = line.id;
+    this._endDrawing();
+  }
+
+  cancelLine() { this._endDrawing(); }
+
+  _endDrawing() {
+    this.drawing = null;
+    this._extendingId = null;
+    this.map.draftLine = null;
+    this.map.invalidate();
+    this._syncDrawBar();
+    this.rebuild();
+  }
+
+  drawingLine() { return this.drawing; }
+
+  extendLine(id) {
+    const line = this.store.doc.lines.find((l) => l.id === id);
+    if (line) this.startLine(line.kind, line);
+  }
+
+  editLine(id, fn, coalesce) {
+    this.store.edit((doc) => {
+      const l = doc.lines.find((x) => x.id === id);
+      if (l) fn(l);
+    }, { coalesce: coalesce || null, structural: !coalesce });
+  }
+
+  deleteLine(id) {
+    this.store.edit((doc) => { doc.lines = doc.lines.filter((l) => l.id !== id); },
+      { structural: true });
+    if (this.selectedLineId === id) this.selectLine(null);
+  }
+
+  goToLine(id) {
+    const l = this.store.doc.lines.find((x) => x.id === id);
+    if (!l || !l.points.length) return;
+    const lons = l.points.map((p) => p[0]), lats = l.points.map((p) => p[1]);
+    this.map.fitBounds([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)], 0.4);
+  }
+
+  _syncDrawBar() {
+    const line = this.drawing;
+    this.drawBar.classList.toggle('hidden', !line);
+    if (!line) return;
+    const n = line.points.length;
+    const fix = this.geo.state.fix;
+    clear(this.drawBar);
+    this.drawBar.append(
+      el('span', { class: 'draw-count', text: `${n} point${n === 1 ? '' : 's'}` }),
+      el('button', {
+        class: 'draw-btn', type: 'button', text: 'Here', disabled: !fix,
+        title: fix ? 'Add a point at your position' : 'No fix yet',
+        onclick: () => this.addVertexHere(),
+      }),
+      el('button', {
+        class: 'draw-btn', type: 'button', text: 'Undo', disabled: !n,
+        onclick: () => this.undoVertex(),
+      }),
+      el('button', {
+        class: 'draw-btn primary', type: 'button', text: 'Done', disabled: n < 2,
+        onclick: () => this.finishLine(),
+      }),
+      el('button', {
+        class: 'draw-btn', type: 'button', text: '×', 'aria-label': 'Cancel',
+        onclick: () => this.cancelLine(),
+      }),
+    );
   }
 
   selectStation(id) {
@@ -1007,6 +1164,15 @@ export class MapSection {
       deleteStation: (id) => this.deleteStation(id),
       goToStation: (id) => this.goToStation(id),
       moveStationToFix: (id) => this.moveStationToFix(id),
+
+      selectLine: (id) => this.selectLine(id),
+      selectedLineId: () => this.selectedLineId,
+      startLine: (k) => this.startLine(k),
+      drawingLine: () => this.drawingLine(),
+      extendLine: (id) => this.extendLine(id),
+      editLine: (id, fn, c) => this.editLine(id, fn, c),
+      deleteLine: (id) => this.deleteLine(id),
+      goToLine: (id) => this.goToLine(id),
 
       selection: () => this.selection(),
       beginSelection: () => this.beginSelection(),
