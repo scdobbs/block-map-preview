@@ -5,6 +5,7 @@ import { swatchEl } from './swatch.js';
 import { tabIcon } from './icons.js';
 import { layersPanel, historyPanel, terrainPanel, viewPanel, fieldPanel } from './panels.js';
 import { stereonet } from './stereonet.js';
+import { groundMapPane, GroundMap } from './groundMap.js';
 import { MapSection } from './map/section.js';
 import { BlockScene } from '../render/scene.js';
 import { Store, loadSaved, exportJSON, importJSON } from '../store.js';
@@ -47,6 +48,7 @@ export class App {
     this._mapFit = null;
     this._mapView = null;   // null so the first sync always applies the setting
     this._showNet = null;
+    this._showGround = null;
 
     this._buildDOM();
     this.scene = new BlockScene(this.canvas);
@@ -81,6 +83,9 @@ export class App {
       selectMarker: (id) => this.selectMarker(id),
       setNet: (on) => this.setNet(on),
       netOpen: () => this.store.doc.settings.showNet === true,
+      setGroundMap: (on) => this.setGroundMap(on),
+      groundOpen: () => this.store.doc.settings.showGroundMap === true,
+      groundAvailable: () => GroundMap.available(this.store.doc),
       fit: () => this.fit(),
       mapFit: () => this.mapFit(),
     };
@@ -89,7 +94,9 @@ export class App {
     // it, and dropped into the stage so it covers the block but never the
     // sheet — on a wide screen the panel stays usable beside it.
     this.net = stereonet(this.ctx);
+    this.ground = groundMapPane(this.ctx);
     this.stage.appendChild(this.net);
+    this.stage.appendChild(this.ground);
     this._bindNetGrip();
 
     this.panels = {};
@@ -189,6 +196,40 @@ export class App {
    * battery budget, and there is no reason to hold them open while somebody
    * is dragging a fold.
    */
+  /**
+   * Take a block cut from a field area and make it the block on screen.
+   *
+   * Goes through the store's own replace, so it lands on the undo stack: a
+   * student who builds a block over the one they were working on has to be
+   * able to take that back, and "I lost an hour's work to a button" is exactly
+   * the thing an undo stack exists to prevent.
+   */
+  adoptBlock(doc) {
+    this.store.replace(doc, true);
+    this.setMapView(false);
+    this.activeTab = 'history';
+    this.setMode('block');
+    this._renderTabs();
+    this._renderPanel();
+    requestAnimationFrame(() => {
+      this.scene.resize();
+      this.scene.frame(this.store.doc);
+    });
+  }
+
+  /**
+   * The map beside the block, and the net beside the block, are the same slot.
+   * Three panes is not a layout a phone has room for, so opening one closes
+   * the other rather than splitting the stage three ways.
+   */
+  setGroundMap(on) {
+    if (this.store.doc.settings.showGroundMap === on) return;
+    this.store.edit((d) => {
+      d.settings.showGroundMap = on;
+      if (on) d.settings.showNet = false;
+    }, { structural: true });
+  }
+
   setMode(mode) {
     if (this.mode === mode) return;
     this.mode = mode;
@@ -292,6 +333,19 @@ export class App {
     if (this.selectedMarkerId && !(doc.markers || []).some((m) => m.id === this.selectedMarkerId)) {
       this.selectedMarkerId = null;
     }
+    // A block cut from an invented landform has no ground map to show, so the
+    // pane closes itself rather than sitting there empty.
+    const ground = doc.settings.showGroundMap === true && GroundMap.available(doc);
+    if (ground !== this._showGround) {
+      this._showGround = ground;
+      this.ground.setVisible(ground);
+      requestAnimationFrame(() => {
+        this.scene.resize();
+        this.scene.frame(this.store.doc);
+      });
+    }
+    if (ground) this.ground.refresh();
+
     const net = doc.settings.showNet === true;
     if (net !== this._showNet) {
       this._showNet = net;
@@ -434,7 +488,11 @@ export class App {
    */
   setNet(on) {
     if (this.store.doc.settings.showNet === on) return;
-    this.store.edit((d) => { d.settings.showNet = on; }, { structural: true });
+    this.store.edit((d) => {
+      d.settings.showNet = on;
+      // One companion pane at a time — see setGroundMap.
+      if (on) d.settings.showGroundMap = false;
+    }, { structural: true });
   }
 
   addMarkerAt(clientX, clientY) {

@@ -8,6 +8,7 @@
 import { el, clear } from '../widgets.js';
 import { MapCanvas } from './canvas.js';
 import { measurePanel, stationsPanel, linesPanel, areasPanel, setupPanel } from './panels.js';
+import { blockPanel } from './blockPanel.js';
 import { measureView } from './measureView.js';
 import { niceScaleBar } from './symbols.js';
 import { FieldStore, loadWorkspace, readProject, writeProject, writeIndex,
@@ -21,12 +22,14 @@ import { downloadArea, verifyArea, deleteArea, requestPersistence,
   SOURCES, BASE_SOURCES } from '../../field/tiles.js';
 import { elevationAt } from '../../field/dem.js';
 import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
+import { cutBlock, surveyExtent } from '../../field/cutblock.js';
 
 const TABS = [
   { id: 'measure', label: 'Measure', build: measurePanel },
   { id: 'stations', label: 'Stations', build: stationsPanel },
   { id: 'lines', label: 'Lines', build: linesPanel },
   { id: 'areas', label: 'Areas', build: areasPanel },
+  { id: 'block', label: 'Block', build: blockPanel },
   { id: 'setup', label: 'Setup', build: setupPanel },
 ];
 
@@ -39,6 +42,11 @@ export class MapSection {
     this.selectedStationId = null;
     this.selectedLineId = null;
     this.placeMode = false;
+    // The last block cut from this project, and what the fit decided. Kept on
+    // the section rather than in the document: it is a derived reading of the
+    // notes, and a stale one must never look like part of the record.
+    this._blockReport = null;
+    this._blockBuilding = null;
     // The line being drawn. Held outside the document until it is finished,
     // so an abandoned line leaves nothing behind and every tap does not land
     // on the undo stack.
@@ -1143,6 +1151,52 @@ export class MapSection {
     this.rebuild();
   }
 
+  // -------------------------------------------------------------------------
+  // Cutting a block
+  // -------------------------------------------------------------------------
+
+  /** What the current box holds, answered without downloading anything. */
+  surveyExtent() {
+    return surveyExtent(this.store.doc, this.map.selection);
+  }
+
+  /**
+   * Build a block from the box, and hand it to the other half.
+   *
+   * The field notes are read and never written: a block is an interpretation
+   * of a record, and an interpretation that edits the record it came from is
+   * not evidence of anything. So nothing here touches this.store.
+   */
+  async buildBlock() {
+    const bbox = this.map.selection;
+    if (!bbox || this._blockBuilding) return;
+    this._blockBuilding = { label: 'Reading the ground…' };
+    this.rebuild();
+    try {
+      const { doc, report } = await cutBlock(this.store.doc, bbox, {
+        allowNetwork: navigator.onLine !== false,
+        name: this.store.doc.name,
+        onProgress: (done, total) => {
+          this._blockBuilding = { label: `Elevation: tile ${done} of ${total}` };
+        },
+      });
+      this._blockReport = report;
+      this._blockBuilding = null;
+      this.map.clearSelection();
+      this._draftArea = null;
+      this.host.adoptBlock(doc);
+      this.rebuild();
+    } catch (err) {
+      console.error(err);
+      this._blockBuilding = null;
+      this._blockReport = null;
+      this.rebuild();
+      this.host.toast
+        ? this.host.toast(`Could not build the block: ${err.message}`)
+        : alert(`Could not build the block: ${err.message}`);
+    }
+  }
+
   /** Live download progress, tagged with which area it belongs to. */
   downloadProgress() {
     if (!this._download) return null;
@@ -1409,6 +1463,12 @@ export class MapSection {
       selection: () => this.selection(),
       beginSelection: () => this.beginSelection(),
       cancelSelection: () => this.cancelSelection(),
+
+      surveyExtent: () => this.surveyExtent(),
+      buildBlock: () => this.buildBlock(),
+      blockReport: () => this._blockReport,
+      blockBuilding: () => this._blockBuilding,
+      showBlock: () => this.host.setMode('block'),
       draftArea: () => this.draftArea(),
       setDraftArea: (p) => this.setDraftArea(p),
       startDownload: () => this.startDownload(),

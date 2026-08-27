@@ -6,7 +6,7 @@ import { OrbitControls } from './controls.js';
 import { BlockMaterial } from './material.js';
 import { buildBlockGeometry, buildEdgeLines, footprint } from './block.js';
 import { planeFrame, axisFrame, rotateAbout, DEG } from '../geo/math.js';
-import { surfaceHeight, surfaceRange } from '../geo/surfaces.js';
+import { surfaceHeight, surfaceRange, isDemSurface } from '../geo/surfaces.js';
 import { unconformityDatums } from '../geo/model.js';
 import { buildContourLabels, buildLabelMeshes, MAX_LABELS } from './contours.js';
 import { buildMarkers } from './markers.js';
@@ -98,7 +98,7 @@ export class BlockScene {
   /** Rebuild block geometry only when its shape actually changed. */
   syncGeometry(doc, force = false) {
     const t = doc.topo;
-    const key = JSON.stringify([doc.block, t]);
+    const key = JSON.stringify([doc.block, surfaceKey(t)]);
     if (!force && key === this._geomKey) return;
     this._geomKey = key;
 
@@ -138,7 +138,7 @@ export class BlockScene {
   syncLabels(doc) {
     const interval = this.blockMat.uniforms.uContourInterval.value;
     const every = this.blockMat.uniforms.uContourIndexEvery.value;
-    const key = JSON.stringify([doc.topo, doc.block, interval, every]);
+    const key = JSON.stringify([surfaceKey(doc.topo), doc.block, interval, every]);
     if (key === this._labelKey) return;
     this._labelKey = key;
 
@@ -544,4 +544,15 @@ function disposeGroup(group) {
     // outlive them.
     if (o.material && !o.userData.sharedMaterial) o.material.dispose();
   });
+}
+
+/**
+ * A cheap identity for a surface, for the caches that ask "has the terrain
+ * changed?" every sync. Measured ground carries a hundred thousand samples,
+ * and stringifying them to answer that question costs more than rebuilding
+ * the geometry would have — so a heightfield answers with its id, which
+ * changes exactly when the samples do.
+ */
+function surfaceKey(s) {
+  return isDemSurface(s) ? `dem:${s.id}` : s;
 }

@@ -16,7 +16,9 @@ import {
 import { quadrantBearing } from '../geo/math.js';
 import { formatReading, FLAT_DIP } from '../render/markers.js';
 import { formatLine, formatPlane } from '../geo/stereonet.js';
-import { surfaceRange, niceContourInterval } from '../geo/surfaces.js';
+import { surfaceRange, niceContourInterval, isDemSurface } from '../geo/surfaces.js';
+import { misfit as fitMisfit } from '../geo/infer.js';
+import { formatLonLat } from '../field/geo.js';
 
 // ---------------------------------------------------------------------------
 // Stratigraphy
@@ -847,6 +849,139 @@ function rockRow(ctx, ev, index, ids) {
 // Terrain
 // ---------------------------------------------------------------------------
 
+
+/**
+ * How well this block still explains the mapping it was built from.
+ *
+ * The verdict and the notes are what the fit decided when the block was cut,
+ * so they are read off the document. The misfit is NOT: it is recomputed here,
+ * every time the panel is drawn, against whatever the history says now. That
+ * is the whole point of showing it — edit the fold, and this is the number
+ * that tells you whether you improved the block or broke it. A stored number
+ * would be a receipt for a block that no longer exists.
+ */
+function fitReport(ctx, doc) {
+  const fit = doc.fit;
+  if (!fit || !doc.survey) return null;
+
+  const root = el('div', {});
+  root.appendChild(el('div', { class: 'sub-head', text: 'How well this block fits your mapping' }));
+
+  const now = fitMisfit(doc.events, doc.survey);
+  const built = fit.built || {};
+  const moved = (a, b) => (a == null || b == null ? '' : (b - a > 0.35 ? ' worse' : (a - b > 0.35 ? ' better' : '')));
+
+  const angleVal = el('span', { class: 'stat-value' });
+  const spreadVal = el('span', { class: 'stat-value' });
+  const stats = [
+    el('div', { class: 'stat' }, [
+      el('span', { class: 'stat-label', text: 'Readings off by' }), angleVal]),
+  ];
+  if (now.surfaces) {
+    stats.push(el('div', { class: 'stat' }, [
+      el('span', { class: 'stat-label', text: 'Contacts held to' }), spreadVal]));
+  }
+  stats.push(statRow('Readings used', String(now.n)));
+  stats.push(statRow('Contacts used', String(now.surfaces)));
+  root.appendChild(el('div', { class: 'stats' }, stats));
+
+  // Rewritten in place rather than rebuilt, so dragging a fold's plunge shows
+  // the misfit moving under the finger instead of the panel flickering.
+  const paint = (m) => {
+    angleVal.textContent = `${m.angle.toFixed(1)}°`;
+    angleVal.className = `stat-value ${m.angle < 6 ? 'good' : 'warn'}`;
+    if (m.surfaces) {
+      spreadVal.textContent = `±${Math.round(m.spread)} m`;
+      spreadVal.className = `stat-value ${m.spread < 40 ? 'good' : 'warn'}`;
+    }
+  };
+  paint(now);
+  root.refreshFit = () => paint(fitMisfit(ctx.store.doc.events, ctx.store.doc.survey));
+
+  const drift = [];
+  if (built.angle != null) {
+    const d = moved(built.angle, now.angle);
+    if (d) drift.push(`Attitudes were ${built.angle.toFixed(1)}° when this block was built —${d} now.`);
+  }
+  if (built.spread != null && now.surfaces) {
+    const d = moved(built.spread, now.spread);
+    if (d) drift.push(`Contacts were ±${Math.round(built.spread)} m —${d} now.`);
+  }
+  if (drift.length) {
+    root.appendChild(el('div', { class: 'ctl-hint standalone', text: drift.join(' ') }));
+  }
+
+  root.appendChild(el('div', { class: 'ctl-hint standalone', text:
+    'Both numbers are live. Change an event on the History tab and they answer for the block you have now, not the one that was fitted — which is the fastest way to find out whether your correction is an improvement.' }));
+
+  // Ninety degrees per reading is also what a broken observation looks like,
+  // so say when that is what is happening rather than letting it read as a
+  // verdict on the geology.
+  if (now.blind) {
+    root.appendChild(el('div', { class: 'notice warn' }, [el('p', { text:
+      `${now.blind} of ${now.n} readings have no bedding beneath them in this block — inside an intrusion, or off the ground the block covers. Each is scored as a right angle, so the number above is worse than the geology is.` })]));
+  }
+
+  // What the stereonet decided, from the readings alone.
+  const v = fit.verdict || {};
+  const said = {
+    girdle: 'a cylindrical fold', cluster: 'one attitude — a homocline',
+    conical: 'a dome or a basin', scattered: 'not one structure',
+    few: 'too few readings to fit anything',
+  }[v.kind];
+  if (said) {
+    root.appendChild(el('div', { class: 'notice' }, [
+      el('p', {}, [el('strong', { text: 'The stereonet said: ' }), el('span', { text: said })]),
+      v.n ? el('p', { class: 'dim', text:
+        `${v.n} pole${v.n === 1 ? '' : 's'}${v.misfit != null ? `, ${v.misfit.toFixed(1)}° off the fitted circle` : ''}${v.spread != null ? `, spanning ${Math.round(v.spread)}° of it` : ''}.` }) : null,
+    ]));
+  }
+
+  for (const n of fit.notes || []) {
+    root.appendChild(el('div', { class: 'ctl-hint standalone', text: n }));
+  }
+  for (const w of fit.warnings || []) {
+    root.appendChild(el('div', { class: 'notice warn' }, [el('p', { text: w })]));
+  }
+
+  if (fit.units && fit.units.length) {
+    root.appendChild(el('div', { class: 'sub-head', text: 'Column, read off the map' }));
+    root.appendChild(el('div', { class: 'stats' }, fit.units.map((u) => el('div', { class: 'stat' }, [
+      el('span', { class: 'stat-label', text: u.name || 'unnamed' }),
+      el('span', { class: `stat-value ${u.measured ? '' : 'dim'}`,
+        text: `${Math.round(u.thickness)} m${u.measured ? '' : ' (guessed)'}` }),
+    ]))));
+    root.appendChild(el('div', { class: 'ctl-hint standalone', text:
+      'Two contacts at a known structure differ by the thickness between them, so these were read off the map rather than measured with a tape. The top and bottom units are open-ended — nothing you mapped says how thick they are.' }));
+  }
+
+  const c = fit.counts || {};
+  const d = c.dropped || {};
+  const skipped = [];
+  if (d.outside) skipped.push(`${d.outside} outside the box`);
+  if (d.noAttitude) skipped.push(`${d.noAttitude} with no reading yet`);
+  if (d.notBedding) skipped.push(`${d.notBedding} not bedding`);
+  if (d.linear) skipped.push(`${d.linear} linear`);
+  if (skipped.length) {
+    root.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: `Stations not used: ${skipped.join(', ')}.` }));
+  }
+  if (fit.ground && fit.ground.missing) {
+    root.appendChild(el('div', { class: 'notice warn' }, [el('p', { text:
+      `${fit.ground.missing} elevation samples were missing when this block was cut and were filled in from their neighbours.` })]));
+  }
+
+  return root;
+}
+
+/** A label and a value, for facts the panel states rather than edits. */
+function statRow(label, value) {
+  return el('div', { class: 'stat' }, [
+    el('span', { class: 'stat-label', text: label }),
+    el('span', { class: 'stat-value', text: value }),
+  ]);
+}
+
 export function terrainPanel(ctx) {
   const root = el('div', { class: 'panel' });
 
@@ -854,14 +989,32 @@ export function terrainPanel(ctx) {
     clear(root);
     const doc = ctx.store.doc;
 
+    const measured = isDemSurface(doc.topo);
+
     root.appendChild(sectionHead(
-      'Land surface',
-      'The map face of the block. Relief is what makes outcrop patterns interesting.',
+      measured ? 'Measured ground' : 'Land surface',
+      measured
+        ? 'This block is capped with real topography, sampled from the elevation data for the area you mapped.'
+        : 'The map face of the block. Relief is what makes outcrop patterns interesting.',
     ));
 
-    root.appendChild(surfaceEditor(doc.topo, (patch, key) => {
-      ctx.store.edit((d) => { Object.assign(d.topo, patch); }, { coalesce: `topo:${key}` });
-    }));
+    if (measured) {
+      // No landform controls: there is nothing to set. Real ground is a place,
+      // not a shape with parameters, and offering an amplitude slider for it
+      // would imply the mountain could be made taller.
+      const gr = doc.georef;
+      root.appendChild(el('div', { class: 'stats' }, [
+        gr ? statRow('Centre', formatLonLat(gr.lon0, gr.lat0)) : null,
+        statRow('Datum', `${Math.round(doc.topo.datum || 0)} m above sea level`),
+        statRow('Samples', `${doc.topo.nx} × ${doc.topo.ny}`),
+      ].filter(Boolean)));
+      root.appendChild(el('div', { class: 'ctl-hint standalone',
+        text: 'Heights on this block are metres about that datum, so the middle of the ground is zero. The Map half is where this came from, and where its readings still live.' }));
+    } else {
+      root.appendChild(surfaceEditor(doc.topo, (patch, key) => {
+        ctx.store.edit((d) => { Object.assign(d.topo, patch); }, { coalesce: `topo:${key}` });
+      }));
+    }
 
     root.appendChild(el('div', { class: 'sub-head', text: 'Contours' }));
     root.appendChild(toggleRow({
@@ -887,11 +1040,22 @@ export function terrainPanel(ctx) {
     }
 
     root.appendChild(el('div', { class: 'sub-head', text: 'Block size' }));
+    if (measured) {
+      // Width and depth are the footprint the ground was sampled over. Change
+      // them and the lid stretches or gets cropped, and every station drifts
+      // off the place it was recorded — so only the depth of the block is left
+      // free, which is the one that costs nothing.
+      root.appendChild(el('div', { class: 'ctl-hint standalone',
+        text: 'Width and north–south depth are fixed by the area you mapped — they are the footprint the ground was sampled over, and the readings are pinned to it. How deep the block is cut is still yours.' }));
+    }
     for (const [key, label, max] of [
       ['width', 'Width (E–W)', 6000],
       ['depth', 'Depth (N–S)', 6000],
       ['height', 'Height', 4000],
     ]) {
+      // On measured ground the footprint is not a preference. Stretching it
+      // would slide every station off the place it was recorded.
+      if (measured && key !== 'height') continue;
       root.appendChild(numberRow({
         label, value: doc.block[key], min: 400, max, step: 100, unit: 'm',
         onChange: (v) => ctx.store.edit((d) => { d.block[key] = v; }, { coalesce: `block:${key}` }),
@@ -933,6 +1097,7 @@ export function fieldPanel(ctx) {
   // wasteful and, on a phone, visibly jumpy.
   const rows = new Map();
   let summary = null;
+  let fitNode = null;
 
   const build = () => {
     clear(root);
@@ -998,6 +1163,26 @@ export function fieldPanel(ctx) {
         ? 'Place some readings first — a stereonet has nothing to say about an empty notebook.'
         : 'Opens beside the block. Edit a fold in History with it up and the girdle swings as you drag.',
     }));
+
+    // Only for a block cut from a field area: an invented landform has no map
+    // that was walked, so there is nothing to hold the prediction against.
+    if (ctx.groundAvailable && ctx.groundAvailable()) {
+      const onGround = ctx.groundOpen();
+      root.appendChild(el('button', {
+        class: `btn wide ${onGround ? 'armed' : ''}`, type: 'button',
+        text: onGround ? 'Ground map shown — tap to hide' : 'Compare with the map you walked',
+        onclick: () => ctx.setGroundMap(!onGround),
+      }));
+      root.appendChild(el('div', { class: 'ctl-hint', text:
+        'Draws the contacts this block predicts over the ones you mapped. Where they part company is where the model and the ground disagree — which is the argument worth having. It shares the slot with the stereonet.' }));
+    }
+
+    // Everything the fit decided, for a block cut from a field area. Placed
+    // here rather than left behind on the Map section: building a block takes
+    // you straight to this half, and an explanation you have to navigate back
+    // to is one nobody reads.
+    fitNode = fitReport(ctx, doc);
+    if (fitNode) root.appendChild(fitNode);
 
     root.appendChild(el('div', { class: 'sub-head', text: 'Display' }));
     root.appendChild(toggleRow({
@@ -1094,6 +1279,7 @@ export function fieldPanel(ctx) {
     // Dragging a marker across a hinge swings the fitted axis, and watching
     // that happen is half the lesson.
     fillSummary();
+    fitNode?.refreshFit?.();
   };
 
   build();

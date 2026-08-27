@@ -11,7 +11,7 @@
 // would not find out until they were standing in it with no signal. So the
 // tile cache is named without a version and listed here as untouchable.
 
-const CACHE = 'blockdiagram-v30';
+const CACHE = 'blockdiagram-v31';
 
 // Must match CACHE_NAME in js/field/tiles.js.
 const TILE_CACHE = 'field-tiles';
@@ -31,6 +31,8 @@ const ASSETS = [
   './js/geo/unmake.js',
   './js/geo/stereonet.js',
   './js/geo/glsl.js',
+  './js/geo/marching.js',
+  './js/geo/infer.js',
   './js/render/block.js',
   './js/render/controls.js',
   './js/render/material.js',
@@ -44,6 +46,7 @@ const ASSETS = [
   './js/ui/icons.js',
   './js/ui/surfaceEditor.js',
   './js/ui/stereonet.js',
+  './js/ui/groundMap.js',
   './js/field/geo.js',
   './js/field/model.js',
   './js/field/store.js',
@@ -51,11 +54,14 @@ const ASSETS = [
   './js/field/dem.js',
   './js/field/sensors.js',
   './js/field/declination.js',
+  './js/field/ground.js',
+  './js/field/cutblock.js',
   './js/ui/map/section.js',
   './js/ui/map/canvas.js',
   './js/ui/map/panels.js',
   './js/ui/map/measureView.js',
   './js/ui/map/symbols.js',
+  './js/ui/map/blockPanel.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',

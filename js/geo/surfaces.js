@@ -19,6 +19,63 @@ export const SURFACE_KINDS = [
 
 export const KIND_CODE = Object.fromEntries(SURFACE_KINDS.map((k) => [k.id, k.code]));
 
+// ---------------------------------------------------------------------------
+// Measured terrain
+// ---------------------------------------------------------------------------
+// A seventh kind that is not in SURFACE_KINDS, because it is not something a
+// student picks off a list: it is a real landscape, sampled from the DEM tiles
+// the Map section already downloads, and it arrives only when a block is cut
+// from a mapped field area.
+//
+// It is deliberately NOT given a KIND_CODE. The GLSL twin of surfaceHeight
+// exists to color *unconformity* erosion surfaces on the GPU, and an
+// unconformity surface is always one of the analytic kinds; the land surface
+// never reaches the shader, because the block's lid is meshed from it on the
+// CPU instead. So a heightfield needs no GLSL counterpart, and giving it a
+// code would only invite one to be written.
+
+/**
+ * Wrap a sampled heightfield as a surface.
+ *
+ * @param {Float32Array} grid  heights in metres, row-major, row 0 at y = -depth/2
+ *                             (south) and column 0 at x = -width/2 (west)
+ * @param {number} nx          columns
+ * @param {number} ny          rows
+ * @param {number} width       block footprint E–W, metres
+ * @param {number} depth       block footprint N–S, metres
+ * @param {object} over        anything else to carry (id, georeference, ...)
+ */
+export function demSurface(grid, nx, ny, width, depth, over = {}) {
+  return {
+    ...defaultSurface(),
+    kind: 'dem',
+    grid, nx, ny, width, depth,
+    // Identity for cache keys. The renderer keys its geometry on the surface,
+    // and JSON.stringify of a hundred thousand floats every frame is not a
+    // cache, it is a leak with a lookup on the front.
+    id: over.id || `dem${Math.random().toString(36).slice(2, 10)}`,
+    ...over,
+  };
+}
+
+export function isDemSurface(s) { return !!(s && s.kind === 'dem' && s.grid); }
+
+/** Bilinear height from the heightfield, clamped at the edges. */
+function demHeight(s, x, y) {
+  const { grid, nx, ny } = s;
+  const fx = ((x / s.width) + 0.5) * (nx - 1);
+  const fy = ((y / s.depth) + 0.5) * (ny - 1);
+  const i = Math.min(nx - 2, Math.max(0, Math.floor(fx)));
+  const j = Math.min(ny - 2, Math.max(0, Math.floor(fy)));
+  const tx = Math.min(1, Math.max(0, fx - i));
+  const ty = Math.min(1, Math.max(0, fy - j));
+  const a = grid[j * nx + i];
+  const b = grid[j * nx + i + 1];
+  const c = grid[(j + 1) * nx + i];
+  const d = grid[(j + 1) * nx + i + 1];
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+
 export function defaultSurface(over = {}) {
   return {
     kind: 'flat',
@@ -60,6 +117,10 @@ function bell(t) {
 
 /** Height of the surface at map position (x, y). */
 export function surfaceHeight(s, x, y) {
+  // Measured ground answers from the samples and nothing else: no base, no
+  // roughness, no landform. It is not a shape with parameters, it is a place.
+  if (s.kind === 'dem') return demHeight(s, x, y);
+
   // Flat means flat. Roughness is remembered so that switching back to a
   // landform restores it, but it must not leak into a level plain.
   if (s.kind === 'flat') return s.base;
@@ -115,6 +176,24 @@ export function surfaceNormal(s, x, y, eps = 2) {
 
 /** Min and max height over a block footprint, sampled on a coarse grid. */
 export function surfaceRange(s, width, depth, n = 24) {
+  // Measured ground gets its exact range from the samples rather than a 25x25
+  // guess at them — a coarse scan of a real landscape walks straight past the
+  // summit and the canyon floor, and the block's base is hung off `lo`. The
+  // answer is cached on the surface: it is asked for on every document sync,
+  // and it cannot change without the grid changing.
+  if (isDemSurface(s) && width === s.width && depth === s.depth) {
+    if (!s._range) {
+      let lo = Infinity, hi = -Infinity;
+      for (let k = 0; k < s.grid.length; k++) {
+        const h = s.grid[k];
+        if (h < lo) lo = h;
+        if (h > hi) hi = h;
+      }
+      Object.defineProperty(s, '_range', { value: { lo, hi }, enumerable: false, configurable: true, writable: true });
+    }
+    return s._range;
+  }
+
   let lo = Infinity, hi = -Infinity;
   for (let i = 0; i <= n; i++) {
     for (let j = 0; j <= n; j++) {

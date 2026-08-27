@@ -103,6 +103,12 @@ export function buildContourLabels(doc, interval, indexEvery, box) {
   const { lo, hi } = surfaceRange(doc.topo, doc.block.width, doc.block.depth);
   if (!(hi - lo > 1)) return empty;
 
+  // Labels have to name the elevation the shader actually drew, and on real
+  // ground that is metres above sea level rather than metres above the middle
+  // of the block. The geometry stays in block coordinates; only the level the
+  // lines fall on, and the number written on them, know about the datum.
+  const datum = doc.topo.datum || 0;
+
   const span = Math.max(box.x1 - box.x0, box.y1 - box.y0);
   const labelW = span * 0.105;
   const minGap = span * 0.5;           // keep labels from crowding each other
@@ -111,7 +117,11 @@ export function buildContourLabels(doc, interval, indexEvery, box) {
   const res = 96;
 
   const labels = [];
-  const first = Math.ceil((lo + 1) / step) * step;
+  // In block coordinates, but stepping through levels whose *absolute*
+  // elevation is a multiple of the index interval — because that is where the
+  // shader puts the heavy lines, and a label on a line that is not there is
+  // worse than no label.
+  const first = Math.ceil((lo + datum + 1) / step) * step - datum;
   const grid = sampleGrid(doc.topo, box, res);
 
   for (let level = first; level <= hi - 1 && labels.length < MAX_LABELS; level += step) {
@@ -153,7 +163,7 @@ export function buildContourLabels(doc, interval, indexEvery, box) {
       labels.push({
         x, y, level,
         angle: Math.atan2(dyn, dxn),
-        text: formatLevel(level),
+        text: formatLevel(level + datum),
       });
     }
   }

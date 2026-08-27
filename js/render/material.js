@@ -39,6 +39,7 @@ export class BlockMaterial {
       uSamples: { value: 4 },
       uExag: { value: 1 },
       uContourInterval: { value: 0 },
+      uContourDatum: { value: 0 },
       uContourIndexEvery: { value: 5 },
       uLabelSpots: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) },
       uLabelCount: { value: 0 },
@@ -101,6 +102,10 @@ export class BlockMaterial {
     // Contour interval: either the value the user pinned, or one chosen from
     // the terrain's own relief so the map stays readable as the landform
     // changes. Flat ground yields 0, which switches contours off.
+    // Real ground carries its height above sea level; an invented landform is
+    // its own datum and has none.
+    u.uContourDatum.value = doc.topo.datum || 0;
+
     if (s.showContours === false) {
       u.uContourInterval.value = 0;
     } else if (s.contourInterval > 0) {

@@ -14,6 +14,12 @@ US topographic and aerial map downloaded before you leave, your position on
 it from the satellites, strike and dip measured by laying the phone on the
 bedding, and a record of what each reading was taken in.
 
+**Build a block** joins the two. Draw a box around the ground you have mapped
+and the app cuts a block from it: the real topography as its lid, your readings
+standing on it, and a geologic history fitted to what you actually measured —
+then draws the map that history predicts, over the one you walked, so you can
+see where the two disagree.
+
 Both run with **no signal** — that is the whole point of them.
 
 ---
@@ -350,6 +356,131 @@ prints them, and a contact can record the unit on each side.
 Deleting a line asks first, and says what it is about to lose — its name, how
 many points, how far it runs. So do deleting a station and removing a unit.
 
+## Building a block from what you mapped
+
+**Block** is the tab that joins the two halves. Draw a box round the ground you
+have mapped — the same box the Areas tab downloads with, corners and all — and
+the app cuts a 3D block out of it.
+
+The block is capped with the **real topography**, from the elevation tiles the
+area already downloaded, so it works on a ridge with no signal. Your stations
+stand on it as ordinary map symbols. And the geologic history is **fitted to
+what you measured**, then handed over as ordinary events on the History tab —
+tap one and change it, because the fit is a first draft and arguing with it is
+the exercise.
+
+### What it does, in the order it does it
+
+The order is not an implementation detail, it is the argument.
+
+1. **The stereonet decides the shape of the answer**, from the readings alone
+   and with the map not consulted. Poles in a cluster are one attitude and
+   admit no fold; poles on a girdle are a cylindrical fold and its hinge is
+   already known; poles on a small circle are a dome, which has no hinge line
+   at all. Fitting a fold to a homocline would always "succeed", at some
+   enormous wavelength, and mean nothing.
+2. **The structure's numbers are fitted to those readings.** A fault cannot
+   disturb this step: a fault translates a block without rotating it, so both
+   sides of one read the same attitude.
+3. **Each fault plane comes out of its own drawn trace**, by geometry rather
+   than by search. A fault trace on the map is the intersection of the fault
+   with the ground, so the traced points lie in the plane and the plane is the
+   one that best contains them.
+4. **Only then is slip fitted**, against contacts that cross the faults.
+
+### The contact trick
+
+A contact is a surface of constant stratigraphic depth. So the **spread of that
+depth along a line you walked is the error, in metres** — with no fitting, and
+with no assumption about which units it separates. That one fact is what makes
+the whole thing work: the contacts can be used before the column is known, and
+once a fault is in the history the same number scores its slip too, because
+undoing a fault correctly brings the two halves of a displaced contact back to
+the same depth.
+
+It also means the **column falls out of the contacts for free**. Two contacts at
+a known structure differ by the thickness of what lies between them, so the
+thicknesses are read off the map rather than measured with a tape. The units at
+the top and bottom of the column are open-ended and are labelled as guesses,
+because nothing in the box says how thick they are.
+
+### Naming the units is a measurement
+
+A fault cuts a contact into two traces with a gap between them, and unless
+something says those two traces are the *same* contact, each is internally
+consistent whatever the fault did — so the offset is unconstrained and the fit
+will happily report a confident wrong number.
+
+What says so is already in the notebook: **the units on either side**. A contact
+with sandstone above and shale below is that contact wherever it crops out, on
+either side of any fault. So filling in `unitA` and `unitB` is not paperwork,
+it is the measurement that makes the throw solvable — and the app says so when
+it has to refuse.
+
+### Where it says it cannot answer
+
+Which is most of what it is for.
+
+- **Fewer than three bedding readings** fits nothing, and three on one limb
+  still only give one attitude.
+- **A fault trace across ground with too little relief** constrains no dip at
+  all — every plane containing that line fits equally well. It is called
+  vertical and flagged as an assumption rather than given a fabricated dip that
+  looks measured.
+- **A fault no contact crosses** gets zero slip and says the fault is drawn,
+  not solved.
+- **A history more than about eight degrees from the readings** is reported as
+  not an explanation of them. A block quietly twelve degrees from every reading
+  it was built from looks exactly as convincing as one that fits, and is the
+  single most misleading thing this feature could produce.
+- **A box far bigger than the mapping inside it** makes a block that is mostly
+  extrapolation, and says so. A big empty block looks more authoritative than a
+  small full one.
+- **A wavelength far wider than the area mapped** means only part of one limb
+  is exposed and the fold is not really constrained.
+- Readings with **no bedding beneath them** are counted separately, because
+  ninety degrees per reading is also what a data fault looks like, and "your
+  block is hopeless" and "these readings never reached it" must not print the
+  same number with no way to tell them apart.
+
+### Holding it against the map you walked
+
+**Field → Compare with the map you walked** opens the **Ground map** beside the
+block: the hillshade, the contours, the contacts and faults you mapped in the
+map's own colours, and in blue the contacts *this block says should crop out*.
+
+Those blue lines are not drawn by hand. The history gives a continuous
+stratigraphic depth at every point; sample it on the real ground and contour
+the result, and where a contact crops out falls out of the arithmetic. Nobody
+codes the rule of Vs — the contour of a dipping surface against a real valley
+*is* a V.
+
+Where the model agrees, the walked line sits inside its halo. Where it does not,
+there are visibly two lines and the gap between them is the error, on the
+ground, where you can go back and look.
+
+One caveat worth knowing: each contact's depth is taken as the **mean** along
+the line you walked, so the prediction cannot drift off wholesale. What is being
+tested is the **shape and trend** of the trace, not its absolute position.
+
+### How well it fits, live
+
+**Field → How well this block fits your mapping** carries the whole reading:
+what the stereonet decided, what was fitted to the map, the column, which
+stations were not used and why, and every warning above.
+
+The two numbers at the top — how far the readings are off, and how tightly the
+contacts hold to a single surface — are **recomputed from the history you have
+now**, not stored from when the block was cut. Change a fold on the History tab
+and they answer for the block in front of you. That is the fastest way to find
+out whether a correction is an improvement, and it is the same instinct as
+leaving the stereonet up beside the block.
+
+The ground map and the stereonet share one slot: opening either closes the
+other, because three panes is not a layout a phone has room for.
+
+---
+
 ## Getting the work out
 
 Four buttons, on both the Stations and the Lines tab, because they go to
@@ -484,6 +615,51 @@ an event triggers a recompile.
 identify tool and it is the reference the shader must agree with — **if you
 change one, change the other.**
 
+## Reading a history back out of a map
+
+`js/geo/infer.js` is the same engine pointed the other way, and there is no new
+geology in it.
+
+`stratDepth()` already answers "how far below the top of the column is this
+point" as a continuous number. Run that over a student's own readings instead
+of over the screen and it stops being an answer and becomes a **misfit** — and
+a misfit is something that can be minimised.
+
+Two kinds of evidence, and it matters that they are independent. The stations
+say which way the beds lean at a point; the contacts say where one single
+surface goes across the map. A model can satisfy either alone and still be
+wrong: dips alone cannot tell an anticline from the syncline half a wavelength
+away, and contacts alone cannot tell a tight fold from a broad one where only
+part of a limb is exposed.
+
+The search is a coarse scan to find the right basin, then coordinate descent
+with a shrinking step to walk to the bottom of it. Nothing cleverer, because
+the objective has long flat valleys and several local minima and this behaves
+predictably in both. A whole fit is tens of milliseconds.
+
+**Real ground is a seventh kind of surface.** `demSurface()` in
+`geo/surfaces.js` wraps a sampled heightfield, and `surfaceHeight()` answers
+from the samples. Everything downstream — the cutaway, vertical exaggeration,
+the markers, the identify tool, contours, map view — already went through that
+one function, so all of it works on a real landscape unchanged. It is
+deliberately given no `KIND_CODE`: the GLSL twin exists to colour *unconformity*
+surfaces on the GPU, an unconformity surface is always one of the analytic
+kinds, and the land surface never reaches the shader because the block's lid is
+meshed from it on the CPU instead.
+
+Two things a heightfield breaks if you are not careful, both fixed:
+
+- **Undo.** `snapshot()` deep-copies the document on every edit, and a
+  `Float32Array` through `JSON.stringify` comes back as an object with
+  thirty-seven thousand numeric keys — a round trip does not merely cost, it
+  destroys the terrain. The samples are immutable, so snapshots share the
+  surface by reference instead.
+- **Contours.** The shader draws lines where `z / interval` is a whole number,
+  and on real ground `z` is metres about the block's own datum. Without
+  `uContourDatum` the lines fall at 1806, 1831, 1856 rather than the round
+  elevations a map prints, and the labels name the wrong thing. An invented
+  landform passes a datum of zero and is unaffected.
+
 ---
 
 ## How offline actually holds
@@ -539,6 +715,8 @@ js/
     unmake.js         the inverse history, on the CPU
     stereonet.js      lower-hemisphere projection and the girdle fit
     glsl.js           the inverse history, generated as GLSL
+    marching.js       marching squares, on any grid of numbers
+    infer.js          reading a history back out of a map
   render/
     block.js          block geometry with a terrain lid and cutaway
     material.js       document → uniforms; decides when to recompile
@@ -554,10 +732,13 @@ js/
     dem.js            elevation decode, hillshade, contour tracing
     sensors.js        GPS watch and the compass clinometer
     declination.js    magnetic to true north
+    ground.js         the frame the two halves share, and the sampled ground
+    cutblock.js       a field area and a box -> a block document
   ui/
     app.js            shell, section switch, tabs, identify tool, files
     panels.js         layers / history / terrain / field / view panels
     stereonet.js      the net, and the readout of what it found
+    groundMap.js      the map beside the block: walked vs predicted
     widgets.js        controls, compass dial, protractor
     surfaceEditor.js  shared surface parameter editor
     swatch.js         canvas lithology swatches
@@ -568,6 +749,7 @@ js/
       measureView.js  the full-screen clinometer
       panels.js       measure / stations / areas / setup panels
       symbols.js      station symbols and the position marker, on canvas
+      blockPanel.js   the Block tab: cut a block out of the mapped area
 ```
 
 Caps: 20 layers, 16 events. Both exist to keep the generated shader inside the
@@ -702,13 +884,35 @@ fragment uniform budget of older mobile GPUs.
   than laying its whole back on a surface — there is less of the phone touching
   less of the rock. Expect a linear reading to be the less trustworthy of the
   two, and check the scatter.
-- **No line drawing yet.** Contacts, faults and traverses as *mapped* lines
-  (as opposed to measured linear structures, which are supported) are the
-  obvious next thing; this version records stations only.
-- Readings do not yet reach the stereonet. `geo/stereonet.js` fits a girdle to
-  any bag of readings and does not care where they came from, so wiring the
-  bedding stations into it is small — it is left out of this version rather
-  than left impossible.
+### Building a block
+
+- **One structure at a time.** The fit puts a single tilt, fold or dome in the
+  history, plus a fault for each fault you drew. Two folds overprinting, or a
+  fold refolded, comes out as a poor fit and says so rather than being
+  decomposed.
+- **The predicted contacts are anchored to your own lines.** Each contact's
+  depth is the mean along the trace you walked, so the prediction cannot drift
+  off wholesale — it tests the shape and trend of the trace rather than its
+  absolute position. Hanging the levels off the column instead would be a
+  harder test and is the obvious next thing.
+- **Faults are planar and their slip is uniform**, the same limit the block has
+  everywhere, and an infinite plane besides — a fault that dies out along
+  strike is not represented.
+- **Only bedding is fitted.** Joints, foliation and lineations are carried into
+  the block as record but say nothing about the shape of the beds.
+- **The ground is the DEM's**, so about 10 m, and every thickness read off the
+  map inherits that.
+- The heightfield travels inside the document, packed as int16 decimetres —
+  about 75 kB before base64 for a 193 x 193 lid. A block cut from a field area
+  is therefore a much bigger file than an invented one, and that is what lets it
+  open on a phone that has never downloaded the area.
+- **The block's footprint is fixed** once it is cut. Width and depth are the
+  ground the samples were taken over and the readings are pinned to it; only
+  how deep the block is cut stays adjustable.
+- Field readings reach the stereonet only by way of **Build a block** — the
+  fit runs on the Map section's bedding, but the net itself is still a block
+  instrument. Plotting a project's readings without cutting a block is the
+  obvious next step and `geo/stereonet.js` already takes any bag of readings.
 - A station's elevation is filled in from the terrain a moment after it is
   recorded, and stays null if that area's elevation tiles were never
   downloaded. Null rather than zero: a station recorded at sea level because

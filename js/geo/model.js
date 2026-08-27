@@ -257,6 +257,10 @@ export function defaultDocument() {
     // Strike-and-dip stations the student has dropped on the land surface.
     markers: [],
     topo: defaultSurface({ kind: 'flat', base: 0 }),
+    // Where on Earth this block is, when it was cut from a mapped field area
+    // rather than invented. Null for an invented block, which is most of them.
+    // { lon0, lat0, width, depth } — see field/ground.js.
+    georef: null,
     settings: {
       showContacts: true,
       showPatterns: true,
@@ -268,6 +272,7 @@ export function defaultDocument() {
       markerSize: 1,
       mapView: false,       // plan view: orthographic, north up, flat symbols
       showNet: false,               // stereonet pane beside the block
+      showGroundMap: false,         // ground map pane, for a block cut from a field area
       netProjection: 'equalArea',   // 'equalArea' (Schmidt) | 'equalAngle' (Wulff)
       netPlanes: false,             // draw each bed's great circle, not just its pole
       contourInterval: 0,   // 0 = choose one from the terrain's relief

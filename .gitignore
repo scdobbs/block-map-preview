@@ -8,3 +8,8 @@
 .vscode/
 .idea/
 *.swp
+
+# Scratch harness used while building the map-to-block fit. Holds an older
+# copy of geo/infer.js and a superseded georef.js, so it must not ship
+# alongside the real modules.
+lab/

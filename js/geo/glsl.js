@@ -380,6 +380,12 @@ uniform float uExag;
 
 uniform float uContourInterval;
 uniform float uContourIndexEvery;
+// Height of the block's zero above sea level. Zero for an invented landform,
+// which has no sea level to be above; real for ground cut from a field area,
+// where the lines have to fall on the round elevations a map prints -- 1850,
+// 1900 -- and not on 1834 and 1884 because that is where the block's own zero
+// happened to land.
+uniform float uContourDatum;
 uniform vec4  uLabelSpots[24];   // (x, y, gap radius, unused)
 uniform int   uLabelCount;
 
@@ -492,7 +498,7 @@ void main() {
   // via fwidth, so the lines keep a constant on-screen weight at any zoom and
   // fade out before they can alias into a solid wash.
   if (vTop > 0.5 && uContourInterval > 0.0) {
-    float f = vWorld.z / uContourInterval;
+    float f = (vWorld.z + uContourDatum) / uContourInterval;
     float w = fwidth(f);
     if (w > 1e-6) {
       float fade = 1.0 - smoothstep(0.30, 0.75, w);

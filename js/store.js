@@ -4,6 +4,8 @@
 // forty intermediate values leaves one undo step, not forty.
 
 import { defaultDocument, SCHEMA_VERSION, faultKindFromRake, newId } from './geo/model.js';
+import { isDemSurface } from './geo/surfaces.js';
+import { packGround, unpackGround } from './field/ground.js';
 
 const KEY = 'blockdiagram.doc.v1';
 const COALESCE_MS = 900;
@@ -95,7 +97,7 @@ export class Store {
 
   save() {
     try {
-      localStorage.setItem(KEY, JSON.stringify(this.doc));
+      localStorage.setItem(KEY, JSON.stringify(serialiseDoc(this.doc)));
     } catch (err) {
       // Private browsing or a full quota. Losing autosave is survivable;
       // losing the session is not, so carry on silently.
@@ -104,7 +106,44 @@ export class Store {
   }
 }
 
-function snapshot(doc) { return JSON.parse(JSON.stringify(doc)); }
+/**
+ * A deep copy for the undo stack — except for measured ground, which is shared
+ * by reference instead.
+ *
+ * Two reasons, and both are load-bearing. A Float32Array through
+ * JSON.stringify comes back as an object with thirty-seven thousand numeric
+ * keys, so a round trip does not merely cost, it destroys the terrain. And the
+ * samples are immutable: nothing edits a landscape in place, a different area
+ * is a different surface object. So sharing is safe, and it keeps an undo step
+ * the size it was before any of this existed.
+ */
+function snapshot(doc) {
+  const ground = isDemSurface(doc.topo) ? doc.topo : null;
+  if (!ground) return JSON.parse(JSON.stringify(doc));
+  const copy = JSON.parse(JSON.stringify({ ...doc, topo: null }));
+  copy.topo = ground;
+  return copy;
+}
+
+/**
+ * The document as something that can be written down: the heightfield packed
+ * to int16 decimetres and base64, because that is the one part of it that is
+ * not already plain JSON.
+ */
+export function serialiseDoc(doc) {
+  if (!isDemSurface(doc.topo)) return doc;
+  return { ...doc, topo: packGround(doc.topo) };
+}
+
+/** The inverse, tolerant of a file whose ground failed to decode. */
+export function reviveDoc(doc) {
+  if (!doc || !doc.topo || doc.topo.kind !== 'dem') return doc;
+  const ground = unpackGround(doc.topo);
+  // A block whose ground will not decode is still a block. Falling back to a
+  // flat datum keeps the history, the column and the readings openable rather
+  // than losing the lot to a corrupted lid.
+  return { ...doc, topo: ground || defaultDocument().topo };
+}
 
 export function loadSaved() {
   try {
@@ -112,7 +151,7 @@ export function loadSaved() {
     if (!raw) return null;
     const doc = JSON.parse(raw);
     if (!doc || doc.version !== SCHEMA_VERSION) return null;
-    return migrate(doc);
+    return migrate(reviveDoc(doc));
   } catch {
     return null;
   }
@@ -123,7 +162,11 @@ function migrate(doc) {
   const base = defaultDocument();
   doc.settings = { ...base.settings, ...(doc.settings || {}) };
   doc.block = { ...base.block, ...(doc.block || {}) };
-  doc.topo = { ...base.topo, ...(doc.topo || {}) };
+  // Measured ground is taken whole. Spreading a default landform's parameters
+  // over it would leave a surface that is both a heightfield and a set of hill
+  // parameters, and surfaceHeight would answer from whichever it checked first.
+  doc.topo = isDemSurface(doc.topo) ? doc.topo : { ...base.topo, ...(doc.topo || {}) };
+  doc.georef = doc.georef || null;
   doc.events = (doc.events || []).map((e) => {
     const ev = { enabled: true, ...e };
     // Faults used to store a bare rake. Recover the kind and obliquity the
@@ -145,11 +188,14 @@ function migrate(doc) {
 }
 
 export function exportJSON(doc) {
-  return JSON.stringify({ ...doc, exportedAt: new Date().toISOString() }, null, 2);
+  // Not pretty-printed when it carries ground: an indented base64 blob of a
+  // hundred thousand characters helps nobody and triples the file.
+  const out = { ...serialiseDoc(doc), exportedAt: new Date().toISOString() };
+  return isDemSurface(doc.topo) ? JSON.stringify(out) : JSON.stringify(out, null, 2);
 }
 
 export function importJSON(text) {
-  const doc = JSON.parse(text);
+  const doc = reviveDoc(JSON.parse(text));
   if (!doc.layers || !Array.isArray(doc.layers)) throw new Error('Not a block diagram file');
   return migrate({ ...defaultDocument(), ...doc });
 }
