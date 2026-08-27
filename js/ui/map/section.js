@@ -611,7 +611,11 @@ export class MapSection {
     this.rebuild();
   }
 
-  downloadProgress() { return this._download?.progress || null; }
+  /** Live download progress, tagged with which area it belongs to. */
+  downloadProgress() {
+    if (!this._download) return null;
+    return { ...this._download.progress, areaId: this._download.area.id };
+  }
 
   async startDownload() {
     const area = this.draftArea();
@@ -631,7 +635,7 @@ export class MapSection {
         signal: ctrl.signal,
         onProgress: (p) => {
           this._download.progress = p;
-          if (this.activeTab === 'areas') this._refreshAreaProgress(p);
+          if (this.activeTab === 'areas') this._refreshPanel();
         },
       });
     } catch (err) {
@@ -669,16 +673,6 @@ export class MapSection {
     }
   }
 
-  _refreshAreaProgress(p) {
-    const bar = this.host.sectionPanel?.querySelector?.('.progress-bar span');
-    const text = this.host.sectionPanel?.querySelector?.('.progress-text');
-    if (bar && p.total) bar.style.width = `${Math.round((p.done / p.total) * 100)}%`;
-    if (text) {
-      text.textContent = `${p.done} of ${p.total} tiles · ${Math.round(p.bytes / 1024 / 1024)} MB`
-        + (p.failed ? ` · ${p.failed} failed` : '');
-    }
-  }
-
   cancelDownload() {
     this._download?.ctrl.abort();
   }
@@ -705,7 +699,13 @@ export class MapSection {
     this._download = { area, progress: { done: 0, total: 0, bytes: 0, failed: 0 }, ctrl };
     this.rebuild();
     try {
-      await downloadArea(area, { signal: ctrl.signal, onProgress: (p) => { this._download.progress = p; } });
+      await downloadArea(area, {
+        signal: ctrl.signal,
+        onProgress: (p) => {
+          this._download.progress = p;
+          if (this.activeTab === 'areas') this._refreshPanel();
+        },
+      });
     } catch { /* reported by the check that follows */ }
     this._download = null;
     await this.verify(id);

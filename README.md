@@ -287,8 +287,21 @@ basemap worth having forbids the bulk pre-caching this feature exists to do.
 | Layer | Source | Best zoom |
 |---|---|---|
 | **Topo** | USGS 7.5-minute quad | 16 (~1.8 m/px) |
-| **Imagery** | USGS orthoimagery with contours and names over it | 16 |
+| **Aerial** | USGS orthoimagery | 16 |
+| **Aerial + topo** | the same imagery with contours and names over it | 16 |
 | **Elevation** | Terrain Tiles on AWS (USGS 3DEP) | 15 (~10 m) |
+
+**Aerial + topo is the prettier layer and the gappier one.** USGS has not
+cached the combined layer everywhere it has cached the two it is made from:
+around the Poleta folds in the White-Inyo Mountains a whole column of it is
+absent, while plain Aerial and Topo both cover the same ground completely. If
+an area reports tiles that are not published, try Aerial.
+
+A tile the server does not have is recorded as such rather than counted as a
+failed download — otherwise an area containing one could never be marked
+complete and Repair would retry it forever. The map fills those squares from
+the next zoom out, so a hole in the source shows as a softer patch rather than
+as nothing at all.
 
 The imagery stops at zoom 16 and there is no public-domain way past it. Past
 that the photograph goes soft — but elevation is numbers rather than a picture,

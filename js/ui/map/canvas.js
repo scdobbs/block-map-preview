@@ -65,7 +65,7 @@ export class MapCanvas {
     this._dem = new Map();      // "z/x/y|scale|interval" -> { canvas }
     this._demPending = new Set();
     this._frame = null;
-    this._coverage = { wanted: 0, drawn: 0, missing: 0, fromCache: 0 };
+    this._coverage = { wanted: 0, drawn: 0, missing: 0, fromCache: 0, absent: 0 };
 
     this._pointers = new Map();
     this._gesture = null;
@@ -217,7 +217,7 @@ export class MapCanvas {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    const cov = { wanted: 0, drawn: 0, missing: 0, fromCache: 0 };
+    const cov = { wanted: 0, drawn: 0, missing: 0, fromCache: 0, absent: 0 };
     this._drawBase(ctx, cov);
     if (this.showHillshade || this.showContours) this._drawTerrain(ctx);
     this._drawAreas(ctx);
@@ -267,9 +267,10 @@ export class MapCanvas {
         const sy = (y / r.n - this.center.y) * w + this.height / 2;
         cov.wanted++;
         const how = this._blit(ctx, sourceId, z, tx, y, sx, sy, size);
-        if (how === 'ok' || how === 'parent') cov.drawn++;
+        if (how === 'ok' || how === 'parent' || how === 'absent') cov.drawn++;
         else cov.missing++;
         if (how === 'ok') cov.fromCache++;
+        if (how === 'absent') cov.absent++;
       }
     }
   }
@@ -288,6 +289,9 @@ export class MapCanvas {
       return 'ok';
     }
     this._want(sourceId, z, x, y);
+    // A tile the source does not publish is drawn from its parent and is not
+    // reported as a gap in the download — nothing is going to fill it in.
+    const absent = t && t.from === 'absent';
 
     const min = source(sourceId).minZoom;
     for (let up = 1; up <= 5 && z - up >= min; up++) {
@@ -298,7 +302,7 @@ export class MapCanvas {
       const sub = TILE / f;
       ctx.drawImage(p.bitmap, (x - px * f) * sub, (y - py * f) * sub, sub, sub,
         sx, sy, size + 0.5, size + 0.5);
-      return 'parent';
+      return absent ? 'absent' : 'parent';
     }
 
     // Nothing to show. A flat dark square rather than a guess, with a hatch so
@@ -315,7 +319,7 @@ export class MapCanvas {
     ctx.save(); ctx.beginPath(); ctx.rect(sx, sy, size, size); ctx.clip();
     ctx.stroke(); ctx.restore();
     ctx.restore();
-    return t ? 'missing' : 'loading';
+    return absent ? 'absent' : t ? 'missing' : 'loading';
   }
 
   _want(sourceId, z, x, y) {

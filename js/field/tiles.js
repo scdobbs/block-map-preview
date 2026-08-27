@@ -49,11 +49,26 @@ export const SOURCES = {
     url: (z, x, y) =>
       `https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/${z}/${y}/${x}`,
   },
+  aerial: {
+    id: 'aerial',
+    label: 'Aerial',
+    kind: 'base',
+    detail: 'Plain aerial photography. Wider coverage than the combined layer.',
+    maxZoom: 16,
+    minZoom: 4,
+    bytes: 34000,
+    attribution: 'USGS The National Map: Orthoimagery',
+    url: (z, x, y) =>
+      `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/${z}/${y}/${x}`,
+  },
   imagery: {
     id: 'imagery',
-    label: 'Imagery',
+    label: 'Aerial + topo',
     kind: 'base',
-    detail: 'Aerial photography with contours and names drawn over it.',
+    // Prettier than plain aerial and gappier: USGS has not cached this
+    // combined layer everywhere it has cached the two it is made of. The
+    // White-Inyo Mountains have a column of it missing outright.
+    detail: 'Aerial photography with contours and names over it. Patchier coverage than plain Aerial.',
     maxZoom: 16,
     minZoom: 4,
     bytes: 37000,
@@ -78,7 +93,7 @@ export const SOURCES = {
   },
 };
 
-export const BASE_SOURCES = ['topo', 'imagery'];
+export const BASE_SOURCES = ['topo', 'aerial', 'imagery'];
 
 export function source(id) { return SOURCES[id] || SOURCES.topo; }
 
@@ -91,6 +106,28 @@ export function clampZoom(sourceId, z) {
 // ---------------------------------------------------------------------------
 // The cache
 // ---------------------------------------------------------------------------
+
+// A tile the server says does not exist is not a tile we failed to fetch.
+// USGS caches these services region by region and there are real holes —
+// whole columns of the combined imagery layer are simply absent in parts of
+// California. Without somewhere to record that, an area containing one can
+// never be marked complete, and Repair retries it forever.
+//
+// So an absent tile gets a tombstone in the cache: a real entry, marked, with
+// no body. Verification counts it as accounted for, the map draws the parent
+// tile over the hole, and Repair stops asking.
+const ABSENT = 'x-tile-absent';
+
+function absentTombstone() {
+  return new Response(new Blob([]), {
+    status: 200,
+    headers: { [ABSENT]: '1', 'Content-Type': 'application/octet-stream' },
+  });
+}
+
+export function isAbsent(res) {
+  return !!res && res.headers.get(ABSENT) === '1';
+}
 
 let cachePromise = null;
 function openCache() {
@@ -115,10 +152,14 @@ export async function readTile(sourceId, z, x, y, { allowNetwork = true } = {}) 
   const url = urlFor(sourceId, z, x, y);
   const cache = await openCache();
   const hit = await cache.match(url);
-  if (hit) return { response: hit, from: 'cache' };
+  if (hit) return { response: hit, from: isAbsent(hit) ? 'absent' : 'cache' };
   if (!allowNetwork) return { response: null, from: 'missing' };
   try {
     const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+    if (res.status === 404) {
+      await cache.put(url, absentTombstone());
+      return { response: null, from: 'absent' };
+    }
     if (!res.ok) return { response: null, from: 'error', status: res.status };
     // Browsing around online quietly builds the cache, which is how a student
     // who forgot to download an area sometimes still has it.
@@ -135,9 +176,9 @@ export async function readTileBitmap(sourceId, z, x, y, opts) {
   if (!response) return { bitmap: null, from };
   try {
     const blob = await response.blob();
-    // A zero-length body is a tile that was cached from a broken response.
-    // Treat it as absent so the repair pass can pick it up.
-    if (!blob.size) return { bitmap: null, from: 'missing' };
+    // Either a tombstone, or a tile cached from a broken response. Neither
+    // can be drawn; the caller falls back to the parent tile.
+    if (!blob.size) return { bitmap: null, from: from === 'absent' ? 'absent' : 'missing' };
     return { bitmap: await createImageBitmap(blob), from };
   } catch {
     return { bitmap: null, from: 'error' };
@@ -211,6 +252,7 @@ export async function downloadArea(area, { onProgress, signal } = {}) {
   let fetched = 0;
   let skipped = 0;
   let failed = 0;
+  let absent = 0;
   let bytes = 0;
   let cursor = 0;
 
@@ -224,7 +266,12 @@ export async function downloadArea(area, { onProgress, signal } = {}) {
           skipped++;
         } else {
           const res = await fetch(url, { mode: 'cors', credentials: 'omit', signal });
-          if (res.ok) {
+          if (res.status === 404) {
+            // The source has no tile here and never will. Record that, so the
+            // area can still be complete and Repair stops asking.
+            await cache.put(url, absentTombstone());
+            absent++;
+          } else if (res.ok) {
             const blob = await res.blob();
             bytes += blob.size;
             await cache.put(url, new Response(blob, {
@@ -250,14 +297,14 @@ export async function downloadArea(area, { onProgress, signal } = {}) {
       }
       done++;
       if (onProgress && (done % 5 === 0 || done === total)) {
-        onProgress({ done, total, fetched, skipped, failed, bytes });
+        onProgress({ done, total, fetched, skipped, failed, absent, bytes });
       }
     }
   };
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, step));
-  onProgress?.({ done, total, fetched, skipped, failed, bytes });
-  return { total, fetched, skipped, failed, bytes, aborted: !!signal?.aborted };
+  onProgress?.({ done, total, fetched, skipped, failed, absent, bytes });
+  return { total, fetched, skipped, failed, absent, bytes, aborted: !!signal?.aborted };
 }
 
 /**
@@ -271,17 +318,23 @@ export async function verifyArea(area, { onProgress } = {}) {
   const cache = await openCache();
   const wanted = areaTiles(area);
   let present = 0;
+  let absent = 0;
   const missing = [];
   for (let i = 0; i < wanted.length; i++) {
     const t = wanted[i];
-    if (await cache.match(urlFor(t.sourceId, t.z, t.x, t.y))) present++;
-    else missing.push(t);
+    const hit = await cache.match(urlFor(t.sourceId, t.z, t.x, t.y));
+    if (!hit) missing.push(t);
+    else if (isAbsent(hit)) absent++;
+    else present++;
     if (onProgress && i % 50 === 0) onProgress({ done: i, total: wanted.length });
   }
   onProgress?.({ done: wanted.length, total: wanted.length });
   return {
     total: wanted.length,
     present,
+    // Tiles the source does not have. Downloading again cannot produce them,
+    // so an area is complete once nothing is merely missing.
+    absent,
     missing: missing.length,
     complete: missing.length === 0,
     at: Date.now(),

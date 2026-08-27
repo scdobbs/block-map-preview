@@ -90,6 +90,24 @@ function statLine(label, value, cls = '') {
   return row;
 }
 
+/** A download in flight. Returned with handles so it can be updated in place. */
+function progressBlock() {
+  const fill = el('span');
+  const bar = el('div', { class: 'progress-bar' }, [fill]);
+  const text = el('div', { class: 'progress-text' });
+  const node = el('div', { class: 'progress' }, [bar, text]);
+  node.set = (p) => {
+    fill.style.width = p.total ? `${Math.round((p.done / p.total) * 100)}%` : '0%';
+    text.textContent = [
+      `${p.done} of ${p.total} tiles`,
+      formatBytes(p.bytes || 0),
+      p.absent ? `${p.absent} not published` : null,
+      p.failed ? `${p.failed} failed` : null,
+    ].filter(Boolean).join('  ·  ');
+  };
+  return node;
+}
+
 function head(title, sub) {
   return el('div', { class: 'section-head' }, [
     el('h2', { text: title }),
@@ -529,6 +547,8 @@ export function areasPanel(ctx) {
 
   const online = navigator.onLine !== false;
   let sizeStat = null, tilesStat = null, bytesStat = null;
+  let newProgress = null;
+  const areaProgress = new Map();
   if (!online) {
     node.appendChild(el('div', { class: 'notice warn' }, [
       el('p', { text: 'No connection, so nothing new can be downloaded.' }),
@@ -586,15 +606,10 @@ export function areasPanel(ctx) {
     node.appendChild(layerChoice);
 
     const prog = ctx.downloadProgress();
-    if (prog) {
-      const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
-      node.appendChild(el('div', { class: 'progress' }, [
-        el('div', { class: 'progress-bar' }, [
-          el('span', { style: { width: `${pct}%` } }),
-        ]),
-        el('div', { class: 'progress-text',
-          text: `${prog.done} of ${prog.total} tiles · ${formatBytes(prog.bytes)}${prog.failed ? ` · ${prog.failed} failed` : ''}` }),
-      ]));
+    if (prog && prog.areaId === area.id) {
+      newProgress = progressBlock();
+      newProgress.set(prog);
+      node.appendChild(newProgress);
       node.appendChild(el('button', {
         class: 'btn wide danger', type: 'button', text: 'Stop',
         onclick: () => ctx.cancelDownload(),
@@ -628,8 +643,12 @@ export function areasPanel(ctx) {
     let state, klass;
     if (busy) { state = 'checking…'; klass = 'dim'; }
     else if (!check) { state = 'not checked'; klass = 'warn'; }
-    else if (check.complete) { state = 'complete'; klass = 'good'; }
-    else { state = `${check.missing} tiles missing`; klass = 'bad'; }
+    else if (check.complete) {
+      // Complete means nothing is outstanding, not that every tile exists.
+      // Some of them the USGS has never published.
+      state = check.absent ? `complete · ${check.absent} not published` : 'complete';
+      klass = 'good';
+    } else { state = `${check.missing} tiles missing`; klass = 'bad'; }
 
     const card = el('div', { class: 'card area-card' }, [
       el('div', { class: 'card-main static' }, [
@@ -651,6 +670,21 @@ export function areasPanel(ctx) {
         el('button', { class: 'btn small danger', type: 'button', text: 'Delete', onclick: () => ctx.deleteArea(a.id) }),
       ]),
     ]);
+
+    const prog = ctx.downloadProgress();
+    if (prog && prog.areaId === a.id) {
+      const block = progressBlock();
+      block.set(prog);
+      block.style.padding = '0 12px 12px';
+      areaProgress.set(a.id, block);
+      card.appendChild(block);
+    }
+
+    if (check && check.absent) {
+      card.appendChild(el('div', { class: 'ctl-hint card-note',
+        text: `${check.absent} tiles are not published by the USGS for this layer here — the map fills those in from the next zoom out. Downloading again cannot produce them. Plain "Aerial" often covers ground the combined layer does not.` }));
+    }
+
     node.appendChild(card);
   }
 
@@ -665,6 +699,11 @@ export function areasPanel(ctx) {
   // restates itself rather than the panel being rebuilt under the finger —
   // which would take the half-typed area name with it.
   node.refreshReadings = () => {
+    const p = ctx.downloadProgress();
+    if (p) {
+      if (newProgress && p.areaId === ctx.draftArea()?.id) newProgress.set(p);
+      areaProgress.get(p.areaId)?.set(p);
+    }
     if (!sizeStat) return;
     const box = ctx.selection();
     if (!box) return;

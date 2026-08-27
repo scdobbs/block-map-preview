@@ -1187,3 +1187,5 @@ html, body {
   font-size: 11.5px; color: var(--ink-faint); margin-top: 3px;
   font-variant-numeric: tabular-nums;
 }
+
+.card-note { padding: 0 12px 12px; margin: 0; }
