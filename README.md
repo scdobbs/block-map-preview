@@ -531,11 +531,17 @@ fragment uniform budget of older mobile GPUs.
   strike is rotated by the same amount without ever looking wrong. It is stored
   with each reading, so a wrong setting can be corrected afterwards in a
   spreadsheet without retaking anything.
-- iOS reports a heading already corrected to true north, so on an iPhone the
-  declination setting records what the phone did rather than changing anything;
-  Android reports magnetic and the correction is applied here. Some browsers
-  give tilt with no compass reference at all, and there the dip is real and the
-  strike is withheld rather than invented.
+- **Every phone browser reports a magnetic bearing, iOS included.** Safari
+  exposes `webkitCompassHeading`, which reads as though it must already be
+  true north; it is not. WebKit fills it from CoreLocation's `magneticHeading`
+  and never from `trueHeading`, because `trueHeading` is only valid while
+  location updates are running and a web page cannot guarantee that. So the
+  declination correction is applied here, on every platform, and the setting is
+  the only thing that makes a strike true. Trusting the property name instead
+  puts every reading out by the local declination while the app looks like it
+  is working.
+- Some browsers give tilt with no compass reference at all, and there the dip
+  is real and the strike is withheld rather than invented.
 - Reconstructing an absolute frame from `webkitCompassHeading` degrades as the
   phone gets further from level, so a reading on a very steep bed is the least
   trustworthy one the compass gives.

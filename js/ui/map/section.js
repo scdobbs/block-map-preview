@@ -385,7 +385,7 @@ export class MapSection {
       strike, dip, scatter,
       source: src,
       certainty: bySight ? 'estimated' : d.certainty,
-      declination: c.trueNorth ? 0 : (doc.settings.declination || 0),
+      declination: doc.settings.declination || 0,
       unitId: d.unitId,
       unitName: d.unitName,
       rockId: d.rockId,

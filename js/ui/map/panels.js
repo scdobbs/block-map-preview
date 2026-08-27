@@ -378,7 +378,7 @@ function buildCompass(ctx, draft, wrap) {
     const bits = [];
     if (s.needsCalibration) bits.push('The magnetometer wants calibrating — wave the phone in a figure of eight.');
     if (!s.absolute) bits.push('This browser is not giving a compass heading, so only the dip is real.');
-    if (!s.trueNorth && !ctx.declinationSet()) {
+    if (!ctx.declinationSet()) {
       bits.push('Declination is not set, so every strike is a magnetic bearing. Set it on the Setup tab.');
     }
     if (!s.still) bits.push('Still moving. Rest the phone on the rock and wait for the bar to fill.');
@@ -743,7 +743,8 @@ export function setupPanel(ctx) {
 
   node.appendChild(el('div', { class: 'about' }, [
     el('p', { text: 'A phone’s magnetometer finds magnetic north. A map is drawn to true north. The gap between them is the declination, and it is up to 20° across the United States — enough to move a strike into the wrong quadrant without ever looking wrong.' }),
-    el('p', { text: 'iPhones correct for it before reporting a heading, so on an iPhone this setting is a record of what the phone already did rather than a correction the app applies. On Android it is applied here. Either way the number is stored with every reading, so a wrong one can be undone later without retaking anything.' }),
+    el('p', { text: 'Every phone browser reports a magnetic bearing — iPhones included, despite offering a property that sounds like it means true north. So this correction is applied here, on every platform, and nothing else applies it. If your readings sit a consistent ten or fifteen degrees off a Brunton, this setting is the first thing to check.' }),
+    el('p', { text: 'The value is stored with every reading, so a wrong one can be corrected later in a spreadsheet without retaking anything.' }),
   ]));
 
   // --- accuracy ------------------------------------------------------------
@@ -845,11 +846,8 @@ export function setupPanel(ctx) {
 
   node.refreshReadings = () => {
     const src = doc.settings.declinationSource;
-    const iosCorrects = ctx.clinoState().trueNorth;
     if (!doc.settings.declinationSet) {
       declState.textContent = 'Not set yet. Until it is, a strike from the phone is a magnetic bearing.';
-    } else if (iosCorrects) {
-      declState.textContent = `${formatDeclination(doc.settings.declination)} — this phone reports true north itself, so nothing is being applied.`;
     } else {
       declState.textContent = `${formatDeclination(doc.settings.declination)} applied to every compass reading`
         + (src === 'noaa' ? ', from NOAA.' : '.');

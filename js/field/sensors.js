@@ -81,8 +81,13 @@ const MIN_SAMPLES = 8;
  *              browsers deliver tilt without a compass, in which case the dip
  *              is real and the strike is meaningless — so the strike is
  *              withheld rather than invented.
- *   trueNorth  whether the heading already accounts for declination (iOS) or
- *              whether this code had to apply it.
+ *   absolute is not the same as correct. No browser on any platform hands
+ *   back a bearing that is already turned to true north — iOS included, which
+ *   is a trap, because it offers a property called `webkitCompassHeading` that
+ *   reads as though it must be. It is not: WebKit fills it from CoreLocation's
+ *   `magneticHeading`, never `trueHeading`. So the declination correction is
+ *   always this code's job, on every platform, and the user's setting is the
+ *   only thing that makes a strike true.
  */
 export class Clinometer {
   constructor({ getDeclination = () => 0 } = {}) {
@@ -128,22 +133,29 @@ export class Clinometer {
   _onEvent(e) {
     if (e.alpha == null && e.webkitCompassHeading == null) return;
 
-    // iOS gives a heading already turned to true north and an alpha that is
-    // relative to wherever the phone happened to be switched on, so the
-    // heading has to be substituted back in. Azimuth runs clockwise from
-    // north and alpha runs the other way, hence the subtraction.
+    // iOS reports an absolute heading but an `alpha` measured from wherever
+    // the phone happened to be switched on, so the heading is substituted back
+    // in. Azimuth runs clockwise from north and alpha runs the other way,
+    // hence the subtraction.
     const iosHeading = Number.isFinite(e.webkitCompassHeading) ? e.webkitCompassHeading : null;
     const alpha = iosHeading != null ? 360 - iosHeading : (e.alpha || 0);
     const absolute = iosHeading != null || e.absolute === true;
-    const trueNorth = iosHeading != null;
 
     let n = deviceNormal(alpha, e.beta || 0, e.gamma || 0);
-    // Android reports against magnetic north, so the correction is ours to
-    // make. iOS has already made it.
-    if (!trueNorth) n = applyDeclination(n, this.getDeclination());
+    // Every platform reports against MAGNETIC north, so the correction is
+    // always ours to make.
+    //
+    // The name `webkitCompassHeading` invites the opposite assumption, and
+    // taking it on trust puts every strike out by the local declination —
+    // fifteen degrees in the western United States — while the app looks
+    // like it is working. WebKit fills that property from CoreLocation's
+    // `magneticHeading` and never from `trueHeading`, because `trueHeading`
+    // is only valid while location updates are running and a web page has no
+    // way to guarantee that. See WebCoreMotionManager.mm.
+    n = applyDeclination(n, this.getDeclination());
 
     const now = performance.now();
-    this.samples.push({ t: now, n, absolute, trueNorth,
+    this.samples.push({ t: now, n, absolute,
       accuracy: Number.isFinite(e.webkitCompassAccuracy) ? e.webkitCompassAccuracy : null });
     while (this.samples.length && now - this.samples[0].t > SAMPLE_MS) this.samples.shift();
 
@@ -171,7 +183,6 @@ export class Clinometer {
     for (const k of s) scatter = Math.max(scatter, angleBetween(k.n, mean));
 
     const absolute = s.every((k) => k.absolute);
-    const trueNorth = s.every((k) => k.trueNorth);
     const acc = s[s.length - 1].accuracy;
     const { strike, dip } = normalToStrikeDip(mean);
 
@@ -187,7 +198,6 @@ export class Clinometer {
       scatter,
       still: scatter <= STILL_DEG,
       absolute,
-      trueNorth,
       // iOS reports this as a plus-or-minus in degrees, and negative means
       // the magnetometer is not calibrated at all.
       compassAccuracy: acc,
@@ -207,7 +217,7 @@ function emptyState() {
     ready: false, settling: false, samples: 0,
     normal: null, strike: null, dip: null,
     scatter: null, still: false,
-    absolute: false, trueNorth: false,
+    absolute: false,
     compassAccuracy: null, needsCalibration: false,
     error: null,
   };
