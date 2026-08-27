@@ -209,6 +209,12 @@ a Brunton, east positive.
 
 ## On the outcrop
 
+The map **follows you until you touch it**. The first fix centres on you and
+the crosshair button lights up; the moment you drag the map it lets go, so you
+can look somewhere you are not standing — which is most of what the Areas tab
+is for. The crosshair brings you back and starts following again. Panning is
+not an edit and does not land on the undo stack.
+
 **Measure** is the working screen. It shows the fix, its accuracy radius, how
 old it is, and the ground elevation read from the cached terrain. A station
 cannot be recorded on a fix worse than the limit you set, and when the button

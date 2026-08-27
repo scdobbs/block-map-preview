@@ -747,7 +747,7 @@ export function setupPanel(ctx) {
   node.appendChild(toggleRow({
     label: 'Follow my position',
     value: s.follow,
-    hint: 'Keep the map centered on you as you walk.',
+    hint: 'Keep the map centered on you as you walk. Dragging the map turns this off; the crosshair button turns it back on.',
     onChange: (v) => ctx.setSetting({ follow: v }),
   }));
 

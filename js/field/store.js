@@ -116,14 +116,25 @@ export class FieldStore {
 
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
 
+  /**
+   * Apply a mutation.
+   *
+   *   coalesce    key that merges consecutive edits into one undo step
+   *   structural  the change alters what controls exist, so rebuild the panel
+   *   silent      do not notify listeners
+   *   transient   not an edit at all — where the map is looking, whether it is
+   *               following you. These live in the document so they survive a
+   *               reload, but they are not work, and undo should step back
+   *               over a deleted station rather than over a pan.
+   */
   edit(mutator, opts = {}) {
-    const { coalesce = null, structural = false, silent = false } = opts;
+    const { coalesce = null, structural = false, silent = false, transient = false } = opts;
     const now = performance.now();
     const sameRun = coalesce != null
       && coalesce === this._lastKey
       && now - this._lastAt < COALESCE_MS;
 
-    if (!sameRun) {
+    if (!sameRun && !transient) {
       this.undoStack.push(snapshot(this.doc));
       if (this.undoStack.length > MAX_UNDO) this.undoStack.shift();
       this.redoStack.length = 0;

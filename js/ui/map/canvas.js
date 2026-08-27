@@ -34,6 +34,10 @@ export class MapCanvas {
     this.ctx = canvas.getContext('2d');
     this.onTap = opts.onTap || (() => {});
     this.onMove = opts.onMove || (() => {});
+    // Fired only for a hand on the map, never for a programmatic move. The
+    // difference matters: following your position moves the map constantly,
+    // and something has to be able to tell that apart from being dragged.
+    this.onUserMove = opts.onUserMove || (() => {});
     this.onCoverage = opts.onCoverage || (() => {});
 
     this.center = { x: lonToWorld(-109.549), y: latToWorld(38.573) };
@@ -461,6 +465,7 @@ export class MapCanvas {
         const g = this._gesture;
         if (g.dist > 0 && now.dist > 0) {
           this.zoomAround(g.zoom + Math.log2(now.dist / g.dist), now.mx, now.my);
+          this.onUserMove();
         }
         return;
       }
@@ -468,6 +473,7 @@ export class MapCanvas {
 
       if (this._gesture?.kind === 'pan') {
         this.panBy(dx, dy);
+        this.onUserMove();
       } else if (this._gesture?.kind?.startsWith('corner:')) {
         this._dragCorner(this._gesture.kind.slice(7), e);
       }
@@ -498,6 +504,7 @@ export class MapCanvas {
       e.preventDefault();
       const local = this._local(e);
       this.zoomAround(this.zoom - e.deltaY * 0.0022, local.x, local.y);
+      this.onUserMove();
     }, { passive: false });
   }
 

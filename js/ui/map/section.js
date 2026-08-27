@@ -110,6 +110,7 @@ export class MapSection {
     this.map = new MapCanvas(this.canvas, {
       onTap: (ll, screen) => this.onTap(ll, screen),
       onMove: () => this._onMapMove(),
+      onUserMove: () => this.breakFollow(),
       onCoverage: (c) => this._onCoverage(c),
     });
   }
@@ -188,6 +189,7 @@ export class MapSection {
     if (layerChanged) this.map.invalidate();
     this.map.invalidate();
     this._syncChrome();
+    this._syncFollowButton();
   }
 
   _syncChrome() {
@@ -209,7 +211,7 @@ export class MapSection {
       if (!this.ready) return;
       this.store.edit((d) => {
         d.view = { lon: this.map.lon, lat: this.map.lat, zoom: this.map.zoom };
-      }, { coalesce: 'map-view', silent: true });
+      }, { coalesce: 'map-view', silent: true, transient: true });
     }, 700);
     if (this.map.selection && this.activeTab === 'areas') this._refreshPanel();
   }
@@ -288,10 +290,40 @@ export class MapSection {
     );
   }
 
+  /**
+   * Stop following, because a hand is on the map.
+   *
+   * A map that pulls itself back every second is unusable for the one job the
+   * Areas tab needs it for — framing somewhere you are not standing. So the
+   * first drag wins and the button below gets you back.
+   *
+   * Written silently: panning is not an edit, and it should neither land on
+   * the undo stack nor rebuild the panel under a moving finger.
+   */
+  breakFollow() {
+    if (this.store.doc.settings.follow !== true) return;
+    this.store.edit((d) => { d.settings.follow = false; }, { silent: true, transient: true });
+    this._syncFollowButton();
+    // The Setup tab shows this as a switch, and a switch that disagrees with
+    // the map is worse than no switch.
+    if (this.activeTab === 'setup') this.rebuild();
+  }
+
+  /** Go to the current fix, and resume following it. */
   locate() {
     const fix = this.geo.state.fix;
     if (!fix) { this.geo.start(); return; }
+    this.store.edit((d) => { d.settings.follow = true; }, { silent: true, transient: true });
     this.map.setView(fix.lon, fix.lat, Math.max(this.map.zoom, 16));
+    this._syncFollowButton();
+    if (this.activeTab === 'setup') this.rebuild();
+  }
+
+  _syncFollowButton() {
+    const on = this.store.doc.settings.follow === true;
+    this.locateBtn.classList.toggle('on', on);
+    this.locateBtn.title = on ? 'Following you — drag the map to stop' : 'Centre on me';
+    this.locateBtn.setAttribute('aria-label', this.locateBtn.title);
   }
 
   cycleLayer() {
