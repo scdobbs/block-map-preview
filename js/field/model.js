@@ -158,6 +158,31 @@ export function lineCertainty(id) {
   return LINE_CERTAINTY_BY_ID[id] || LINE_CERTAINTY_BY_ID.certain;
 }
 
+/**
+ * Which way the rock moved on a fault.
+ *
+ * A trace on a map cannot answer this and never will: the trace is where the
+ * rock broke, and the sense is what happened afterwards. It has to be observed
+ * — older rock carried over younger, a marker bed offset one way rather than
+ * the other, slickenlines with steps on them — and so it is asked for rather
+ * than inferred, and left unanswered rather than guessed.
+ *
+ * The ids are the ones the block engine already stores on a fault event, so
+ * what a student picks here is passed through rather than translated.
+ */
+export const FAULT_SENSES = [
+  { id: '', label: 'Not sure', hint: 'Say so rather than guess. The fit will search every sense and tell you it could not decide.' },
+  { id: 'reverse', label: 'Thrust / reverse', hint: 'Hanging wall up. Older rock ends up on top of younger.' },
+  { id: 'normal', label: 'Normal', hint: 'Hanging wall down. Section is cut out rather than repeated.' },
+  { id: 'dextral', label: 'Dextral', hint: 'Standing on one side, the far block moved to your right.' },
+  { id: 'sinistral', label: 'Sinistral', hint: 'Standing on one side, the far block moved to your left.' },
+];
+
+export const FAULT_SENSE_BY_ID = Object.fromEntries(FAULT_SENSES.map((s) => [s.id, s]));
+export function faultSenseLabel(id) {
+  return (FAULT_SENSE_BY_ID[id] || FAULT_SENSES[0]).label;
+}
+
 let counter = 0;
 export function newFieldId(prefix = 'st') {
   counter += 1;
@@ -307,10 +332,75 @@ export function makeLine(over = {}) {
     // where the beds are the right way up.
     unitUpper: '',
     unitLower: '',
+    // Faults only, and null until somebody measures them.
+    //
+    // A fault trace is the intersection of the fault plane with the ground, so
+    // where the ground has relief the trace gives the dip for free. Where it
+    // does not — a straight trace across a flat bench — every plane through
+    // that line fits it equally well, and the fit is reduced to calling the
+    // fault vertical and saying so. That is the one gap only the mapper can
+    // close, either by measuring the plane at an exposure or by reading the
+    // dip off the way the trace wanders across the contours.
+    //
+    // `dipDir` is the azimuth the plane dips toward rather than a free
+    // bearing, because the trace already fixes the strike: the only thing left
+    // to say is which of the two sides it leans to. Null with a dip of 90 is a
+    // vertical fault; null with a null dip is "not measured".
+    dip: null,
+    dipDir: null,
+    // One of FAULT_SENSES. '' is not sure, which is a real answer.
+    sense: '',
     note: '',
     at: new Date().toISOString(),
     ...over,
   };
+}
+
+/**
+ * The overall bearing of a drawn line, 0-180, as a strike.
+ *
+ * Taken as the principal direction of its points rather than the bearing from
+ * end to end, so a trace that wanders — which every real one does — still
+ * reports the direction it actually runs in instead of the chord across its
+ * bends. Longitude is scaled by cos(lat) first, or a line in the far north
+ * would come out rotated toward east-west.
+ */
+export function lineTrend(line) {
+  const p = line.points || [];
+  if (p.length < 2) return null;
+  let lat0 = 0;
+  for (const q of p) lat0 += q[1];
+  lat0 /= p.length;
+  const k = Math.cos(lat0 * Math.PI / 180);
+  let cx = 0, cy = 0;
+  for (const q of p) { cx += q[0] * k; cy += q[1]; }
+  cx /= p.length; cy /= p.length;
+  // Second moments of the mean-centred points; the principal axis is the
+  // eigenvector of the larger eigenvalue, which for a 2x2 is one arctangent.
+  let sxx = 0, syy = 0, sxy = 0;
+  for (const q of p) {
+    const dx = q[0] * k - cx, dy = q[1] - cy;
+    sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+  }
+  if (sxx + syy < 1e-18) return null;
+  // atan2 in map terms: x is east, y is north, and a bearing is measured from
+  // north clockwise, so the arguments go (east, north).
+  const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const az = Math.atan2(Math.cos(theta), Math.sin(theta)) * 180 / Math.PI;
+  return ((az % 180) + 180) % 180;
+}
+
+/**
+ * The two azimuths a fault of this trace could dip toward, as {az, label}.
+ *
+ * Offered as a pair rather than a free compass because that is the actual
+ * choice in the field: the trace fixes the strike, and the plane leans to one
+ * side of it or the other.
+ */
+export function dipChoices(line) {
+  const t = lineTrend(line);
+  if (t == null) return [];
+  return [((t + 90) % 360 + 360) % 360, ((t - 90) % 360 + 360) % 360];
 }
 
 /**

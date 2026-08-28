@@ -73,7 +73,8 @@ export function blockPanel(ctx) {
     statLine('Bedding', String(survey.bedding), survey.bedding >= 3 ? '' : 'warn'),
     statLine('Contacts', String(survey.lines.contact)),
     statLine('Faults', String(survey.lines.fault)),
-  ]));
+    survey.faultObs ? statLine('On the fault', String(survey.faultObs)) : null,
+  ].filter(Boolean)));
 
   // What is missing, said before the button rather than after it.
   const blockers = [];
@@ -86,6 +87,14 @@ export function blockPanel(ctx) {
   }
   if (survey.lines.fault && survey.lines.unnamed) {
     hints.push(`${plural(survey.lines.unnamed, 'contact')} has no units named on either side. A fault's offset is measured by finding the same contact again across it, so an unnamed contact cannot help — naming the two units is what makes the throw solvable.`);
+  }
+  // Said before the button rather than as an apology afterwards: this is the
+  // one gap the student can still go and close, and it is three taps.
+  if (survey.lines.undipped) {
+    hints.push(`${plural(survey.lines.undipped, 'fault')} has no dip on it. A trace gives the dip only where the ground has relief under it; across flat ground every plane through that line fits, and the fit has no choice but to call the fault vertical. Set its dip, which way it moved and the unit either side on the Lines tab — that is what turns a drawn fault into a solved one.`);
+  }
+  if (survey.faultObs) {
+    hints.push(`${plural(survey.faultObs, 'reading')} taken on a fault surface will be used for the fault rather than for the beds: a measured plane sets its dip outright, and slickenlines give the rake — the direction of slip, which nothing else in a map can supply.`);
   }
   if (!survey.lines.contact) {
     hints.push('No contacts in the box. The readings alone can still give the shape of the structure, but the contacts are what pin its size and give the unit thicknesses.');
@@ -190,7 +199,7 @@ function reportBlock(ctx, r) {
     const parts = [];
     if (dropped.outside) parts.push(`${dropped.outside} outside the box`);
     if (dropped.noAttitude) parts.push(`${dropped.noAttitude} with no reading yet`);
-    if (dropped.notBedding) parts.push(`${dropped.notBedding} not bedding`);
+    if (dropped.notBedding) parts.push(`${dropped.notBedding} neither bedding nor on a fault`);
     if (dropped.linear) parts.push(`${dropped.linear} linear`);
     wrap.appendChild(el('div', { class: 'ctl-hint standalone',
       text: `Stations not used: ${parts.join(', ')}.` }));

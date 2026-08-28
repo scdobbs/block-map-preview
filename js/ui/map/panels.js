@@ -9,11 +9,10 @@
 
 import { el, clear, numberRow, selectRow, toggleRow, compassDial, protractor } from '../widgets.js';
 import { swatchEl } from '../swatch.js';
-import { quadrantBearing } from '../../geo/math.js';
 import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, CERTAINTIES, ROCKS, rockOf,
   unitColor, knownUnitNames, makeUnit, hasAttitude, isLinearFeature,
   formatAttitude, LINE_KINDS, LINE_CERTAINTY, lineKind, lineCertainty,
-  lineLength } from '../../field/model.js';
+  lineLength, FAULT_SENSES, dipChoices } from '../../field/model.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
 import { SOURCES, BASE_SOURCES, estimateArea, storageReport } from '../../field/tiles.js';
@@ -54,6 +53,18 @@ function noteRow({ label, value, placeholder, onChange }) {
   ]);
   row.input = area;
   return row;
+}
+
+/**
+ * An azimuth as three digits, which is how a bearing is written in a notebook.
+ *
+ * Three digits rather than one or two because 090 cannot be misread as a dip
+ * and 90 can — the padding is what says "this is a direction" before anybody
+ * has read the label. Quadrant notation says the same thing more emphatically
+ * but has to be translated back before it can be used for anything.
+ */
+function azimuth(a) {
+  return `${String(Math.round(a) % 360).padStart(3, '0')}°`;
 }
 
 /** A row of tap targets, for a short list where a dropdown would be a step. */
@@ -740,6 +751,116 @@ function areaText(cells, cellWorld, lat) {
   return a > 1e6 ? `${(a / 1e6).toFixed(2)} km²` : `${Math.round(a / 100) * 100} m²`;
 }
 
+/**
+ * The three things about a fault that a trace cannot tell you.
+ *
+ * Everything else on a line card is a description of what was drawn. These are
+ * measurements, and they are the ones that decide whether a fault can be
+ * solved at all: the plane's dip, the direction the rock moved, and which unit
+ * ended up against which. Without them a fault trace is a line on a map and
+ * the fit has no choice but to call it vertical and search blind.
+ *
+ * They are asked for as separate questions because they are separately
+ * knowable. A student may have stood on a slickensided surface and measured it
+ * and still not know the throw; another may see Cambrian carried over Devonian
+ * from half a mile away and never find the plane. Both are worth recording,
+ * and neither implies the other.
+ */
+function faultRows(ctx, line, known) {
+  const rows = [];
+  const set = (fn, coalesce) => ctx.editLine(line.id, fn, coalesce);
+  const choices = dipChoices(line);
+
+  rows.push(el('div', { class: 'sub-head', text: 'The fault plane' }));
+
+  // Which way it leans. The trace fixes the strike, so the only question is
+  // which of the two sides — offered as the two sides rather than as a free
+  // bearing, because any other answer would contradict the line drawn.
+  // How far apart two azimuths are, 0-180, so "which of the two sides" is
+  // decided by the nearer one rather than by an exact match: the trace's own
+  // trend shifts a degree or two whenever a point is dragged.
+  const apart = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+  const dipState = line.dip == null ? 'none'
+    : (line.dipDir == null || line.dip >= 89 ? 'vertical'
+      : (choices.length && apart(line.dipDir, choices[0]) < 90 ? 'a' : 'b'));
+
+  const options = [
+    { id: 'none', label: 'Not measured', hint: 'The fit will take it as vertical and say that it did.' },
+    { id: 'vertical', label: 'Vertical', hint: 'You looked, and it is vertical. Different from not knowing.' },
+  ];
+  if (choices.length) {
+    options.push({ id: 'a', label: `Dips toward ${azimuth(choices[0])}`,
+      hint: 'The plane leans this way from the line you drew. A compass direction, not an angle of tilt.' });
+    options.push({ id: 'b', label: `Dips toward ${azimuth(choices[1])}`,
+      hint: 'The plane leans the other way. A compass direction, not an angle of tilt.' });
+  }
+
+  rows.push(chipsRow({
+    label: 'Dip direction', value: dipState, options,
+    onChange: (v) => set((l) => {
+      if (v === 'none') { l.dip = null; l.dipDir = null; }
+      else if (v === 'vertical') { l.dip = 90; l.dipDir = null; }
+      else {
+        l.dipDir = choices[v === 'a' ? 0 : 1];
+        if (l.dip == null || l.dip >= 89) l.dip = 45;
+      }
+    }),
+  }));
+
+  if (dipState === 'a' || dipState === 'b') {
+    rows.push(protractor({
+      value: line.dip == null ? 45 : line.dip, label: 'Dip angle', max: 89,
+      onChange: (v) => set((l) => { l.dip = v; }, `fault-dip:${line.id}`),
+    }));
+    rows.push(el('div', { class: 'ctl-hint standalone', text:
+      `Two different numbers, and they are easy to run together: ${azimuth(choices[dipState === 'a' ? 0 : 1])} is the compass direction the plane leans toward, measured on the map; the dip angle is how far it leans below horizontal, measured in the vertical plane. Written out, this fault is ${azimuth(choices[dipState === 'a' ? 0 : 1])}/${Math.round(line.dip == null ? 45 : line.dip)}° — dip direction first, then dip angle.` }));
+  }
+
+  rows.push(el('div', { class: 'ctl-hint standalone', text:
+    'A fault trace is the fault plane cut by the ground, so where there is relief the trace gives the dip on its own — the fit reads it off the topography. Across flat ground it cannot: every plane through that line fits the trace equally well. This is where you say what you saw at the outcrop, or what the trace crossing the contours told you.' }));
+
+  // Which way it moved. The one fault parameter no geometry can supply.
+  rows.push(chipsRow({
+    label: 'Which way it moved', value: line.sense || '',
+    options: FAULT_SENSES.map((s) => ({ id: s.id, label: s.label, hint: s.hint })),
+    onChange: (v) => set((l) => { l.sense = v; }),
+  }));
+  rows.push(el('div', { class: 'ctl-hint standalone', text:
+    'The plane is where the rock broke; the sense is what happened afterwards, and nothing in a map pattern alone distinguishes a thrust from a normal fault of the opposite dip. Saying it here narrows the fit from every direction of slip to one, which is usually the difference between an offset it can solve and a number it made up.' }));
+
+  // The units either side. Only askable once there is a hanging wall to speak
+  // of: without a dip direction, "above the fault" names nothing.
+  if (line.dip != null && line.dipDir != null) {
+    rows.push(el('div', { class: 'ctl-pair' }, [
+      textRow({
+        label: 'Hanging wall', value: line.unitUpper, placeholder: 'e.g. Campito Fm',
+        list: known.length ? 'field-unit-names' : null,
+        onChange: (v) => set((l) => { l.unitUpper = v.trim(); }),
+      }),
+      textRow({
+        label: 'Footwall', value: line.unitLower, placeholder: 'e.g. Poleta Fm',
+        list: known.length ? 'field-unit-names' : null,
+        onChange: (v) => set((l) => { l.unitLower = v.trim(); }),
+      }),
+    ]));
+    // Named from the chip that is lit rather than from the stored azimuth: the
+    // two have to agree, and after a trace is dragged it is the trace that is
+    // right. Same reasoning as faultFromTrace.
+    const leans = choices.length ? choices[dipState === 'a' ? 0 : 1] : line.dipDir;
+    rows.push(el('div', { class: 'ctl-hint standalone', text:
+      `The hanging wall is the block above the plane — here, the ${azimuth(leans)} side, because that is the way you said it dips. Naming what crops out on each side is what tells the fit that older rock has been carried over younger, which is a measurement of the throw and not an opinion about it.` }));
+    if (known.length) {
+      rows.push(el('datalist', { id: 'field-unit-names' },
+        known.map((u) => el('option', { value: u.name }))));
+    }
+  } else {
+    rows.push(el('div', { class: 'ctl-hint standalone', text:
+      'Say which way it dips and you can also name the unit on each side. Which of them is the hanging wall only means something once the plane has a direction to lean in.' }));
+  }
+
+  return rows;
+}
+
 export function linesPanel(ctx) {
   const doc = ctx.doc();
   const node = el('div', { class: 'panel' });
@@ -848,6 +969,10 @@ export function linesPanel(ctx) {
           box.appendChild(el('datalist', { id: 'field-unit-names' },
             known.map((u) => el('option', { value: u.name }))));
         }
+      }
+
+      if (line.kind === 'fault') {
+        for (const n of faultRows(ctx, line, known)) box.appendChild(n);
       }
 
       box.appendChild(noteRow({

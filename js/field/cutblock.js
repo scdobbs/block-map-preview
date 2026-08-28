@@ -28,6 +28,17 @@ import { floodPatches, samplePatches, extentOf, BARRIER_KINDS } from './patches.
 const FITTABLE_FEATURE = 'bedding';
 
 /**
+ * Readings that are evidence about a fault rather than about the beds.
+ *
+ * These used to be dropped with everything that was not bedding, which was
+ * wrong in a way worth naming: a fault plane measured at an exposure is the
+ * single hardest number anybody collects about a fault, and slickenlines are
+ * the rake — the one parameter the fit otherwise searches for blind. Both were
+ * being recorded by the app and thrown away by the thing that needed them.
+ */
+const FAULT_FEATURES = new Set(['fault', 'slickenline']);
+
+/**
  * Carry the notebook into the block's frame.
  *
  * A station's height comes from the block's own lid rather than from the
@@ -41,11 +52,23 @@ export function projectNotes(doc, g, ground) {
   const zOf = (x, y) => surfaceHeight(ground, x, y);
 
   const stations = [];
+  const faultObs = [];
   const dropped = { outside: 0, noAttitude: 0, notBedding: 0, linear: 0 };
   for (const st of doc.stations || []) {
     const [x, y] = toBlock(g, st.lon, st.lat);
     if (!inBlock(g, x, y)) { dropped.outside++; continue; }
     if (!hasAttitude(st)) { dropped.noAttitude++; continue; }
+    // Taken before the bedding filter, because these are not failed bedding
+    // readings — they are evidence about a different structure, and they go
+    // to the part of the fit that wants them.
+    if (FAULT_FEATURES.has(st.feature)) {
+      faultObs.push(isLinearFeature(st.feature)
+        ? { id: st.id, name: st.name, feature: st.feature, x, y, z: zOf(x, y),
+          trend: st.trend, plunge: st.plunge }
+        : { id: st.id, name: st.name, feature: st.feature, x, y, z: zOf(x, y),
+          strike: st.strike, dip: st.dip });
+      continue;
+    }
     if (isLinearFeature(st.feature)) { dropped.linear++; continue; }
     if (st.feature !== FITTABLE_FEATURE) { dropped.notBedding++; continue; }
     stations.push({
@@ -68,6 +91,12 @@ export function projectNotes(doc, g, ground) {
       id: ln.id, name: ln.name || '', kind: ln.kind, pts,
       unitUpper: ln.unitUpper || '', unitLower: ln.unitLower || '',
       certainty: ln.certainty,
+      // What the mapper said about the fault plane, carried through as given.
+      // Null means not measured, and the fit must be able to tell that apart
+      // from a measured vertical.
+      dip: Number.isFinite(ln.dip) ? ln.dip : null,
+      dipDir: Number.isFinite(ln.dipDir) ? ln.dipDir : null,
+      sense: ln.sense || '',
       // Neither a traverse nor a map boundary is evidence about the rock: one
       // is where somebody walked and the other is where they stopped looking.
       // The boundary still bounds the shading — that is read off `kind`, not
@@ -105,7 +134,7 @@ export function projectNotes(doc, g, ground) {
     });
   }
 
-  return { stations, lines, patches, dropped };
+  return { stations, lines, patches, faultObs, dropped };
 }
 
 /**
@@ -341,6 +370,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     lines: notes.lines.map((l) => ({
       id: l.id, name: l.name, kind: l.kind, certainty: l.certainty,
       unitUpper: l.unitUpper, unitLower: l.unitLower,
+      dip: l.dip, dipDir: l.dipDir, sense: l.sense,
       // Thinned. A contact walked with a GPS on every second is a thousand
       // points that draw the same line as eighty. Height travels with each
       // point for the same reason a station's does: a contact is a surface of
@@ -356,6 +386,16 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     patches: notes.patches.map((p) => ({
       id: p.id, unit: p.unit,
       pts: thin(p.pts, 60).map((q) => [r1(q[0]), r1(q[1]), r1(q[2])]),
+    })),
+    // Fault planes and slickenlines, kept beside the bedding rather than
+    // mixed into it: they are scored against the fault, not against the beds.
+    faultObs: notes.faultObs.map((o) => ({
+      id: o.id, name: o.name, feature: o.feature,
+      x: r1(o.x), y: r1(o.y), z: r1(o.z),
+      strike: o.strike == null ? null : r1(o.strike),
+      dip: o.dip == null ? null : r1(o.dip),
+      trend: o.trend == null ? null : r1(o.trend),
+      plunge: o.plunge == null ? null : r1(o.plunge),
     })),
   };
 
@@ -393,6 +433,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
       patches: notes.patches.length,
       stations: notes.stations.length,
       dropped: notes.dropped,
+      faultObs: notes.faultObs.length,
       surfaces: contactGroups(notes).length,
       faults: notes.lines.filter((l) => l.kind === 'fault').length,
     },
@@ -412,6 +453,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
         patches: notes.patches.length,
         stations: notes.stations.length,
         dropped: notes.dropped,
+        faultObs: notes.faultObs.length,
         surfaces: contactGroups(notes).length,
         contactLines: notes.lines.filter((l) => l.kind === 'contact' || l.kind === 'unconformity').length,
         faults: notes.lines.filter((l) => l.kind === 'fault').length,
@@ -513,13 +555,15 @@ export function surveyExtent(fieldDoc, bbox) {
   const g = georefFromBbox(bbox);
   let bedding = 0;
   let other = 0;
+  let faultObs = 0;
   for (const st of fieldDoc.stations || []) {
     const [x, y] = toBlock(g, st.lon, st.lat);
     if (!inBlock(g, x, y)) continue;
-    if (hasAttitude(st) && !isLinearFeature(st.feature) && st.feature === FITTABLE_FEATURE) bedding++;
+    if (hasAttitude(st) && FAULT_FEATURES.has(st.feature)) faultObs++;
+    else if (hasAttitude(st) && !isLinearFeature(st.feature) && st.feature === FITTABLE_FEATURE) bedding++;
     else other++;
   }
-  const lines = { contact: 0, fault: 0, boundary: 0, other: 0, unnamed: 0 };
+  const lines = { contact: 0, fault: 0, boundary: 0, other: 0, unnamed: 0, undipped: 0 };
   for (const ln of fieldDoc.lines || []) {
     const inside = (ln.points || []).some(([lon, lat]) => {
       const [x, y] = toBlock(g, lon, lat);
@@ -529,9 +573,15 @@ export function surveyExtent(fieldDoc, bbox) {
     if (ln.kind === 'contact' || ln.kind === 'unconformity') {
       lines.contact++;
       if (!String(ln.unitUpper || '').trim() || !String(ln.unitLower || '').trim()) lines.unnamed++;
-    } else if (ln.kind === 'fault') lines.fault++;
+    } else if (ln.kind === 'fault') {
+      lines.fault++;
+      // A fault with no measured plane is the one the fit will have to call
+      // vertical, so the panel can say so before the button is pressed rather
+      // than apologise for it afterwards.
+      if (!Number.isFinite(ln.dip)) lines.undipped++;
+    }
     else if (ln.kind === 'boundary') lines.boundary++;
     else lines.other++;
   }
-  return { georef: g, bedding, other, lines };
+  return { georef: g, bedding, other, faultObs, lines };
 }
