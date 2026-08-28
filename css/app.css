@@ -1265,6 +1265,11 @@ html, body {
    away when the clinometer is open. Whichever one is being used gets the
    screen. */
 .map-full .sheet { display: none; }
+/* The block half's equivalent. Same rule, same reason: on a phone the block
+   and the panel do not both fit, and a block you cannot turn is not a block
+   diagram. Worth more here than on the map, because with the stereonet or the
+   ground map open the block is already down to a third of the screen. */
+.block-full .sheet { display: none; }
 
 .mf-target {
   flex: 1 1 auto; text-align: center; min-width: 0;

@@ -2,7 +2,7 @@
 
 import { el, svg, clear } from './widgets.js';
 import { swatchEl } from './swatch.js';
-import { tabIcon } from './icons.js';
+import { tabIcon, expandIcon, collapseIcon } from './icons.js';
 import { layersPanel, historyPanel, terrainPanel, viewPanel, fieldPanel } from './panels.js';
 import { stereonet } from './stereonet.js';
 import { groundMapPane, GroundMap } from './groundMap.js';
@@ -42,6 +42,7 @@ export class App {
     this.mode = 'block';
     this.mapSection = null;
     this.sheetState = 'half';   // 'peek' | 'half' | 'full'
+    this.blockFull = false;     // block over the whole screen, panel hidden
     this._history = null;
     this._readings = null;
     this._fit = null;
@@ -134,6 +135,11 @@ export class App {
     this.undoBtn = iconBtn('↶', 'Undo', () => this.store.undo());
     this.redoBtn = iconBtn('↷', 'Redo', () => this.store.redo());
 
+    // Same control the map half has, for the same reason: on a phone the block
+    // and the panel do not both fit, and turning a block is the one thing here
+    // that needs room. Doubly so with a companion pane open, where the block is
+    // sharing what is left of the stage with the net or the ground map.
+    this.fullBtn = iconBtn(expandIcon(), 'Full screen block', () => this.setBlockFull());
     this.compass = compassRose();
     this.readout = el('div', { class: 'readout hidden' });
     // Live reading for the marker under the finger. The panel list says the
@@ -164,7 +170,7 @@ export class App {
     this.blockPane = el('div', { class: 'block-pane' }, [
       this.canvas,
       el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn, this.mapChip]),
-      el('div', { class: 'hud hud-right' }, [this.compass.node]),
+      el('div', { class: 'hud hud-right' }, [this.fullBtn, this.compass.node]),
       this.scaleChip,
       this.markerChip,
       this.modeBanner,
@@ -230,6 +236,29 @@ export class App {
       d.settings.showGroundMap = on;
       if (on) d.settings.showNet = false;
     }, { structural: true });
+    if (on) this._makeRoomForPane();
+  }
+
+  /**
+   * Opening a second view of the block on a phone.
+   *
+   * Stacked, the stage is already sharing itself between the block and the new
+   * pane; leaving the panel over half of what is left gives each of them about
+   * a quarter of the screen and makes the thing that was just asked for the
+   * smallest object on it. So the sheet drops to its handle — still there,
+   * still draggable, and one tap from coming back.
+   *
+   * Only when stacked. Side by side the panes have their own column and the
+   * panel is not competing with them for anything.
+   */
+  _makeRoomForPane() {
+    if (this.stacked() && this.sheetState !== 'peek') this._setSheet('peek');
+  }
+
+  /** True when the block and its companion pane are stacked rather than side
+      by side — the same 4/3 threshold the stylesheet splits on. */
+  stacked() {
+    return !window.matchMedia('(min-aspect-ratio: 4/3)').matches;
   }
 
   setMode(mode) {
@@ -515,6 +544,32 @@ export class App {
   }
 
   /**
+   * Give the block the whole screen, or give the panel back.
+   *
+   * Transient rather than saved: which half of the screen you want right now
+   * is a fact about what you are doing this minute, and a file that reopens
+   * with its panel hidden looks broken. The map half stores its equivalent for
+   * the same length of time and no longer.
+   */
+  setBlockFull(on = null) {
+    const next = on == null ? !this.blockFull : on;
+    if (next === this.blockFull) return;
+    this.blockFull = next;
+    this.root.classList.toggle('block-full', next);
+    this._syncFullButton();
+    // The stage just changed size and the canvas does not watch its own box.
+    requestAnimationFrame(() => this.scene.resize());
+  }
+
+  _syncFullButton() {
+    clear(this.fullBtn);
+    this.fullBtn.appendChild(this.blockFull ? collapseIcon() : expandIcon());
+    this.fullBtn.classList.toggle('on', this.blockFull);
+    this.fullBtn.title = this.blockFull ? 'Show the panel' : 'Full screen block';
+    this.fullBtn.setAttribute('aria-label', this.fullBtn.title);
+  }
+
+  /**
    * Show or hide the stereonet pane. A document setting rather than a mode,
    * because it is a second view of the same block and it should still be there
    * when the student comes back to the file.
@@ -526,6 +581,7 @@ export class App {
       // One companion pane at a time — see setGroundMap.
       if (on) d.settings.showGroundMap = false;
     }, { structural: true });
+    if (on) this._makeRoomForPane();
   }
 
   addMarkerAt(clientX, clientY) {
@@ -687,15 +743,30 @@ export class App {
    * style, so the side-by-side rule can go on overriding it from the
    * stylesheet when the screen is turned.
    */
+  /**
+   * The pill between the block and whichever pane is sharing the stage with it.
+   *
+   * Bound to each pane rather than to the stereonet alone, which is what it
+   * used to be: the ground map builds the same grip, exposes it the same way,
+   * and had nothing listening to it — so on a phone, where the split is the
+   * only thing that decides how much map you get, it was stuck at whatever the
+   * stylesheet last left it and the map was unreadably small with no way to
+   * grow it. The two panes share a slot and a stylesheet; they now share this.
+   */
   _bindNetGrip() {
-    const grip = this.net.grip;
+    for (const pane of [this.net, this.ground]) this._bindPaneGrip(pane);
+  }
+
+  _bindPaneGrip(pane) {
+    const grip = pane.grip;
+    if (!grip) return;
     const STOPS = [30, 58, 100];
     let dragging = false;
     let moved = 0;
     let startY = 0;
     let startPct = 0;
 
-    const current = () => (this.net.clientHeight / (this.stage.clientHeight || 1)) * 100;
+    const current = () => (pane.clientHeight / (this.stage.clientHeight || 1)) * 100;
     // Never below a readable net; up to the whole stage, where the block goes
     // away entirely and the grip is what brings it back.
     const apply = (v) => {
@@ -793,9 +864,11 @@ function saveMode(mode) {
   try { localStorage.setItem(MODE_KEY, mode); } catch { /* private browsing */ }
 }
 
+/** `glyph` is either a character or a ready-made mark, so both kinds of button
+    are built the same way and styled by the same rule. */
 function iconBtn(glyph, label, onClick) {
   return el('button', { class: 'icon-btn', type: 'button', title: label, 'aria-label': label, onclick: onClick }, [
-    el('span', { text: glyph }),
+    typeof glyph === 'string' ? el('span', { text: glyph }) : glyph,
   ]);
 }
 

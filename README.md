@@ -130,7 +130,11 @@ pluton, say — an open circle rather than an invented number.
 **Plot on a stereonet** (in Field) opens the net *beside* the block rather
 than over it, and leaves it there — it is a second view of the same geology,
 not a page you visit. On a phone, where the two are stacked, drag the pill
-between them to give either one the whole screen. Every reading goes on as a pole to bedding, and a girdle
+between them to give either one the whole screen, or tap it to cycle. The
+**ground map** shares that slot and that pill. Opening either on a stacked
+screen drops the panel to its handle, since three things sharing a phone
+leaves the one you just asked for the smallest object on it, and the
+full-screen button over the block hides the panel outright. Every reading goes on as a pole to bedding, and a girdle
 is fitted through them. That fit is the whole exercise: on a cylindrically folded surface the poles all lie in the
 plane perpendicular to the hinge, so the pole of the fitted girdle *is* the
 fold axis — and it is recoverable from readings taken anywhere, whether or not

@@ -18,6 +18,24 @@ const frame = () => svg('rect', {
   x: 2.5, y: 2.5, width: 19, height: 19, rx: 2.5, class: 'evicon-frame',
 });
 
+/**
+ * The four corner brackets, out and in.
+ *
+ * Here rather than in either half, because both halves have the same control
+ * doing the same job and one of them looking different would read as a
+ * different feature. Sized for the round HUD buttons over a canvas rather than
+ * for the tab bar, hence its own class.
+ */
+function hudIcon(paths) {
+  return svg('svg', { viewBox: VB, class: 'hud-icon', 'aria-hidden': 'true' },
+    paths.map((d) => svg('path', { d, class: 'tabicon-line' })));
+}
+
+export const expandIcon = () =>
+  hudIcon(['M4 9 V4 H9', 'M15 4 H20 V9', 'M20 15 V20 H15', 'M9 20 H4 V15']);
+export const collapseIcon = () =>
+  hudIcon(['M9 4 V9 H4', 'M20 9 H15 V4', 'M15 20 V15 H20', 'M4 15 H9 V20']);
+
 const path = (d, cls = 'evicon-line') => svg('path', { d, class: cls });
 
 export const EVENT_ICONS = {

@@ -21,6 +21,7 @@ import { inferHistory, columnFrom, misfit, contactGroups } from '../geo/infer.js
 import { defaultDocument, makeLayer, makeMarker, rock, ROCKS } from '../geo/model.js';
 import { surfaceHeight, surfaceRange } from '../geo/surfaces.js';
 import { compileHistory, stratDepth } from '../geo/unmake.js';
+import { clamp } from '../geo/math.js';
 import { hasAttitude, isLinearFeature } from './model.js';
 import { floodPatches, samplePatches, extentOf, BARRIER_KINDS } from './patches.js';
 
@@ -321,18 +322,31 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
   doc.topo = ground;
 
   const relief = surfaceRange(ground, g.width, g.depth);
+  // The short side of the footprint. A block's proportions are set against the
+  // dimension it can most easily end up looking like a column beside.
+  const across = Math.min(g.width, g.depth);
   doc.block = {
     width: Math.round(g.width),
     depth: Math.round(g.depth),
     // Deep enough to hold the structure that was fitted, not merely the
     // relief: a fold with 200 m of amplitude needs room to close beneath the
-    // ground or the block is a lid with nothing under it. Capped against the
-    // footprint all the same — a big fitted amplitude would otherwise give a
-    // block several kilometres deeper than it is wide, which is a column
-    // rather than a block and cannot be read as either a map or a section.
-    height: Math.round(Math.min(
-      Math.max(1200, Math.min(g.width, g.depth) * 0.9),
-      Math.max(800, (relief.hi - relief.lo) * 2, structureDepth(fit.events) * 2.5),
+    // ground or the block is a lid with nothing under it. Bounded against the
+    // footprint all the same — a block several times deeper than it is wide is
+    // a column rather than a block, and cannot be read as either a map or a
+    // section.
+    //
+    // Both bounds are fractions of the footprint and none of them is a fixed
+    // number of metres, which the previous version got wrong in a way that
+    // only showed on small areas. Its cap was max(1200, footprint * 0.9), so
+    // for anything under about 1300 m across the cap WAS 1200 and the
+    // footprint had no say at all; a 360 x 480 m field area came out 1000 m
+    // deep — two and a half times its own width, unreadable, and on a phone
+    // unmanageable to turn. A block is a box you look at, so how deep it
+    // should be is a question about its own proportions.
+    height: Math.round(clamp(
+      Math.max((relief.hi - relief.lo) * 1.8, structureDepth(fit.events, across) * 1.6),
+      Math.max(120, across * 0.4),
+      across * 1.1,
     )),
     cutE: 0, cutN: 0,
   };
@@ -536,13 +550,17 @@ function deepenFloor(doc, ground) {
 }
 
 /** How deep the fitted structure reaches, so the block can be cut to hold it. */
-function structureDepth(events) {
-  let d = 400;
+function structureDepth(events, across) {
+  // Headroom under the deepest thing the history makes, scaled to the block
+  // rather than fixed: 300 m of clearance beneath a 40 m fold is not caution,
+  // it is most of the block given over to rock nothing is happening in.
+  const pad = Math.max(60, across * 0.25);
+  let d = pad;
   for (const e of events) {
-    if (e.type === 'fold') d = Math.max(d, (e.amplitude || 0) * 2 + 300);
-    if (e.type === 'domebasin') d = Math.max(d, Math.abs(e.amplitude || 0) * 2 + 300);
-    if (e.type === 'fault') d = Math.max(d, (e.slip || 0) * 1.5 + 300);
-    if (e.type === 'tilt') d = Math.max(d, 600);
+    if (e.type === 'fold') d = Math.max(d, (e.amplitude || 0) * 2 + pad);
+    if (e.type === 'domebasin') d = Math.max(d, Math.abs(e.amplitude || 0) * 2 + pad);
+    if (e.type === 'fault') d = Math.max(d, (e.slip || 0) * 1.5 + pad);
+    if (e.type === 'tilt') d = Math.max(d, across * 0.5);
   }
   return d;
 }

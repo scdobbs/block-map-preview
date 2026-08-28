@@ -6,6 +6,7 @@
 // a record of an outcrop that actually exists.
 
 import { el, clear } from '../widgets.js';
+import { expandIcon, collapseIcon } from '../icons.js';
 import { MapCanvas } from './canvas.js';
 import { measurePanel, stationsPanel, linesPanel, areasPanel, setupPanel } from './panels.js';
 import { blockPanel } from './blockPanel.js';
@@ -1726,8 +1727,6 @@ function svgIcon(paths) {
   return s;
 }
 
-const expandIcon = () => svgIcon(['M4 9 V4 H9', 'M15 4 H20 V9', 'M20 15 V20 H15', 'M9 20 H4 V15']);
-const collapseIcon = () => svgIcon(['M9 4 V9 H4', 'M20 9 H15 V4', 'M15 20 V15 H20', 'M4 15 H9 V20']);
 const locateIcon = () => svgIcon(['M12 3 V6 M12 18 V21 M3 12 H6 M18 12 H21',
   'M12 8.2 A3.8 3.8 0 1 0 12 15.8 A3.8 3.8 0 1 0 12 8.2']);
 const layersIcon = () => svgIcon(['M12 3 L21 8 L12 13 L3 8 Z', 'M3 12.5 L12 17.5 L21 12.5',
