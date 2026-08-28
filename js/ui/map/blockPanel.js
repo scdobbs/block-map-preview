@@ -28,6 +28,9 @@ function statLine(label, value, cls = '') {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+/** Whether the Advanced fold is open. Screen state, not document state. */
+let advancedOpen = false;
+
 /** "4.3 × 6.1 km" — one unit, not two, so it fits a stats column. */
 function compactSize(g) {
   const km = (m) => (m / 1000).toFixed(m < 10000 ? 1 : 0);
@@ -107,6 +110,8 @@ export function blockPanel(ctx) {
     node.appendChild(el('div', { class: 'ctl-hint standalone', text: h }));
   }
 
+  node.appendChild(advanced(ctx));
+
   node.appendChild(el('div', { class: 'row-actions' }, [
     el('button', {
       class: 'btn primary', type: 'button', text: 'Build the block',
@@ -123,6 +128,43 @@ export function blockPanel(ctx) {
 
   if (report) node.appendChild(reportBlock(ctx, report));
   return node;
+}
+
+/**
+ * The one place the fit is given a choice about how it may answer.
+ *
+ * Folded shut, because a student building their first block should not have to
+ * have an opinion about this, and the default is the behaviour every block
+ * before it was built with. Open it and the explanation is the point: this is
+ * a real extra freedom handed to the fit, and anybody switching it on should
+ * know both what it buys and what it costs.
+ */
+function advanced(ctx) {
+  const doc = ctx.doc();
+  const box = el('details', { class: 'advanced' });
+  // Ticking the box writes a document setting, which rebuilds the panel — and
+  // a rebuilt <details> would spring shut under the finger. Whether it is open
+  // is a fact about the screen and not about the survey, so it lives here
+  // rather than on the document.
+  box.open = advancedOpen;
+  box.addEventListener('toggle', () => { advancedOpen = box.open; });
+  box.appendChild(el('summary', { text: 'Advanced' }));
+
+  const label = el('label', { class: 'check-row' });
+  const input = el('input', { type: 'checkbox' });
+  input.checked = doc.settings.localFolds === true;
+  input.addEventListener('change', () => ctx.setSetting({ localFolds: input.checked }));
+  label.append(input, el('span', { text: 'Let a fold stop where the mapping stops' }));
+  box.appendChild(label);
+
+  box.appendChild(el('div', { class: 'ctl-hint standalone', text:
+    'A fold here is a wave that runs at full height to every edge of the block. Along its own axis that is an assertion rather than a measurement: a cylindrical fold is identical all the way along, and nothing in your readings argues for it carrying on past the last one. Switch this on and the fit is allowed to fade the fold out at the edge of the ground you actually mapped, starting from how far your stations and contacts reach along the axis and adjusting from there.' }));
+  box.appendChild(el('div', { class: 'ctl-hint standalone', text:
+    'What it buys is room for a bigger, broader fold in the middle where the evidence is, instead of a tight one stretched to cover ground it was never measured on. What it costs is a parameter: the fit has one more way to make its numbers look better, and a fold that fades is harder to argue with than one that does not. The reach is written on the History tab like any other number, so you can see what it chose and change it.' }));
+  box.appendChild(el('div', { class: 'ctl-hint standalone', text:
+    'Only along the axis, never across it. Across the axis is where the fold actually bends, and fading it there does not stop the block over-claiming — it deletes the structure.' }));
+
+  return box;
 }
 
 // ---------------------------------------------------------------------------

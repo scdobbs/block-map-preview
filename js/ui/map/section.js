@@ -1322,6 +1322,7 @@ export class MapSection {
       const { doc, report } = await cutBlock(this.store.doc, bbox, {
         allowNetwork: navigator.onLine !== false,
         name: this.store.doc.name,
+        localFolds: this.store.doc.settings.localFolds === true,
         onProgress: (done, total) => {
           this._blockBuilding = { label: `Elevation: tile ${done} of ${total}` };
         },

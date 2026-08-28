@@ -710,7 +710,7 @@ function juxtaposition(events, obs, faults, extent) {
  * @param {object} opts    { extent } the block's footprint, metres
  * @returns {object} { verdict, events, misfit, notes, warnings }
  */
-export function inferHistory(obs, { extent = 4000 } = {}) {
+export function inferHistory(obs, { extent = 4000, localFolds = false } = {}) {
   const notes = [];
   const warnings = [];
   const stations = (obs.stations || []).filter(
@@ -719,7 +719,8 @@ export function inferHistory(obs, { extent = 4000 } = {}) {
   const verdict = fitBedding(stations);
 
   // --- 1 & 2. the structure, from the readings ---------------------------
-  const built = fitStructure(verdict, { ...obs, stations }, extent, notes, warnings);
+  const built = fitStructure(verdict, { ...obs, stations }, extent, notes, warnings,
+    { localFolds });
   let events = built.events;
 
   // --- 3. the faults, from what was measured on them ----------------------
@@ -802,6 +803,16 @@ export function inferHistory(obs, { extent = 4000 } = {}) {
     }
   }
   if (fitted.length) reportSlip(fitted, events, obs, extent, notes, warnings);
+
+  // How far the fold was allowed to reach, said after it stopped moving.
+  if (built.reachSeed) {
+    const fold = events.find((e) => e.type === 'fold');
+    if (fold) {
+      notes.push(fold.reachAlong
+        ? `Fold fades out ${Math.round(fold.reachAlong)} m along its axis — seeded from the ${Math.round(built.reachSeed)} m your mapping spans in that direction, then fitted from there. Beyond it the block carries no fold, because nothing you measured says it should.`
+        : 'Asked how far the fold reaches, the fit answered "further than this block", so it is left running to every edge after all.');
+    }
+  }
 
   // Do the two sides of a fault even describe the same structure?
   if (fitted.length) domainsAcross(fitted, stations, verdict, notes, warnings);
@@ -896,7 +907,41 @@ function angleBetweenAxes(a, b) {
 }
 
 /** The structure itself: whichever of the three the net says it is. */
-function fitStructure(verdict, obs, extent, notes, warnings) {
+/**
+ * How far the mapping actually reaches, measured along the fold's own axis.
+ *
+ * This is the honest seed for a fold's reach, and it is worth saying why it is
+ * measured along the axis and not across it.
+ *
+ * ALONG the axis a cylindrical fold is constant — the same crest, the same
+ * trough, all the way to the ends of the earth. Nothing in a set of readings
+ * argues for that constancy beyond the last reading, so carrying it there at
+ * full amplitude is an assertion, not a finding. Fading it at the edge of the
+ * evidence removes only the part nobody measured.
+ *
+ * ACROSS the axis is where the wave lives, and fading it there does not remove
+ * an assertion, it removes the fold. Tried on the notebook this was built
+ * against, every value of a cross-axis reach made the fit worse than no reach
+ * at all — so only the along-axis one is ever seeded, and the other is left
+ * for a person to set deliberately if they have a reason to.
+ */
+function evidenceReach(obs, trend) {
+  const az = azimuthVec(trend);
+  const along = [];
+  for (const s of obs.stations || []) {
+    if (Number.isFinite(s.x) && Number.isFinite(s.y)) along.push(s.x * az[0] + s.y * az[1]);
+  }
+  for (const l of contactsOf(obs)) {
+    for (const p of l.pts) along.push(p[0] * az[0] + p[1] * az[1]);
+  }
+  if (along.length < 4) return null;
+  // Half the span, not the furthest point: a fold centred on the block should
+  // reach as far as the mapping does on either side of it, and one stray
+  // station on the far edge is not a mandate to extend the structure to it.
+  return (Math.max(...along) - Math.min(...along)) / 2;
+}
+
+function fitStructure(verdict, obs, extent, notes, warnings, { localFolds = false } = {}) {
   const attitudeOnly = { stations: obs.stations, lines: [] };
   const none = { events: [], polish: null };
 
@@ -976,23 +1021,57 @@ function fitStructure(verdict, obs, extent, notes, warnings) {
   const { x } = refine(seed, bounds, score);
   const ev = make(x);
 
+  // --- how far it reaches, when that was asked for -------------------------
+  // Seeded rather than searched from nothing. A free reach has a degenerate
+  // direction — shrink it and the fold switches off, which "explains" any
+  // scatter — so it starts where the evidence stops and is only refined from
+  // there, inside bounds that cannot collapse it.
+  let reach = null;
+  if (localFolds) {
+    const seed = evidenceReach(obs, ev.trend);
+    if (seed && seed > extent * 0.05) {
+      reach = { seed, bounds: [seed * 0.6, Math.max(extent, seed * 2.2)] };
+      ev.reachAlong = seed;
+    }
+  }
+
   const dipMax = Math.atan((2 * Math.PI * ev.amplitude) / ev.wavelength) * RAD;
   notes.push(`Fold: wavelength ${Math.round(ev.wavelength)} m, amplitude ${Math.round(ev.amplitude)} m — limbs steepest at ${dipMax.toFixed(0)}°.`);
   if (ev.wavelength > extent * 2.5) {
     warnings.push('The fitted wavelength is far wider than the area mapped, so only part of one limb is exposed and the fold is not really constrained. Expect these numbers to move a long way when one more reading is added.');
   }
 
+  const shaped = reach
+    ? [...bounds, reach.bounds]
+    : bounds;
+  const makeShaped = reach
+    ? ([lw, a, ph, tr, pl, ra]) => makeEvent('fold', {
+      wavelength: Math.exp(lw), amplitude: a, phase: ph, trend: tr, plunge: pl,
+      reachAlong: ra, name: 'Fold',
+    })
+    : make;
+
   return {
     events: [ev],
     polish: (events, all) => {
-      const { x: y } = refine(
-        [Math.log(ev.wavelength), ev.amplitude, ev.phase, ev.trend, ev.plunge],
-        bounds, (v) => misfit(withFirst(events, make(v)), all).total,
-      );
+      const start = [Math.log(ev.wavelength), ev.amplitude, ev.phase, ev.trend, ev.plunge];
+      if (reach) start.push(ev.reachAlong || reach.seed);
+      const { x: y } = refine(start, shaped,
+        (v) => misfit(withFirst(events, makeShaped(v)), all).total);
       Object.assign(ev, {
         wavelength: Math.exp(y[0]), amplitude: y[1], phase: y[2], trend: y[3], plunge: y[4],
       });
+      if (reach) {
+        // A reach that ends up wider than the block is not a limit, it is a
+        // fold that happens to fill the map. Recorded as no limit at all, so
+        // the document reads as the ordinary infinite fold it has become
+        // rather than carrying a number that does nothing.
+        ev.reachAlong = y[5] >= extent ? 0 : y[5];
+      }
     },
+    // Reported by inferHistory once everything has settled, because polish
+    // only runs when there are contacts and the reach is applied either way.
+    reachSeed: reach ? reach.seed : null,
   };
 }
 

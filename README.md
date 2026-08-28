@@ -1019,6 +1019,16 @@ fragment uniform budget of older mobile GPUs.
     what it always used to do. Setting it is what lets one block hold an open
     limb in one corner and a tight train in another — two fold events with
     their own shapes rather than one sinusoid asked to serve both.
+  - The fit leaves vergence and hinge shape at zero always. **Reach along the
+    axis** it will fit, but only when asked — *Build a block → Advanced → let a
+    fold stop where the mapping stops* — and only from a seed, never from
+    nothing. The seed is how far the stations and contacts actually reach along
+    the axis; a free reach has a degenerate direction, since shrinking it
+    switches the fold off and "explains" any scatter at all. Across the axis is
+    never seeded: that is where the wave lives, and fading it there deletes the
+    structure rather than stopping the block over-claiming. A fitted reach
+    wider than the block is recorded as no limit, so the document reads as the
+    ordinary fold it has become.
   - The pair `|vergence| + |hinge|` is held under 0.9 so the warp stays
     monotonic. Past one it runs backwards over part of the cycle and grows
     parasitic crests; the inverse survives that, the geology does not.

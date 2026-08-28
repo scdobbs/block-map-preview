@@ -499,6 +499,11 @@ export function defaultFieldDocument() {
       contourInterval: 0,     // 0 means choose one from the relief on screen
       showStations: true,
       labelStations: true,
+      // Let a fitted fold stop where the mapping stops, rather than running at
+      // full amplitude to every edge of the block. Off by default: it is a
+      // real extra freedom given to the fit, and the fit should not quietly
+      // take freedoms nobody asked it to take.
+      localFolds: false,
       mapFull: false,
       follow: true,
       // Declination is the student's to set. Zero is not a guess at their

@@ -872,6 +872,23 @@ html, body {
 }
 .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
+/* The one panel that offers the fit a choice. Quiet until opened, because a
+   student building their first block should not need an opinion about it. */
+.advanced { margin: 14px 0 4px; border-top: 1px solid var(--line); padding-top: 10px; }
+.advanced > summary {
+  cursor: pointer; font-size: 12px; color: var(--ink-dim);
+  text-transform: uppercase; letter-spacing: .07em;
+}
+.advanced .ctl-hint { margin-top: 8px; }
+.check-row {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 12px;
+  font-size: 13.5px; color: var(--ink); cursor: pointer;
+}
+.check-row input {
+  flex: 0 0 auto; width: 18px; height: 18px; margin: 1px 0 0;
+  accent-color: var(--accent); cursor: pointer;
+}
+
 .stereo-numbers { margin-top: 14px; font-size: 12px; color: var(--ink-faint); }
 .stereo-numbers summary { cursor: pointer; color: var(--ink-dim); }
 .stereo-numbers p { margin: 7px 0 0; font-variant-numeric: tabular-nums; }

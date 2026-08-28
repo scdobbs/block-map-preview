@@ -291,14 +291,14 @@ function hangColumn(ground, notes, column) {
  * @param {object} opts       { allowNetwork, onProgress, name }
  * @returns {{doc, report}}   a block document, and everything the fit decided
  */
-export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress, name } = {}) {
+export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress, name, localFolds = false } = {}) {
   const g = georefFromBbox(bbox);
   const got = await groundFor(g, { allowNetwork, onProgress });
   const ground = got.surface;
 
   const notes = projectNotes(fieldDoc, g, ground);
   const extent = Math.max(g.width, g.depth);
-  const fit = inferHistory(notes, { extent });
+  const fit = inferHistory(notes, { extent, localFolds });
 
   // A box far bigger than the mapping inside it makes a block that is mostly
   // extrapolation. The fit is only as good as the ground it was measured on,
