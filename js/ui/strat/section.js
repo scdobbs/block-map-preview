@@ -131,8 +131,8 @@ export class StratSection {
     if (!doc.units.length) {
       this.sheetEl.appendChild(el('div', { class: 'strat-empty' }, [
         el('p', { text: 'No column yet.' }),
-        el('p', { class: 'dim', text: 'Add the units you know about on the Column tab — '
-          + 'names first, in order. Thicknesses can come later, from a tape or from a block.' }),
+        el('p', { class: 'dim', text: 'Add units on the Column tab. '
+          + 'Names first; thicknesses can come later.' }),
       ]));
       this.scaleChip.textContent = '';
       this._geom = null;
@@ -443,7 +443,7 @@ export class StratSection {
     const stations = doc.stations.filter((s) => s.unitId === id).length;
     const marks = (doc.marks || []).filter((m) => m.unitId === id).length;
     const also = [
-      kids ? `${kids} member${kids === 1 ? '' : 's'} come out of it and stand on their own` : null,
+      kids ? `${kids} member${kids === 1 ? '' : 's'} come out of it` : null,
       marks ? `${marks} symbol${marks === 1 ? '' : 's'} placed in it go` : null,
       stations ? `${stations} station${stations === 1 ? '' : 's'} keep the name; only the link goes` : null,
     ].filter(Boolean);
@@ -623,7 +623,7 @@ export class StratSection {
     const parsed = new DOMParser().parseFromString(text, 'image/svg+xml');
     const root = parsed.documentElement;
     if (root.querySelector('parsererror')) {
-      alert('Could not lay the section out for printing. The SVG export will always work.');
+      alert('Could not lay the section out for printing. Try SVG.');
       return;
     }
     const box = (root.getAttribute('viewBox') || '0 0 600 800').split(/\s+/).map(Number);
@@ -683,7 +683,7 @@ export class StratSection {
       }, 'image/png'));
     } catch (err) {
       console.error(err);
-      alert('Could not render the section to a PNG. The SVG will always work.');
+      alert('Could not render the PNG. Try SVG.');
     } finally {
       URL.revokeObjectURL(url);
     }

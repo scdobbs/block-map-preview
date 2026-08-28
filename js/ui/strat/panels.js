@@ -36,23 +36,21 @@ export function columnPanel(ctx) {
     el('p', { text: layout.rows.length
       ? `${plural(layout.rows.length, 'unit')}, ${fmtThickness(layout.total)} m`
         + (layout.unknown ? ` — ${layout.unknown} not measured` : '')
-      : 'What the succession is, before anything is said about where it crops out.' }),
+      : 'Units in order, youngest at the top.' }),
   ]));
 
   if (!doc.units.length) {
     node.appendChild(el('div', { class: 'empty' }, [
       el('p', { text: 'Nothing in the column yet.' }),
-      el('p', { class: 'dim', text: 'Start with what you know — the names, in order, '
-        + 'youngest at the top. Thicknesses can wait: an unmeasured unit still draws, '
-        + 'and the block will offer you a number for it later.' }),
+      el('p', { class: 'dim', text: 'Names first, youngest at the top. '
+        + 'Thicknesses can wait.' }),
     ]));
     node.appendChild(el('button', {
       class: 'btn primary wide', type: 'button', text: 'Add the first unit',
       onclick: () => ctx.addUnit(null, 'below'),
     }));
-    node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-      'Units are shared with the map: whatever you name here is what you can tap when '
-      + 'you log a station or name the two sides of a contact.' }));
+    node.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'Units here are the map’s units too.' }));
     return node;
   }
 
@@ -74,10 +72,9 @@ export function columnPanel(ctx) {
   });
   node.appendChild(list);
   node.appendChild(el('div', { class: 'ctl-hint standalone', text: doc.units.length > 1
-    ? 'Drag a unit by its grip to move it through the column. Pull a member clear of its '
-      + 'formation and it comes out as a formation of its own; drop one between two members '
-      + 'and it joins them. A formation travels with its members.'
-    : 'Drag a unit by its grip to move it through the column.' }));
+    ? 'Drag by the grip. Pull a member clear of its formation to take it out, or drop one '
+      + 'between members to add it. A formation moves with its members.'
+    : 'Drag by the grip to reorder.' }));
 
   node.appendChild(el('div', { class: 'row-actions' }, [
     el('button', {
@@ -92,9 +89,8 @@ export function columnPanel(ctx) {
 
   if (selected) node.appendChild(unitEditor(ctx, doc, selected));
   else {
-    node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-      'Tap a unit — here or on the section — to give it a thickness, a grain size, '
-      + 'or a description.' }));
+    node.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'Tap a unit, here or on the section, to edit it.' }));
   }
 
   return node;
@@ -121,10 +117,8 @@ function unitCard(ctx, doc, u, row, selected) {
   // the same arrangement the block's layer list uses, for the same reason.
   const grip = el('button', {
     class: 'unit-grip', type: 'button',
-    'aria-label': leaf ? 'Drag to move this unit through the column'
-      : 'Drag to move this formation and its members through the column',
-    title: leaf ? 'Drag to move this unit through the column'
-      : 'Drag to move this formation and its members through the column',
+    'aria-label': leaf ? 'Drag to reorder' : 'Drag to move it with its members',
+    title: leaf ? 'Drag to reorder' : 'Drag to move it with its members',
   }, [el('span', { text: '⠿' })]);
 
   const card = el('div', {
@@ -163,7 +157,6 @@ function unitEditor(ctx, doc, u) {
   box.appendChild(textRow({
     label: 'Name', value: u.name, placeholder: 'e.g. Poleta Formation',
     onChange: (v) => set((x) => { x.name = v.trim(); }),
-    hint: 'The same name you will tap when you log a station in it.',
   }));
 
   // Only the ranks this unit is allowed to be. A unit with members in it can
@@ -179,8 +172,8 @@ function unitEditor(ctx, doc, u) {
     text: (RANKS.find((r) => r.id === u.rank) || RANKS[1]).hint
       + (ranks.length < RANKS.length
         ? (childrenOf(doc, u).length
-          ? ' Only ranks that can hold members are offered, because this one has members in it.'
-          : ' Only ranks that sit inside something are offered, because this one does.')
+          ? ' Fewer ranks while it has members.'
+          : ' Fewer ranks while it sits in a formation.')
         : '') }));
 
   // Which formation this is a member of. Never itself, never something already
@@ -194,8 +187,7 @@ function unitEditor(ctx, doc, u) {
       onChange: (v) => ctx.setParent(u.id, v || null),
     }));
     box.appendChild(el('div', { class: 'ctl-hint standalone', text:
-      'A member sits inside a formation. The formation stops drawing a box of its own '
-      + 'and becomes the bracket down the side of its members, with their total on it.' }));
+      'The formation becomes a bracket beside its members, carrying their total.' }));
   }
 
   if (!leaf) {
@@ -205,9 +197,8 @@ function unitEditor(ctx, doc, u) {
     box.appendChild(el('div', { class: 'notice' }, [
       el('p', { text: `${plural(kids.length, 'member')}, ${fmtThickness(total)} m`
         + (known ? '.' : ' so far.') }),
-      el('p', { class: 'dim', text: 'A formation with members in it has no thickness of '
-        + 'its own — it is the sum of theirs, and storing that twice means storing it wrong. '
-        + 'Its lithology and colour are not drawn either.' }),
+      el('p', { class: 'dim',
+        text: 'Thickness, lithology and colour come from the members.' }),
     ]));
   }
 
@@ -223,8 +214,8 @@ function unitEditor(ctx, doc, u) {
     onChange: (v) => set((x) => { x.contactBelow = v; }),
   }));
   box.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    (CONTACT_STYLES.find((c) => c.id === (u.contactBelow || 'conformable')) || CONTACT_STYLES[0]).hint
-    + ' Drawn as the line between this unit and the one beneath it.' }));
+    (CONTACT_STYLES.find((c) => c.id === (u.contactBelow || 'conformable'))
+      || CONTACT_STYLES[0]).hint }));
 
   box.appendChild(noteRow({
     label: 'Description', value: u.description,
@@ -233,7 +224,7 @@ function unitEditor(ctx, doc, u) {
     rows: 4,
   }));
   box.appendChild(el('div', { class: 'ctl-hint standalone',
-    text: 'Goes in the right-hand margin of the section.' }));
+    text: 'Shown in the section’s right margin.' }));
 
   // Offered only where it means something. A member of a member is not a
   // deeper stratigraphy, it is a mess with no way to draw it: the bracket
@@ -249,10 +240,8 @@ function unitEditor(ctx, doc, u) {
       onclick: () => ctx.deleteUnit(u.id) }),
   ]));
   if (!holds && u.parentId) {
-    box.appendChild(el('div', { class: 'ctl-hint standalone', text:
-      'A member cannot hold members of its own. The column is two tiers — formations, '
-      + 'and what is inside them — because that is what the bracket beside the boxes can '
-      + 'show, and a third tier would have nowhere to be drawn.' }));
+    box.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'A member cannot hold members. The column is two tiers.' }));
   }
   return box;
 }
@@ -293,11 +282,9 @@ function thicknessBlock(ctx, u) {
       el('div', { class: 'ctl-value' }, [input, el('span', { class: 'unit', text: 'm' })]),
     ]),
     el('div', { class: 'ctl-hint', text: said == null
-      ? 'Leave it empty until you have measured it. The section draws the unit anyway, '
-        + 'dashed, at the middle of the ones you do know.'
+      ? 'Leave empty until measured. Drawn dashed at the median of the rest.'
       : u.thicknessSource === 'block'
-        ? 'This came from a block cut from your map, not from a tape. Type over it whenever '
-          + 'you measure it for real.'
+        ? 'From a block, not a tape. Type over it.'
         : 'What you measured.' }),
   ]));
 
@@ -309,10 +296,9 @@ function thicknessBlock(ctx, u) {
           + `map, makes it ${fmtThickness(clash.model)} m — `
           + `${fmtThickness(Math.abs(clash.diff))} m ${clash.thicker ? 'thinner' : 'thicker'}.` }),
       ]),
-      el('p', { class: 'dim', text: 'Both are kept. A disagreement here is a real finding: '
-        + 'either the contacts are drawn in the wrong place, or the structure the block fitted '
-        + 'is repeating or cutting out section, or the thickness you were given is not the '
-        + 'thickness here. Nothing will decide it for you.' }),
+      el('p', { class: 'dim', text: 'Both are kept. Check where the contacts are drawn, '
+        + 'whether the fitted structure repeats or cuts out section, and whether that '
+        + 'thickness applies here.' }),
       el('div', { class: 'row-actions' }, [
         el('button', { class: 'btn small', type: 'button', text: "Take the block's",
           onclick: () => ctx.editUnit(u.id, (x) => {
@@ -376,11 +362,9 @@ function grainBlock(ctx, doc, u) {
 
   box.appendChild(el('div', { class: 'sub-head', text: 'Grain size' }));
   box.appendChild(el('div', { class: 'ctl-hint standalone', text: own
-    ? 'Height is a percentage up the unit, so the shape survives if the thickness changes. '
-      + 'Two points at the same height make a sharp break rather than a ramp.'
-    : `Nothing drawn yet, so the box is flat at ${scale.steps[defaultGrainFor(u.rockId, scaleId)].long.toLowerCase()}`
-      + ' — what the rock type implies. Drag on the right-hand edge of the unit in the section, '
-      + 'or add a point here.' }));
+    ? 'Height is a percentage up the unit. Two points at the same height make a sharp break.'
+    : `Flat at ${scale.steps[defaultGrainFor(u.rockId, scaleId)].long.toLowerCase()}, `
+      + 'from the rock type. Draw on the section, or add a point.' }));
 
   if (own) {
     const rows = el('div', { class: 'grain-list' });
@@ -418,11 +402,10 @@ function grainBlock(ctx, doc, u) {
     own ? el('button', { class: 'btn small', type: 'button', text: 'Back to flat',
       onclick: () => ctx.editUnit(u.id, (x) => { x.grains = []; }) }) : null,
   ]));
-  box.appendChild(el('div', { class: 'ctl-hint standalone', text: drawing
-    ? 'Drag inside a unit on the section. Left is fine, right is coarse. Until you stop, '
-      + 'a drag draws instead of scrolling.'
-    : 'Armed rather than always on, because the section is taller than the screen and '
-      + 'dragging it is normally how you scroll.' }));
+  if (drawing) {
+    box.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'Drag inside a unit. Left is fine, right is coarse.' }));
+  }
   return box;
 }
 
@@ -443,8 +426,7 @@ export function marksPanel(ctx) {
   if (!doc.units.length) {
     node.appendChild(el('div', { class: 'empty' }, [
       el('p', { text: 'Add a unit first.' }),
-      el('p', { class: 'dim', text: 'A symbol is placed at a height in a unit, so there has '
-        + 'to be a unit for it to be at a height in.' }),
+      el('p', { class: 'dim', text: 'Symbols go at a height in a unit.' }),
     ]));
     return node;
   }
@@ -452,7 +434,7 @@ export function marksPanel(ctx) {
   node.appendChild(el('div', { class: `notice${armed ? ' warn' : ''}` }, [
     el('p', { text: armed
       ? `Tap the section where you saw ${symbolLabel(armed).toLowerCase()}.`
-      : 'Pick a symbol, then tap the section at the height you saw it.' }),
+      : 'Pick a symbol, then tap the section where you saw it.' }),
     armed ? el('button', { class: 'btn small', type: 'button', text: 'Stop placing',
       onclick: () => ctx.setMarkSymbol(null) }) : null,
   ]));
@@ -518,7 +500,7 @@ export function legendPanel(ctx) {
 
   node.appendChild(el('div', { class: 'section-head' }, [
     el('h2', { text: 'Explanation' }),
-    el('p', { text: 'Everything on the sheet, and nothing that is not.' }),
+    el('p', { text: 'Lithologies and symbols in use.' }),
   ]));
 
   node.appendChild(el('div', { class: 'sub-head', text: 'The column' }));
@@ -533,18 +515,15 @@ export function legendPanel(ctx) {
 
   if (layout.unknown) {
     node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-      `Unmeasured units are drawn dashed at ${layout.nominal} m — the middle of the ones you `
-      + 'have measured — so the section has a shape before it has numbers. The total above '
-      + 'includes them, which is why it is not a measurement either.' }));
+      `Unmeasured units are drawn dashed at ${layout.nominal} m, the median of the rest. `
+      + 'The total includes them.' }));
   }
 
   const broken = layout.groups.filter((g) => g.broken);
   for (const g of broken) {
     node.appendChild(el('div', { class: 'notice warn' }, [el('p', { text:
-      `The members of ${g.unit.name || 'a formation'} are not next to each other in the column. `
-      + 'The bracket spans from the first to the last, which means it also spans something '
-      + 'that is not part of it. Move them together, or the formation is claiming rock it '
-      + 'does not have.' })]));
+      `The members of ${g.unit.name || 'a formation'} are not next to each other, so its `
+      + 'bracket spans units that are not part of it. Move them together.' })]));
   }
 
   const liths = lithologyEntries(doc);
@@ -564,8 +543,7 @@ export function legendPanel(ctx) {
   const marks = legendEntries(doc);
   node.appendChild(el('div', { class: 'sub-head', text: 'Symbols' }));
   if (!marks.length) {
-    node.appendChild(el('div', { class: 'empty-note', text:
-      'No symbols on the section yet, so there is nothing to explain.' }));
+    node.appendChild(el('div', { class: 'empty-note', text: 'No symbols placed yet.' }));
   } else {
     const list = el('div', { class: 'legend-list' });
     for (const m of marks) {
@@ -578,10 +556,8 @@ export function legendPanel(ctx) {
     node.appendChild(list);
   }
 
-  node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'This is what goes under the section when you save it, drawn from what is actually on '
-    + 'the sheet. A legend that lists symbols nobody used teaches that a legend is '
-    + 'boilerplate rather than a promise.' }));
+  node.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: 'This goes under the section when you save it.' }));
   return node;
 }
 
@@ -597,7 +573,7 @@ export function stratSetupPanel(ctx) {
 
   node.appendChild(el('div', { class: 'section-head' }, [
     el('h2', { text: 'The sheet' }),
-    el('p', { text: 'How the section is drawn, and where it goes next.' }),
+    el('p', { text: 'How the section is drawn, and where it goes.' }),
   ]));
 
   node.appendChild(selectRow({
@@ -606,19 +582,15 @@ export function stratSetupPanel(ctx) {
     onChange: (v) => ctx.setSetting({ grainScale: v }),
   }));
   node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'Wentworth for siliciclastics, Dunham for carbonates. One axis per section — a drawing '
-    + 'with two x axes on it is not a section. Profiles you have already drawn keep their '
-    + 'step numbers, so switching and switching back loses nothing.' }));
+    'Wentworth for siliciclastics, Dunham for carbonates. Profiles you have drawn are kept.' }));
 
   node.appendChild(numberRow({
     label: 'Vertical scale', value: Number(s.columnScale) || 0,
     min: 0, max: 500, step: 5, unit: 'm',
     onChange: (v) => ctx.setSetting({ columnScale: v }),
     hint: (Number(s.columnScale) || 0) === 0
-      ? 'Zero fits the whole column on the screen. Set a number and it is metres per 100 '
-        + 'pixels — a real scale, the one that goes in the caption.'
-      : `${s.columnScale} m per 100 px. Everything is drawn to it, so a thin bed among thick `
-        + 'ones is genuinely thin.',
+      ? 'Zero fits the column to the screen. Otherwise, metres per 100 px.'
+      : `${s.columnScale} m per 100 px.`,
   }));
 
   const room = ctx.roomForText();
@@ -627,8 +599,7 @@ export function stratSetupPanel(ctx) {
     onChange: (v) => ctx.setSetting({ columnDescriptions: v }),
     hint: room
       ? 'The text down the right-hand side of the sheet.'
-      : 'On, but there is no room for it on this screen, so the sheet is drawn without it. '
-        + 'Turn the screen, or pull the panel down. It always goes in the saved file.',
+      : 'No room on this screen — turn it, or pull the panel down. Always in the saved file.',
   }));
   node.appendChild(toggleRow({
     label: 'Symbols', value: s.columnMarks !== false,
@@ -638,11 +609,8 @@ export function stratSetupPanel(ctx) {
 
   // --- taking the column somewhere ----------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: 'Into the block' }));
-  node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'The block’s stratigraphy is this column: units youngest first, a thickness each. '
-    + 'Sending it over replaces the block’s layers and leaves its history — the folds, '
-    + 'the faults — exactly as they are, so you can deform your own succession rather than '
-    + 'the default one.' }));
+  node.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: 'Replaces the block’s layers. Its history is left alone.' }));
   node.appendChild(el('button', {
     class: 'btn primary wide', type: 'button',
     text: `Send ${plural(layout.rows.length, 'unit')} to the block`,
@@ -669,10 +637,8 @@ export function stratSetupPanel(ctx) {
 
   node.appendChild(el('div', { class: 'sub-head', text: 'From the map' }));
   node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'Every unit here is a unit on the map, so there is nothing to import — name it once and '
-    + 'it is in both. What the map gives back is thicknesses: build a block from your mapped '
-    + 'area on the Map section’s Block tab, and the contacts it traced become measured '
-    + 'thicknesses here, marked as having come from a model.' }));
+    'Units are already shared. Build a block from a mapped area and its thicknesses come '
+    + 'back here, marked as modelled.' }));
   const stamped = doc.units.filter((u) => u.modelThickness != null).length;
   node.appendChild(el('div', { class: 'stats' }, [
     statLine('Modelled', String(stamped), stamped ? 'good' : 'dim'),
@@ -699,23 +665,20 @@ export function stratSetupPanel(ctx) {
 const FORMATS = [
   {
     id: 'pdf', label: 'PDF',
-    blurb: 'The sheet as it is meant to be handed in: the section with its explanation '
-      + 'under it, on a page as tall as the column needs, in vector. It opens the print '
-      + 'dialog — choose Save as PDF there.',
+    blurb: 'Section and explanation on one page, in vector. Opens the print dialog — '
+      + 'choose Save as PDF there.',
   },
   {
     id: 'svg', label: 'SVG',
-    blurb: 'The same drawing as a file to edit, in Illustrator or Inkscape, at whatever '
-      + 'size a report wants.',
+    blurb: 'The drawing, to edit in Illustrator or Inkscape.',
   },
   {
     id: 'png', label: 'PNG',
-    blurb: 'A bitmap at three times size, for a document that will not take vector.',
+    blurb: 'A bitmap at three times size.',
   },
   {
     id: 'csv', label: 'CSV',
-    blurb: 'The numbers rather than the drawing: one row per unit, with both thicknesses, '
-      + 'the grain-size range, the contact style and everything placed in it.',
+    blurb: 'One row per unit: thicknesses, grain size, contact style, marks.',
   },
 ];
 

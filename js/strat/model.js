@@ -35,7 +35,7 @@ import { newFieldId } from '../field/model.js';
 
 export const RANKS = [
   { id: 'group', label: 'Group', holds: true, hint: 'Several formations that belong together.' },
-  { id: 'formation', label: 'Formation', holds: true, hint: 'The mappable unit. The usual answer.' },
+  { id: 'formation', label: 'Formation', holds: true, hint: 'The mappable unit.' },
   { id: 'member', label: 'Member', holds: false, hint: 'A named part of a formation.' },
   { id: 'bed', label: 'Bed', holds: false, hint: 'A single distinctive layer.' },
   { id: 'unit', label: 'Unit', holds: false, hint: 'Informal — "unit 3 of the Poleta".' },
@@ -240,10 +240,10 @@ export const CONTACT_STYLES = [
   { id: 'conformable', label: 'Conformable', hint: 'Deposition carried on without a break.' },
   { id: 'sharp', label: 'Sharp', hint: 'An abrupt change, still conformable.' },
   { id: 'gradational', label: 'Gradational', hint: 'One passes up into the other.' },
-  { id: 'erosional', label: 'Erosional', hint: 'Scoured. Drawn as a cut surface.' },
-  { id: 'unconformity', label: 'Unconformity', hint: 'Time missing. Drawn wavy.' },
+  { id: 'erosional', label: 'Erosional', hint: 'Scoured.' },
+  { id: 'unconformity', label: 'Unconformity', hint: 'Time missing.' },
   { id: 'fault', label: 'Fault', hint: 'The succession is cut, not deposited.' },
-  { id: 'covered', label: 'Covered', hint: 'Not exposed — you did not see this one.' },
+  { id: 'covered', label: 'Covered', hint: 'Not exposed.' },
 ];
 
 export const CONTACT_STYLE_BY_ID = Object.fromEntries(CONTACT_STYLES.map((c) => [c.id, c]));
@@ -491,8 +491,7 @@ export function toBlockLayers(doc, { max = MAX_LAYERS } = {}) {
 
   if (layout.unknown) {
     notes.push(`${layout.unknown} unit${layout.unknown === 1 ? '' : 's'} with no thickness `
-      + `went in at ${layout.nominal} m, the middle of the ones you have measured. `
-      + 'Change them on the Layers tab or measure them and build again.');
+      + `went in at ${layout.nominal} m. Change them on the Layers tab.`);
   }
 
   let rows = layout.rows;
@@ -501,8 +500,7 @@ export function toBlockLayers(doc, { max = MAX_LAYERS } = {}) {
     const merged = rows.slice(max - 1);
     const thickness = merged.reduce((a, r) => a + r.thickness, 0);
     notes.push(`The block holds ${max} units and the column has ${rows.length}. `
-      + `The lowest ${merged.length} were merged into one ${Math.round(thickness)} m unit, `
-      + 'since the top of a column is what a map is drawn on.');
+      + `The lowest ${merged.length} were merged into one ${Math.round(thickness)} m unit.`);
     rows = [...keep, {
       ...merged[0],
       thickness,

@@ -901,8 +901,8 @@ export function inferHistory(obs, { extent = 4000, localFolds = false } = {}) {
       const because = plane.reason === 'relief'
         ? `is drawn across ground with too little relief to give a dip — ${Math.round(plane.relief)} m along the whole trace`
         : plane.reason === 'straight'
-          ? 'runs too straight for its trace to say anything about its dip: the points lie along a line, and every plane through a line contains it equally well, whatever its dip'
-          : 'has a trace that does not sit in any one plane, so there is no one dip to read off it';
+          ? 'runs too straight to give a dip — its points lie along a line, and every plane through a line contains it'
+          : 'has a trace that does not sit in any one plane';
       warnings.push(`${label} ${because}. It is taken as vertical, which is an assumption and not a measurement. Measure the plane at an exposure, or set its dip on the line itself, and the fit will use that instead.`);
     }
   }

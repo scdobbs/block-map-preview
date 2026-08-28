@@ -253,18 +253,15 @@ function reportBlock(ctx, r) {
     wrap.appendChild(el('div', { class: 'sub-head', text: 'Into your column' }));
     const lines = [];
     if (note.adopted.length) {
-      lines.push(`${listNames(note.adopted)} had no thickness in your column and now `
-        + `${note.adopted.length === 1 ? 'has' : 'have'} the one this block measured, marked `
-        + 'as having come from a model. Type over it whenever you measure it for real.');
+      lines.push(`${listNames(note.adopted)} had no thickness and `
+        + `${note.adopted.length === 1 ? 'has' : 'have'} taken the one this block measured.`);
     }
     if (note.noted.length) {
-      lines.push(`${listNames(note.noted)} agreed with what you already had, to within the `
-        + 'ten metres the elevation data is good for.');
+      lines.push(`${listNames(note.noted)} agreed with what you already had.`);
     }
     for (const c of note.clashed) {
       lines.push(`${c.name}: you have ${Math.round(c.said)} m, this block makes it `
-        + `${Math.round(c.model)} m. Both are kept — that disagreement is a finding, and the `
-        + 'Strata section shows it beside the unit.');
+        + `${Math.round(c.model)} m. Both are kept; the Strata section shows the difference.`);
     }
     for (const l of lines) wrap.appendChild(el('div', { class: 'ctl-hint standalone', text: l }));
     wrap.appendChild(el('button', {
