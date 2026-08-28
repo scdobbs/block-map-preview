@@ -5,7 +5,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from './controls.js';
 import { BlockMaterial } from './material.js';
 import { buildBlockGeometry, buildEdgeLines, footprint } from './block.js';
-import { planeFrame, axisFrame, rotateAbout, DEG } from '../geo/math.js';
+import { planeFrame, axisFrame, rotateAbout, foldWarpInverse, foldEnvelope, DEG } from '../geo/math.js';
 import { surfaceHeight, surfaceRange, isDemSurface } from '../geo/surfaces.js';
 import { unconformityDatums } from '../geo/model.js';
 import { buildContourLabels, buildLabelMeshes, MAX_LABELS } from './contours.js';
@@ -302,6 +302,11 @@ export class BlockScene {
         // Built the same way the geology is — place the hinge in the upright
         // fold, then carry it through the plunge tilt — so the drawn lines and
         // the shaded rock cannot drift apart.
+        //
+        // That promise is why the warp has to be inverted here rather than
+        // ignored. A verging fold's troughs are no longer half a wavelength
+        // from its crests, so drawing them at even spacing would put the one
+        // line a student uses to read the structure in the wrong place.
         const { perp, axis } = axisFrame(event.trend, event.plunge);
         const pts = [];
         const lam = Math.max(1, event.wavelength);
@@ -309,19 +314,26 @@ export class BlockScene {
         const cx = event.centerX || 0;
         const cy = event.centerY || 0;
         for (let k = -3; k <= 3; k++) {
-          // cos(2*pi*u/lam + phase) is extreme where 2*pi*u/lam + phase = k*pi
-          const u = (k * Math.PI - phase) * lam / (2 * Math.PI);
-          const crest = event.amplitude * Math.cos(k * Math.PI);
+          // cos(psi) is extreme where psi = k*pi, and psi is the warped phase.
+          const t = foldWarpInverse(k * Math.PI, event.vergence, event.hinge);
+          const u = (t - phase) * lam / (2 * Math.PI);
+          // A hinge outside the fold's reach is not a hinge. Taken at the
+          // centre of the axis, which is where the drawn line is anchored.
+          const fade = foldEnvelope(0, u, event.reachAlong, event.reachAcross);
+          if (fade <= 0) continue;
+          const crest = event.amplitude * fade * Math.cos(k * Math.PI);
           const tilted = rotateAbout(
             [perp[0] * u, perp[1] * u, crest], perp, -(event.plunge || 0),
           );
           const base = [tilted[0] + cx, tilted[1] + cy, tilted[2]];
-          const half = span;
+          // A fold that dies out along strike gets a trace that stops with it.
+          const half = event.reachAlong > 0 ? Math.min(span, event.reachAlong) : span;
           pts.push(
             base[0] - axis[0] * half, base[1] - axis[1] * half, base[2] - axis[2] * half,
             base[0] + axis[0] * half, base[1] + axis[1] * half, base[2] + axis[2] * half,
           );
         }
+        if (!pts.length) break;
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
         this.helpers.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({

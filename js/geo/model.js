@@ -132,10 +132,13 @@ export const EVENT_TYPES = {
   },
   fold: {
     label: 'Fold beds',
-    blurb: 'Sinusoidal folds about a trending, optionally plunging axis.',
+    blurb: 'Folds about a trending, optionally plunging axis. Symmetric by default; can verge, sharpen and die out.',
     defaults: () => ({
       trend: 0, plunge: 0, wavelength: 1400, amplitude: 220,
       phase: 0, centerX: 0, centerY: 0,
+      // Shape and extent. All four default to the plain infinite cosine this
+      // event used to be, so every document made before them reads the same.
+      vergence: 0, hinge: 0, reachAlong: 0, reachAcross: 0,
     }),
   },
   domebasin: {

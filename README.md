@@ -140,6 +140,25 @@ through. **Check the whole map** reads bedding on a grid across the block and
 fits the same girdle to it, so you can find out how close your handful of
 stations got without being told what the fold was set to.
 
+**On a block cut from a field area the net carries two sets of poles**, and the
+difference between them is the point. The round ones are the block's, read out
+of the geology under each marker; the green crosses are the readings themselves,
+straight from the notebook and untouched by the fit. Both are fitted and both
+verdicts are printed, the measurements first.
+
+This matters more than it sounds. A marker holds only its position and recovers
+its attitude from the rock beneath it, which is exactly right on a block you
+built — the block is the ground, and a marker is you going and looking at it.
+On a block that was *fitted to a notebook* it is circular: the poles are the
+fit's own answer handed back to it, and they will land on a flawless girdle
+whatever the outcrop did, because the thing they were read off is one
+cylindrical fold by construction. A misfit of zero there is a tautology, not a
+result, and the readout says so in those words. **Check the whole map** has the
+same shape — both sides of that comparison come out of the block — so on a
+fitted block it tells you whether your stations sampled it fairly, not whether
+the block is right. The measured poles are the only marks on the net that can
+disagree with the model, which is the reason they are there.
+
 Because it stays up, the net is an instrument rather than a lookup. Open a
 fold in **History** with the net beside it and drag the plunge: the block
 re-folds, every marker re-reads the bedding under it, the poles slide round the
@@ -300,7 +319,13 @@ pointing down-plunge, so the two families of symbol never have to be told
 apart by their numbers.
 
 Name the feature — bedding, foliation, joint, fault plane, contact. It costs a
-tap and it keeps a joint from quietly joining a fold-axis fit. Name the unit by
+tap and it keeps a joint from quietly joining a fold-axis fit. Two of the names
+do more than that: **a fault plane and a slickenline are evidence about the
+fault**, and the block fit reads them there. A plane measured on the surface
+itself outranks anything derived from the trace, and a slickenline is the rake
+— the direction of slip, and the one fault parameter nothing else on a map can
+supply. Which is why the single phone placement above is worth taking: back on
+the fault and edge along the striae records both at once. Name the unit by
 tapping one you have used before or typing a new one; a name typed once becomes
 a tap thereafter, and a course can set its units up in advance on Setup.
 
@@ -329,6 +354,28 @@ press **Here** to drop a point where you are standing, which is what you do
 when the contact is under your feet and invisible from any distance. Undo takes
 back the last point; Done keeps the line; the × throws it away. **Keep drawing**
 picks an existing line back up and adds to its end.
+
+**A fault carries three things a trace cannot give you**, and they are asked
+for on the line itself: its **dip direction** (not measured, vertical, or one
+of the two bearings its own trace allows, given as a three-digit azimuth —
+`117°`, the compass direction the plane leans toward — with a separate
+protractor for the **dip angle**, how far it leans below horizontal), **which
+way it moved** — thrust, normal, dextral, sinistral, or not sure — and the
+**unit either side**, hanging wall and footwall, offered once there is a dip
+direction for those words to mean anything.
+
+Those two numbers are the pair a notebook writes as `117/30`, and they are kept
+visibly apart because running them together is the easiest mistake in the
+control: one is measured on the map with a compass, the other in the vertical
+plane with a clinometer. The two bearings offered are ninety degrees either
+side of the trace and no others, because the line already fixes the strike —
+the only thing left to say is which side the plane leans to, and the fit takes
+it that way round, so the strike keeps following the line if a point is dragged
+later. None of the three is guessed and
+none is required. What they buy is in [Building a block from what you
+mapped](#building-a-block-from-what-you-mapped): a dip where the ground was too flat
+to give one, a slip search narrowed from every direction to one, and a measure
+of the throw that does not need the same contact mapped twice.
 
 **Points can be dragged**, while the line is being drawn and afterwards. A
 selected line shows a handle on every point; take one and move it. A whole drag
@@ -379,14 +426,35 @@ The order is not an implementation detail, it is the argument.
    already known; poles on a small circle are a dome, which has no hinge line
    at all. Fitting a fold to a homocline would always "succeed", at some
    enormous wavelength, and mean nothing.
-2. **The structure's numbers are fitted to those readings.** A fault cannot
-   disturb this step: a fault translates a block without rotating it, so both
-   sides of one read the same attitude.
-3. **Each fault plane comes out of its own drawn trace**, by geometry rather
-   than by search. A fault trace on the map is the intersection of the fault
-   with the ground, so the traced points lie in the plane and the plane is the
-   one that best contains them.
-4. **Only then is slip fitted**, against contacts that cross the faults.
+2. **The structure's numbers are fitted to those readings**, with the faults
+   not yet in place. A fault translates a block without rotating it, so the
+   beds it carries keep their attitude.
+3. **Each fault plane comes from what was measured on it** — a plane read at an
+   exposure first, then whatever you set on the line, and only failing both
+   from its drawn trace against the terrain, by geometry rather than by search.
+   A fault trace on the map is the intersection of the fault with the ground,
+   so the traced points lie in the plane and the plane is the one that best
+   contains them. Where a measurement and the trace both have something to say
+   they are held against each other, because they describe the same surface and
+   twenty degrees apart means one of them is in the wrong place.
+4. **Only then is slip fitted** — against contacts mapped on both sides, the
+   units named either side, the sense you observed, and any slickenlines
+   measured on the plane.
+5. **Then the fold and the slip are refitted against each other**, once each
+   way. Step 2's claim is only half true and it is worth saying which half: the
+   beds a fault carries keep their attitude, but the attitude you *see* at a
+   station is the fold's attitude at wherever that rock came from, and sliding
+   the hanging wall changes that. So the offset was just fitted to a fold that
+   was fitted assuming no offset, and one pass back and forth lets each answer
+   for the other.
+6. **Both sides of every fault are put on the stereonet separately.** A block
+   here is one structure with a piece of it slid along a plane, which is the
+   right model for a fault that cuts a fold and the wrong one for a thrust that
+   carries a differently folded sheet in over the top of another. When the
+   whole set of readings is a mess and each half of it is clean, that is not
+   noise in the data — it is the fault on the map, no offset will fix it, and
+   being told so beats an afternoon spent adjusting a fold to fit readings from
+   the other side of a thrust.
 
 ### The contact trick
 
@@ -432,6 +500,27 @@ order is what gives a thickness between two contacts, what recognises the same
 contact again across a fault, and what tells "A over B" from "B over A" on an
 overturned limb. Upper means higher in the column — the younger of the two
 where the beds are the right way up — whatever the ground happens to do.
+
+**The same two names on the fault itself measure the throw a second way**, and
+it is the way a thrust usually needs. A fault that carries older rock over
+younger repeats section, and repeated section is only visible to the contact
+term if you happened to map the same contact twice, once in each block. Not
+everybody does. Almost everybody writes down what the rock is on each side of a
+fault — and unit 5 against the Campito across the plane is a statement about
+the stratigraphic separation, in the column's own metres, with a sign on it.
+Younger-on-older and older-on-younger are the difference between a normal fault
+and a thrust.
+
+A contact drawn up to a fault and a stride past it is **not** that contact found
+again on the far side, and it is not allowed to act like one. Two stray points
+across the line will otherwise forbid the fault from having moved at all: any
+slip drags them tens of metres from the fifteen points they were drawn with,
+and the spread that costs is larger than anything the offset can win back. The
+fault then comes back with a confident offset of about a metre, on the
+authority of the end of somebody's pencil line. A side has to be genuinely
+mapped — several points and a real share of the surface — before it counts as
+the other half of a cut contact, and where the test fails the fit says which of
+the two things happened.
 
 It also lets the column be checked. The unit beneath one contact is the unit
 above the next one down, so the two names have to agree; when they do not, the
@@ -487,9 +576,23 @@ Which is most of what it is for.
 - **A fault trace across ground with too little relief** constrains no dip at
   all — every plane containing that line fits equally well. It is called
   vertical and flagged as an assumption rather than given a fabricated dip that
-  looks measured.
-- **A fault no contact crosses** gets zero slip and says the fault is drawn,
-  not solved.
+  looks measured, and the warning names the two ways you can close the gap.
+- **A fault nothing measures the throw of** gets zero slip and says the fault is
+  drawn, not solved — telling "you never found this contact again" apart from
+  "you stopped drawing it at the fault", since those are different things to go
+  and fix.
+- **A slip the data barely prefers** is reported as undetermined. After the
+  search settles, the offset is walked across its whole range and the fit is
+  asked how much it actually minds: when the answer is less than half a degree,
+  the number is where the search stopped rather than what the evidence says,
+  and it prints identically to one that was measured unless somebody says so.
+- **Slickenlines that cannot belong to the fault they were taken on** — a rake
+  that is not the sense you observed however the rock moved along it — are
+  flagged rather than averaged in. A rake is measured in a plane, so usually
+  it is the plane that is wrong.
+- **Readings either side of a fault that are two structures, not one**, are
+  called that. No offset makes a single fold explain both, so the fit says to
+  model one side at a time instead of leaving you to discover it by failing.
 - **A history more than about eight degrees from the readings** is reported as
   not an explanation of them. A block quietly twelve degrees from every reading
   it was built from looks exactly as convincing as one that fits, and is the
@@ -718,7 +821,7 @@ Every deformation is exactly invertible, which is what makes this work:
 | Event | Forward | Why the inverse is exact |
 |---|---|---|
 | **Tilt** | rigid rotation about the strike line | rotations invert |
-| **Fold** | an upright fold (vertical displacement, wave read across the horizontal `perp` axis), then a rigid tilt about `perp` by the plunge | neither step changes the `perp` coordinate the wave is read from |
+| **Fold** | an upright fold (vertical displacement, a warped and enveloped wave read across the horizontal `perp` axis), then a rigid tilt about `perp` by the plunge | neither step changes the horizontal coordinates the profile is read from, whatever shape that profile has |
 | **Dome / basin** | vertical displacement depending only on map position | map position is unchanged by vertical motion |
 | **Fault** | rigid translation of the hanging wall, parallel to the fault plane | slip lies in the plane, so the hanging-wall test gives the same answer before and after |
 | **Unconformity** | splits the column: units above the erosion surface skip all older history | a branch, not a transform |
@@ -892,13 +995,58 @@ fragment uniform budget of older mobile GPUs.
   property that the whole model rests on, so they need a different (iterative)
   approach. The fault code is written around a signed distance to the fault
   surface so a curved surface can be slotted in later.
+- **A fold has a shape and a reach, not just a size.** The profile is a cosine
+  warped by two numbers and multiplied by an envelope, all of them functions of
+  one coordinate — how far across the axis a point lies. That is the property
+  the model rests on: moving in z does not change that coordinate, so the
+  inverse of a fold stays exact and closed-form whatever the profile does, and
+  `beddingAt` finite-differences the result so nothing needs an analytic
+  derivative either. Real fold geometry, for the price of arithmetic.
+  - **Vergence** moves the troughs off centre, so one limb is short and steep
+    and the other long and gentle. Zero is a symmetric fold. It is the odd term
+    `vergence * (1 - cos t)`; the crests keep their full height, only the
+    spacing between them changes.
+  - **Hinge shape** moves the steepest part of each limb. Negative opens the
+    crests and troughs into a genuine box fold, flat on top with steep sides;
+    positive tightens both hinges at the cost of flattening the middle of each
+    limb. It is the even term `hinge * sin(2t) / 2`, so it treats both hinges
+    alike and is never vergence. A true **chevron** — straight limbs, angular
+    hinge — is not in this family, because the derivative of a triangle wave is
+    a square wave and a square wave is not a couple of harmonics.
+  - **Reach**, along the axis and across it, fades the fold to nothing beyond
+    it with the same bounded cosine taper a dome or basin already uses. Left at
+    zero the fold runs at full amplitude to every edge of the block, which is
+    what it always used to do. Setting it is what lets one block hold an open
+    limb in one corner and a tight train in another — two fold events with
+    their own shapes rather than one sinusoid asked to serve both.
+  - The pair `|vergence| + |hinge|` is held under 0.9 so the warp stays
+    monotonic. Past one it runs backwards over part of the cycle and grows
+    parasitic crests; the inverse survives that, the geology does not.
 - Folds are similar folds (Class 2): layer thickness is preserved parallel to
-  the axial surface, not perpendicular to bedding.
+  the axial surface, not perpendicular to bedding. **The profile does not vary
+  with depth at all** — the fold at 800 m down is identical to the one at the
+  surface, and persists forever. Real folds usually die out downward. That is
+  the one extension here that is not free: the moment the displacement depends
+  on z the inverse goes implicit, and the exact cheap inverse is what the whole
+  engine rests on.
 - A plunging fold is built as an upright fold plus a rigid tilt about the
   horizontal axis perpendicular to its trend, so the whole fold train tilts —
   which is what puts the nose in the map view. Merely leaning the displacement
   direction over does not plunge anything; it shears the fold and leaves the
   hinge of a flat bed horizontal.
+- Both of the envelope's coordinates are read off the **unrotated** offset from
+  the fold's centre, and both basis vectors are horizontal, so neither can see
+  a point's height. Taking them after the plunge tilt instead gives an
+  identical wave — the tilt is about the across-axis vector, which it leaves
+  alone — but it tips the along-axis vector out of horizontal, and the envelope
+  of a plunging fold would then fade with depth rather than along strike. It
+  would also stop being an exact inverse, silently.
+- A fold event can also be made asymmetric **without** any of this, by putting
+  a tilt after it: an upright fold with 31° limbs plus a 15° tilt about its own
+  axis reads 16° on one limb and 46° on the other, and past 31° the shallow
+  limb overturns. That changes limb dips but not limb widths, and it tilts the
+  axial surfaces with it. Vergence is the other kind of asymmetry — unequal
+  limb *widths*, upright axial surface — and the two compose.
 - Intrusions cut everything older than themselves and are deformed by
   everything younger, which is correct, but they have no chilled margins or
   contact aureoles.

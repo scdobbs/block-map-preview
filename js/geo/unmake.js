@@ -20,7 +20,8 @@
 // readback, and so the geology can be unit-tested. Keep the two in step.
 
 import {
-  planeFrame, axisFrame, slipVec, rotateAbout, normalToStrikeDip, dot, sub, DEG,
+  planeFrame, axisFrame, azimuthVec, slipVec, rotateAbout, normalToStrikeDip,
+  foldWarp, foldEnvelope, dot, sub, DEG,
 } from './math.js';
 import { surfaceHeight } from './surfaces.js';
 import {
@@ -50,7 +51,10 @@ export function compileHistory(doc) {
       }
       case 'fold': {
         const { perp } = axisFrame(e.trend, e.plunge);
-        return { ...e, perp };
+        // `perp` is across the axis, `az` along it — both horizontal, and both
+        // in the frame the plunge tilt is undone into. Horizontal is the whole
+        // point: see the note in undoEvent.
+        return { ...e, perp, az: azimuthVec(e.trend) };
       }
       case 'fault': {
         const { normal } = planeFrame(e.strike, e.dip);
@@ -96,7 +100,33 @@ function undoEvent(e, p) {
       // Rotating about `perp` leaves the `perp` component untouched, and the
       // fold displaces along z, which is also orthogonal to `perp`. So the
       // wave coordinate survives both steps and the inverse stays exact.
-      const off = e.amplitude * Math.cos(k * dot(d, e.perp) + (e.phase || 0) * DEG);
+      //
+      // The same argument is what lets the shape and the envelope in here at
+      // all, and it is the one thing that could quietly break, so both of the
+      // envelope's coordinates are taken from the UNROTATED offset and from
+      // its horizontal part alone. That is not a shortcut, it is the proof:
+      // `perp` and `az` are horizontal, so neither dot product below can see
+      // p[2] at all, and the displacement stays a function of position in plan.
+      //
+      // Reading them off `d` instead would be wrong, and silently so. Rotating
+      // about `perp` leaves the `perp` component alone — so the wave itself is
+      // identical either way — but it tilts `az` out of horizontal, and the
+      // along-axis coordinate of a plunging fold would then drift with depth.
+      // The envelope would fade with height rather than along strike, and the
+      // inverse would no longer be exact.
+      //
+      // A profile that genuinely depended on z — a fold dying out downward —
+      // would make the inverse implicit, and that is the one extension here
+      // that is not free.
+      const vx = p[0] - cx;
+      const vy = p[1] - cy;
+      const across = vx * e.perp[0] + vy * e.perp[1];
+      const along = vx * e.az[0] + vy * e.az[1];
+      const amp = e.amplitude
+        * foldEnvelope(along, across, e.reachAlong, e.reachAcross);
+      const off = amp * Math.cos(
+        foldWarp(k * across + (e.phase || 0) * DEG, e.vergence, e.hinge),
+      );
       return [d[0] + cx, d[1] + cy, d[2] - off];
     }
     case 'domebasin': {

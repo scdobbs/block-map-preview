@@ -117,16 +117,50 @@ function emitTilt(p) {
 
 function emitFold(p) {
   return {
-    decl: `uniform vec3 ${p}_perp; uniform vec3 ${p}_wave; uniform vec3 ${p}_center; uniform float ${p}_plunge;`,
-    // _wave = (amplitude, angular wavenumber, phase in radians)
+    decl: `uniform vec3 ${p}_perp; uniform vec3 ${p}_az; uniform vec3 ${p}_wave; uniform vec4 ${p}_shape; uniform vec3 ${p}_center; uniform float ${p}_plunge;`,
+    // _wave  = (amplitude, angular wavenumber, phase in radians)
+    // _shape = (vergence, hinge, reach along axis, reach across axis)
+    //
+    // The warp and the envelope here are a line-for-line mirror of foldWarp
+    // and foldEnvelope in geo/math.js, including the way the skew pair is
+    // scaled back inside its circle. THE TWO MUST AGREE — the CPU walk is what
+    // the identify tool, the stereonet and the whole fit read, and this is
+    // what the student sees. Change one, change the other.
     code: `  {
     // A plunging fold is an upright fold that was tilted about the horizontal
     // axis perpendicular to its trend, so undo the tilt first. Leaning the
     // displacement direction instead would only shear the fold: the wave
     // would still depend on horizontal position alone, which leaves the
     // hinge of a flat bed horizontal no matter how far it is leaned.
-    vec3 d = rotAbout(p - ${p}_center, ${p}_perp, ${p}_plunge);
-    d.z -= ${p}_wave.x * cos(${p}_wave.y * dot(d, ${p}_perp) + ${p}_wave.z);
+    vec3 v = p - ${p}_center;
+    vec3 d = rotAbout(v, ${p}_perp, ${p}_plunge);
+    // Both taken from the unrotated offset, and _perp and _az are horizontal,
+    // so neither can see v.z. See the note in geo/unmake.js — reading these
+    // off the rotated d gives the same wave but an envelope fading with depth.
+    float across = dot(v, ${p}_perp);
+    float along = dot(v, ${p}_az);
+    float t = ${p}_wave.y * across + ${p}_wave.z;
+
+    // Shape: an odd term that verges the fold, an even one that sharpens or
+    // squares off its hinges. Held inside the circle where the warp stays
+    // monotonic, as a pair rather than one at a time.
+    vec2 vh = ${p}_shape.xy;
+    float m = abs(vh.x) + abs(vh.y);
+    vh *= m > 0.9 ? 0.9 / max(m, 1e-6) : 1.0;
+    float psi = t + vh.x * (1.0 - cos(t)) + vh.y * sin(2.0 * t) * 0.5;
+
+    // Envelope: the fold dies out beyond its reach. Zero in either direction
+    // means no limit that way, so the common case costs one comparison.
+    float amp = ${p}_wave.x;
+    vec2 reach = ${p}_shape.zw;
+    if (reach.x > 0.0 || reach.y > 0.0) {
+      vec2 q = vec2(reach.x > 0.0 ? along / reach.x : 0.0,
+                    reach.y > 0.0 ? across / reach.y : 0.0);
+      float u = length(q);
+      amp *= u >= 1.0 ? 0.0 : 0.5 * (1.0 + cos(PI * u));
+    }
+
+    d.z -= amp * cos(psi);
     p = d + ${p}_center;
   }`,
   };

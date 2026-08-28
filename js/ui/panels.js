@@ -437,13 +437,34 @@ function eventRow(ctx, ev, index) {
   return row;
 }
 
+/**
+ * Which compass direction the steep limb faces, for the ends of the slider.
+ *
+ * A signed number with no direction on it is a number you have to discover by
+ * dragging. The two sides are ninety degrees either side of the axis, so they
+ * can just be named — and they are renamed when the axis turns.
+ */
+function vergenceEnds(ev) {
+  const a = (ev.trend || 0) + 90;
+  return [`steep to ${quadrantBearing((a + 180) % 360)}`, `steep to ${quadrantBearing(a % 360)}`];
+}
+
 function summarise(ev, doc) {
   const p = (n) => String(Math.round(n)).padStart(3, '0');
   switch (ev.type) {
     case 'tilt': return `${p(ev.strike)}/${Math.round(ev.dip)}  (${quadrantBearing(ev.strike)})`;
     // Same trend/plunge notation the stereonet reports a fitted axis in, so a
     // student can hold their answer up against the event that produced it.
-    case 'fold': return `axis ${formatLine(ev)} · λ ${Math.round(ev.wavelength)} m · A ${Math.round(ev.amplitude)} m`;
+    // Shape and reach are named only when they are doing something, so the
+    // ordinary symmetric fold reads exactly as it always did.
+    case 'fold': return [
+      `axis ${formatLine(ev)}`,
+      `λ ${Math.round(ev.wavelength)} m`,
+      `A ${Math.round(ev.amplitude)} m`,
+      Math.abs(ev.vergence || 0) > 0.02 ? 'verging' : null,
+      Math.abs(ev.hinge || 0) > 0.02 ? ((ev.hinge > 0) ? 'sharp hinges' : 'box hinges') : null,
+      (ev.reachAlong > 0 || ev.reachAcross > 0) ? 'dies out' : null,
+    ].filter(Boolean).join(' · ');
     case 'domebasin': return `${ev.amplitude >= 0 ? 'Dome' : 'Basin'} · ${Math.round(Math.abs(ev.amplitude))} m · r ${Math.round(ev.radiusA)} m`;
     case 'fault': return `${p(ev.strike)}/${Math.round(ev.dip)} · ${faultSense(ev)} · slip ${Math.round(ev.slip)} m`;
     case 'dike': return `${p(ev.strike)}/${Math.round(ev.dip)} · ${Math.round(ev.thickness)} m · ${rock(ev.rockId).label}`;
@@ -635,6 +656,46 @@ function buildEventControls(ctx, ev, index, body) {
         label: 'Hinge shift', value: ev.phase, min: -180, max: 180, step: 5, unit: '°',
         onChange: set('phase'), hint: 'Slides the anticlines across the block.',
       }));
+
+      // --- the shape of the fold, not just its size ------------------------
+      // A cosine has symmetric limbs and rounded hinges and cannot be talked
+      // out of either. These two are the smallest honest way to say otherwise,
+      // and they are separate controls because they are separate observations:
+      // which limb is steeper is not the same question as how sharp the hinge
+      // is, and a fold can do one without the other.
+      body.appendChild(el('div', { class: 'sub-head', text: 'Shape' }));
+      const verge = numberRow({
+        label: 'Vergence', value: ev.vergence || 0, min: -0.9, max: 0.9, step: 0.05,
+        ends: vergenceEnds(ev),
+        onChange: (v) => { set('vergence')(v); verge.setEnds(...vergenceEnds({ ...ev, vergence: v })); },
+        hint: 'Moves the troughs off centre, so one limb is short and steep and the other long and gentle. Zero is a symmetric fold; the crests keep their height either way.',
+      });
+      body.appendChild(verge);
+      body.appendChild(numberRow({
+        label: 'Hinge shape', value: ev.hinge || 0, min: -0.9, max: 0.9, step: 0.05,
+        ends: ['flat crests', 'tight hinges'],
+        onChange: set('hinge'),
+        hint: 'Where the steep part of each limb sits. Left opens the crests and troughs out into a box fold, flat on top with steep sides; right pulls the steepness against the hinges and tightens them. Both hinges change together, so this is never vergence. A true chevron — straight limbs, angular hinge — is not in this family: tightening here always flattens the middle of the limb.',
+      }));
+
+      // --- how far it reaches ----------------------------------------------
+      // Without this a fold is infinite, which is why one fitted structure has
+      // to serve a whole map and why an open limb in one corner cannot coexist
+      // with a tight train in another.
+      body.appendChild(el('div', { class: 'sub-head', text: 'How far it reaches' }));
+      body.appendChild(numberRow({
+        label: 'Along the axis', value: ev.reachAlong || 0, min: 0, max: 6000, step: 50, unit: 'm',
+        onChange: set('reachAlong'),
+        hint: 'The fold fades to nothing this far along its own hinge. Zero means it never does.',
+      }));
+      body.appendChild(numberRow({
+        label: 'Across the axis', value: ev.reachAcross || 0, min: 0, max: 6000, step: 50, unit: 'm',
+        onChange: set('reachAcross'),
+        hint: 'How far the train of folds carries sideways before dying out. Zero means it never does.',
+      }));
+      body.appendChild(el('div', { class: 'ctl-hint standalone', text:
+        'Both at zero is a fold that runs at full amplitude to every edge of the block, which is what this event used to be and is still the right answer for one structure filling one map. Set them and the fold becomes local — which is what lets a second fold, with its own shape, hold a different part of the block.' }));
+
       body.appendChild(centerRow(ctx, ev, index, ['centerX', 'centerY']));
       break;
     }
@@ -997,7 +1058,7 @@ function fitReport(ctx, doc) {
   const skipped = [];
   if (d.outside) skipped.push(`${d.outside} outside the box`);
   if (d.noAttitude) skipped.push(`${d.noAttitude} with no reading yet`);
-  if (d.notBedding) skipped.push(`${d.notBedding} not bedding`);
+  if (d.notBedding) skipped.push(`${d.notBedding} neither bedding nor on a fault`);
   if (d.linear) skipped.push(`${d.linear} linear`);
   if (skipped.length) {
     root.appendChild(el('div', { class: 'ctl-hint standalone',

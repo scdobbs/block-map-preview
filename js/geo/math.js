@@ -156,6 +156,132 @@ export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
  * that measured it. Both the 3D markers and the 2D field map read these, so
  * the two views can never disagree about what counts as flat.
  */
+/**
+ * The shape of a fold, beyond a cosine.
+ *
+ * A fold event displaces points vertically by a function of ONE coordinate:
+ * how far across the axis they lie. That is the property the whole engine
+ * rests on — moving in z does not change that coordinate, so the inverse of a
+ * fold is exact and closed-form whatever the profile does. Which means the
+ * profile can be any periodic function of that coordinate at all, and the rest
+ * of the engine never has to know: `beddingAt` finite-differences the result,
+ * so nothing needs an analytic derivative either.
+ *
+ * So these three add real fold geometry for the price of arithmetic. They are
+ * mirrored in the shader (`emitFold` in geo/glsl.js) and the two MUST agree —
+ * the CPU walk is the reference the GPU is checked against.
+ */
+
+/**
+ * Phase warp: what turns a cosine into a fold with a shape.
+ *
+ *   psi(t) = t + vergence * (1 - cos t) + hinge * sin(2t) / 2
+ *
+ * The two terms do genuinely different things, and both of the obvious first
+ * guesses are wrong in ways worth recording.
+ *
+ * `vergence * (1 - cos t)` is ODD, and moves the trough off centre. One limb
+ * becomes short and steep, the other long and gentle, which is what an
+ * asymmetric fold IS. The crests and troughs keep their full amplitude — only
+ * the spacing between them changes — so the fold verges without growing.
+ *
+ * `hinge * sin(2t) / 2` is EVEN, and leaves the crests and troughs exactly
+ * where they are. Its derivative is 1 + hinge*cos(2t), the same at t = 0 and
+ * t = pi, so it treats both hinges alike — which is what a control called
+ * "hinge shape" has to do. It moves the steepest part of each limb: negative
+ * pushes it to mid-limb and opens the crest into a genuine box fold, flat on
+ * top with steep sides; positive pulls it against the hinge, tightening the
+ * crest and flattening the middle of the limb.
+ *
+ * What it is NOT is a chevron. A chevron has straight limbs — constant dip
+ * from hinge to hinge — and no phase warp of a cosine produces that, because
+ * the derivative of a triangle wave is a square wave and a square wave is not
+ * a couple of harmonics. Tightening the hinge here always costs a flattened
+ * limb centre. Worth knowing before reading too much into a tight one.
+ *
+ * The tempting `hinge * sin t` is worse: its derivative is 1 + hinge at the
+ * crest and 1 - hinge at the trough, so it sharpens the anticlines while
+ * opening the synclines out. That is cusp-and-lobe — a real fold style, but a
+ * different control, and it makes every second hinge do the opposite of what
+ * the slider says.
+ *
+ * Both leave psi(t + 2pi) = psi(t) + 2pi, so the train stays periodic.
+ */
+export const FOLD_SKEW_MAX = 0.9;
+
+/**
+ * The pair, held inside the circle where psi stays monotonic.
+ *
+ * psi' = 1 + vergence*sin(t) + hinge*cos(2t), and the two terms can hit their
+ * worst at the same t, so what has to stay under one is |vergence| + |hinge| —
+ * the sum, not the diagonal. Beyond that the warp runs backwards over part of
+ * the cycle and the profile grows extra crests, which are parasitic folds
+ * nobody asked for. The inverse survives it either way (the displacement is
+ * still a function of one coordinate) but the geology would be nonsense, so
+ * the pair is scaled back together rather than clamped one at a time, which
+ * would let the corner through.
+ */
+function foldSkew(vergence, hinge) {
+  const v = vergence || 0;
+  const h = hinge || 0;
+  const m = Math.abs(v) + Math.abs(h);
+  const f = m > FOLD_SKEW_MAX ? FOLD_SKEW_MAX / m : 1;
+  return [v * f, h * f];
+}
+
+export function foldWarp(t, vergence, hinge) {
+  const [v, h] = foldSkew(vergence, hinge);
+  if (!v && !h) return t;
+  return t + v * (1 - Math.cos(t)) + h * Math.sin(2 * t) / 2;
+}
+
+/**
+ * Where a given warped phase came from, for drawing the axial traces.
+ *
+ * Newton, because psi is monotonic with a derivative bounded below by
+ * 1 - FOLD_SKEW_MAX, so it converges in a handful of steps from psi itself.
+ * Only the helper geometry needs this; the geology never inverts the warp.
+ */
+export function foldWarpInverse(psi, vergence, hinge) {
+  const [v, h] = foldSkew(vergence, hinge);
+  if (!v && !h) return psi;
+  let t = psi;
+  for (let i = 0; i < 24; i++) {
+    const f = t + v * (1 - Math.cos(t)) + h * Math.sin(2 * t) / 2 - psi;
+    const slope = 1 + v * Math.sin(t) + h * Math.cos(2 * t);
+    const step = f / Math.max(1 - FOLD_SKEW_MAX, slope);
+    t -= step;
+    if (Math.abs(step) < 1e-10) break;
+  }
+  return t;
+}
+
+/**
+ * How much of its amplitude the fold still has at a point — 1 in the middle,
+ * 0 outside its reach, tapered smoothly between.
+ *
+ * The same bounded cosine taper a dome or basin already uses, for the same
+ * reason: real structures are finite. A fold train that runs at full amplitude
+ * to the edge of every block is the reason one fitted structure has to serve a
+ * whole map, and why a gentle limb in one corner cannot coexist with a tight
+ * train in another.
+ *
+ * Either reach left at zero means "no limit in that direction", so a fold that
+ * dies out along strike but runs on across it is one number, not a special
+ * case. Both zero is the old behaviour exactly.
+ *
+ * `along` and `across` must both be measured in the unplunged frame, where
+ * they are horizontal — that is what keeps the envelope independent of z, and
+ * so keeps the fold's inverse exact.
+ */
+export function foldEnvelope(along, across, reachAlong, reachAcross) {
+  const a = reachAlong > 0 ? reachAlong : 0;
+  const b = reachAcross > 0 ? reachAcross : 0;
+  if (!a && !b) return 1;
+  const u = Math.hypot(a ? along / a : 0, b ? across / b : 0);
+  return u >= 1 ? 0 : 0.5 * (1 + Math.cos(Math.PI * u));
+}
+
 export const FLAT_DIP = 1.5;
 export const VERTICAL_DIP = 88.5;
 

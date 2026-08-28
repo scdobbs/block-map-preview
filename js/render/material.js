@@ -4,7 +4,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { buildFragmentShader, VERTEX, uniformPrefix } from '../geo/glsl.js';
 import { MAX_LAYERS, rock, faultRake, unconformityDatums } from '../geo/model.js';
-import { planeFrame, axisFrame, slipVec, DEG } from '../geo/math.js';
+import { planeFrame, axisFrame, azimuthVec, slipVec, DEG } from '../geo/math.js';
 import { KIND_CODE, surfaceUniform, surfaceRange, niceContourInterval } from '../geo/surfaces.js';
 
 const tmpColor = new THREE.Color();
@@ -136,7 +136,8 @@ function addEventUniforms(u, p, e) {
       u[`${p}_axis`] = V3(); u[`${p}_center`] = V3(); u[`${p}_angle`] = F();
       break;
     case 'fold':
-      u[`${p}_perp`] = V3(); u[`${p}_wave`] = V3(); u[`${p}_center`] = V3(); u[`${p}_plunge`] = F();
+      u[`${p}_perp`] = V3(); u[`${p}_az`] = V3(); u[`${p}_wave`] = V3();
+      u[`${p}_shape`] = V4(); u[`${p}_center`] = V3(); u[`${p}_plunge`] = F();
       break;
     case 'domebasin':
       u[`${p}_c`] = V4(); u[`${p}_r`] = V3();
@@ -168,10 +169,17 @@ function setEventUniforms(u, p, e, datums) {
     case 'fold': {
       const { perp } = axisFrame(e.trend, e.plunge);
       u[`${p}_perp`].value.set(...perp);
+      // Along the axis, horizontal, in the frame the plunge is undone into —
+      // the envelope needs a second coordinate and it has to be one that does
+      // not vary with depth. See the note in unmake.js.
+      u[`${p}_az`].value.set(...azimuthVec(e.trend));
       u[`${p}_wave`].value.set(
         e.amplitude,
         (2 * Math.PI) / Math.max(1, e.wavelength),
         (e.phase || 0) * DEG,
+      );
+      u[`${p}_shape`].value.set(
+        e.vergence || 0, e.hinge || 0, e.reachAlong || 0, e.reachAcross || 0,
       );
       u[`${p}_center`].value.set(e.centerX || 0, e.centerY || 0, 0);
       u[`${p}_plunge`].value = (e.plunge || 0) * DEG;
