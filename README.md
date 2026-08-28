@@ -577,10 +577,29 @@ Which is most of what it is for.
 
 - **Fewer than three bedding readings** fits nothing, and three on one limb
   still only give one attitude.
-- **A fault trace across ground with too little relief** constrains no dip at
-  all — every plane containing that line fits equally well. It is called
+- **A fault trace that does not turn** constrains no dip at all. Two ways to
+  get one: ground with too little relief, and — less obviously — a trace that
+  runs straight even across plenty of relief, which is what a fault crossing a
+  uniform hillside draws. Either way the points lie along a *line*, and every
+  plane through a line contains it equally well, whatever its dip. It is called
   vertical and flagged as an assumption rather than given a fabricated dip that
-  looks measured, and the warning names the two ways you can close the gap.
+  looks measured, and the warning names which of the two it was and the two
+  ways you can close the gap.
+
+  The test is that the trace **spreads sideways** by a real fraction of its own
+  length — the V a trace makes where it crosses a valley. Asking only whether
+  the points are flat, which is the obvious test, does not work: collinear
+  points are perfectly flat in *every* plane through their line, and three
+  points are perfectly flat by construction. Getting that wrong is what once
+  made a vertical fault trending 152 come back striking 358.
+
+- **A dip you supply makes the strike solvable again.** Once the dip is fixed
+  the strike is no longer free — it is whichever strike puts a plane of that
+  dip through the trace — so it is solved for rather than borrowed from an
+  unconstrained fit that assumed some other dip. At 90° that reduces to the
+  trace's own bearing across the map, which is what a vertical fault's strike
+  is; at lower dips it correctly comes out a few degrees off the trace bearing,
+  because a dipping plane's trace does not run along its strike.
 - **A fault nothing measures the throw of** gets zero slip and says the fault is
   drawn, not solved — telling "you never found this contact again" apart from
   "you stopped drawing it at the fault", since those are different things to go
@@ -1189,6 +1208,17 @@ fragment uniform budget of older mobile GPUs.
 - **Faults are planar and their slip is uniform**, the same limit the block has
   everywhere, and an infinite plane besides — a fault that dies out along
   strike is not represented.
+- **A fault trace clipped by the box is a different trace.** Only the part
+  inside the box is evidence, so a box edge that cuts an end off a trace can
+  take away the bend that was determining the plane. The fit then says so
+  rather than reporting a dip it no longer has grounds for — but it is worth
+  knowing that moving the box can legitimately change what a fault is reported
+  as.
+- **Three points on a trace determine a plane exactly**, which means they leave
+  no residual to check it against. The sideways-spread test still applies, so a
+  degenerate three-point trace is rejected; a non-degenerate one is accepted on
+  the same terms as the classic three-point problem, and inherits its
+  sensitivity to one badly placed point.
 - **Only bedding is fitted.** Joints, foliation and lineations are carried into
   the block as record but say nothing about the shape of the beds.
 - **The ground is the DEM's**, so about 10 m, and every thickness read off the

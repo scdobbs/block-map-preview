@@ -58,6 +58,22 @@ import { traceContours } from './marching.js';
  */
 const METRES_PER_DEGREE = 10;
 
+/**
+ * How much of a trace's spread has to lie across it before it can be said to
+ * determine a plane, as a fraction of the spread along it.
+ *
+ * A hand-drawn line wobbles by a few metres over a few hundred, which is about
+ * 1e-4 of its length squared. A trace that genuinely crosses a valley on a
+ * 45-degree fault swings sideways by roughly the relief, tens of times more.
+ * One per cent sits between the two with an order of magnitude either side.
+ *
+ * Steep faults fall below it, and that is the right answer rather than a
+ * missed one: a near-vertical fault's trace runs nearly straight whatever the
+ * ground does, so it genuinely cannot give its own dip — and "vertical, and
+ * saying so" is then both the honest answer and very nearly the true one.
+ */
+const TRACE_SPREAD_MIN = 0.01;
+
 /** Which drawn lines are evidence about the stratigraphy, and which are faults. */
 const CONTACT_KINDS = new Set(['contact', 'unconformity']);
 
@@ -412,9 +428,33 @@ export function faultFromTrace(pts, given = null) {
   const [l1, l2, l3] = values;
   const relief = Math.max(...pts.map((p) => p[2])) - Math.min(...pts.map((p) => p[2]));
 
-  // The plane is determined only when the points genuinely spread in two
-  // directions and are genuinely flat in the third.
-  const determined = l2 > 1e-9 && l3 / Math.max(1e-12, l2) < 0.02 && relief > 25;
+  // Is this trace shaped like a plane, or like a line?
+  //
+  // The distinction is the whole determinacy question and it is easy to get
+  // wrong, because points strung along a LINE lie perfectly in a plane — in
+  // every plane through that line, all at once. So "flat in the third
+  // direction" is not evidence of anything on its own: a straight trace passes
+  // it absolutely, and a three-point trace passes it by construction, since
+  // three points define a plane exactly and leave no residual to measure.
+  //
+  // What actually determines a plane is the trace TURNING: spreading in a
+  // second direction at a scale comparable to its own length, the way a trace
+  // makes a V where it crosses a valley. Where it does not, the best-fit plane
+  // is decided by whatever noise happens to lie across the line — the wobble
+  // of a hand-drawn line, or one digitised point out of place — and the strike
+  // it reports is arbitrary. That was a real bug: a vertical fault trending
+  // 152 came back striking 358 when a box edge clipped one end off its trace.
+  //
+  // `spread` is that test, and it is a ratio rather than an absolute so it
+  // does not depend on how long the trace is or what units it is in.
+  const spread = l2 / Math.max(1e-12, l1);
+  const flat = l3 / Math.max(1e-12, l2);
+  const determined = relief > 25 && spread > TRACE_SPREAD_MIN && flat < 0.05;
+  // Which test failed, so the caller can say why rather than blaming relief
+  // for everything.
+  const reason = determined ? null
+    : relief <= 25 ? 'relief'
+      : spread <= TRACE_SPREAD_MIN ? 'straight' : 'rough';
 
   // What the trace alone would say, kept even when it is overruled: the
   // caller compares it with the measurement to see whether the two agree.
@@ -426,8 +466,18 @@ export function faultFromTrace(pts, given = null) {
     dip = sd.dip;
   } else {
     // Vertical through the trace's own direction in map view.
+    //
+    // An eigenvector has no preferred end, so which of the two opposite
+    // bearings comes out is down to the sign the solver happened to settle on
+    // — and a fault the mapper thinks of as running northwest reading back as
+    // 135 is confusing even though it is the same vertical plane. Orienting it
+    // along the way the line was drawn is arbitrary too, but it is STABLE, and
+    // it is the direction the person who drew it has in their head.
     const dir = normalize([vectors[0][0], vectors[0][1], 0]);
-    strike = wrap360(Math.atan2(dir[0], dir[1]) * RAD);
+    const last = pts[pts.length - 1];
+    const along = [last[0] - pts[0][0], last[1] - pts[0][1]];
+    const sign = dir[0] * along[0] + dir[1] * along[1] < 0 ? -1 : 1;
+    strike = wrap360(Math.atan2(sign * dir[0], sign * dir[1]) * RAD);
     dip = 90;
   }
   const traceStrike = strike;
@@ -445,29 +495,90 @@ export function faultFromTrace(pts, given = null) {
       // both — and it is taken whole. It is the only evidence here that came
       // off the fault surface rather than off a line drawn near it.
       strike = wrap360(given.strike);
-    } else if (Number.isFinite(given.dipDir)) {
-      // A direction picked on the line editor is not a measured azimuth. It is
-      // a choice between the two sides of the trace, and the trace is what
-      // fixes the strike. Deriving the strike from the stored azimuth instead
-      // would freeze it at whatever the line looked like when the choice was
-      // made, so dragging a point afterwards would move the trace and leave
-      // the fault plane behind it.
-      const traceAz = wrap360(traceStrike + 90);
-      const flipped = Math.abs(((given.dipDir - traceAz + 540) % 360) - 180) > 90;
-      strike = flipped ? wrap360(traceStrike + 180) : traceStrike;
     } else {
-      // Vertical: no side to choose, so it keeps the trace's own line.
-      strike = traceStrike;
+      // Once the dip is known the strike is no longer free: it is whichever
+      // strike puts a plane of THAT dip through the trace, which is a question
+      // the trace can answer even when it is too straight to give a dip of its
+      // own. Solving it beats borrowing the strike from the unconstrained fit,
+      // which belongs to a plane of a different dip — and which, on a straight
+      // trace, was chosen by noise.
+      //
+      // At ninety degrees it reduces to the trace's own bearing across the
+      // map, which is exactly what a vertical fault's strike is.
+      //
+      // A dip direction is a choice between the two sides of the trace rather
+      // than a measured azimuth, so it is used to pick which solution, never
+      // as the strike itself: that would freeze the plane at whatever the line
+      // looked like when the choice was made, and dragging a point afterwards
+      // would move the trace and leave the plane behind it.
+      strike = strikeAtDip(pts, [cx, cy, cz], dip,
+        Number.isFinite(given.dipDir) ? given.dipDir : null, traceStrike);
     }
     source = 'measured';
   }
 
   return {
-    strike, dip, determined, relief, source,
+    strike, dip, determined, reason, relief, source,
     traceStrike, traceDip,
     centerX: cx, centerY: cy, centerZ: cz,
-    flatness: l3 / Math.max(1e-12, l2),
+    spread, flatness: flat,
   };
+}
+
+/**
+ * The strike of a plane of known dip that best contains a trace.
+ *
+ * A one-parameter search, because that is all that is left: the dip is given,
+ * so the family of candidate planes is just the strikes, and the trace picks
+ * one. Scanned rather than solved because the scan cannot fail — a trace that
+ * plunges more steeply than the dip allows has no exact answer, and a scan
+ * returns the closest plane instead of a NaN.
+ *
+ * `preferAz` is the side the mapper said it leans to. It narrows the scan to
+ * the strikes whose dip direction agrees, which is what makes the answer a
+ * choice between two sides rather than a free-for-all.
+ */
+function strikeAtDip(pts, c, dipDeg, preferAz, fallbackStrike) {
+  const residual = (s) => {
+    const { normal } = planeFrame(s, dipDeg);
+    let e = 0;
+    for (const p of pts) {
+      const d = normal[0] * (p[0] - c[0])
+        + normal[1] * (p[1] - c[1])
+        + normal[2] * (p[2] - c[2]);
+      e += d * d;
+    }
+    return e;
+  };
+  const allowed = (s) => preferAz == null
+    || Math.abs(((wrap360(s + 90) - preferAz + 540) % 360) - 180) <= 90;
+
+  let best = null;
+  for (let s = 0; s < 360; s += 1) {
+    if (!allowed(s)) continue;
+    const e = residual(s);
+    if (!best || e < best.e) best = { s, e };
+  }
+  if (!best) return fallbackStrike;
+  for (const step of [0.25, 0.05]) {
+    const around = best.s;
+    for (let k = -4; k <= 4; k++) {
+      const s = wrap360(around + k * step);
+      if (!allowed(s)) continue;
+      const e = residual(s);
+      if (e < best.e) best = { s, e };
+    }
+  }
+
+  // A vertical plane is the same plane at s and at s + 180. Report the end
+  // that runs the way the trace runs, so the number reads like the line on
+  // the map rather than like its reverse.
+  const s = wrap360(best.s);
+  if (preferAz == null && dipDeg > 89.5
+      && Math.abs(((s - fallbackStrike + 540) % 360) - 180) > 90) {
+    return wrap360(s + 180);
+  }
+  return s;
 }
 
 // ---------------------------------------------------------------------------
@@ -782,7 +893,17 @@ export function inferHistory(obs, { extent = 4000, localFolds = false } = {}) {
     } else if (plane.determined) {
       notes.push(`${label}: ${Math.round(plane.strike)}/${Math.round(plane.dip)}, from where its trace crosses the topography.`);
     } else {
-      warnings.push(`${label} is drawn across ground with too little relief to give a dip — ${Math.round(plane.relief)} m along the whole trace. It is taken as vertical, which is an assumption and not a measurement. Measure the plane at an exposure, or set its dip on the line itself, and the fit will use that instead.`);
+      // Why it could not answer, rather than one stock reason for three
+      // different failures. A trace that runs straight down a uniform hillside
+      // has all the relief anyone could ask for and still determines nothing,
+      // and telling that mapper to go and find relief sends them to fix the
+      // wrong thing.
+      const because = plane.reason === 'relief'
+        ? `is drawn across ground with too little relief to give a dip — ${Math.round(plane.relief)} m along the whole trace`
+        : plane.reason === 'straight'
+          ? 'runs too straight for its trace to say anything about its dip: the points lie along a line, and every plane through a line contains it equally well, whatever its dip'
+          : 'has a trace that does not sit in any one plane, so there is no one dip to read off it';
+      warnings.push(`${label} ${because}. It is taken as vertical, which is an assumption and not a measurement. Measure the plane at an exposure, or set its dip on the line itself, and the fit will use that instead.`);
     }
   }
 
