@@ -610,81 +610,98 @@ function unitsBlock(ctx, doc) {
   const wrap = el('div', {});
   wrap.appendChild(el('div', { class: 'sub-head', text: 'Units' }));
 
-  const arming = ctx.shadeMode();
-  wrap.appendChild(el('button', {
-    class: `btn wide ${arming ? 'armed' : ''}`, type: 'button',
-    text: arming ? 'Tap inside a unit — tap here to stop' : 'Shade a unit',
-    onclick: () => ctx.toggleShadeMode(),
-  }));
-  wrap.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'Tap anywhere inside an area your contacts enclose and it fills out to them. The colour is worked out from the lines every time, so moving a contact moves the shading with it — there is no outline to keep in step.' }));
-
-  const note = ctx.patchNote && ctx.patchNote();
-  if (note) {
-    wrap.appendChild(el('div', { class: 'notice' }, [el('p', { text: note })]));
-  }
-
   const patches = ctx.patches();
-  if (!patches.length) return wrap;
-
   const wide = ctx.widePatches();
   const counts = ctx.patchCounts();
   const cell = ctx.patchCell();
-  const known = knownUnitNames(doc);
 
+  // Every unit name in play, whether it was set up in advance, named on a
+  // station, or only ever typed on a patch.
+  const names = new Map();
+  for (const k of knownUnitNames(doc)) names.set(k.name.toLowerCase(), k.name);
   for (const p of patches) {
-    const unit = (doc.units || []).find(
-      (u) => String(u.name || '').trim().toLowerCase() === String(p.unitName || '').trim().toLowerCase(),
+    const n = String(p.unitName || '').trim();
+    if (n) names.set(n.toLowerCase(), n);
+  }
+  const colorOf = (name) => {
+    const u = (doc.units || []).find(
+      (x) => String(x.name || '').trim().toLowerCase() === String(name).trim().toLowerCase(),
     );
+    return u ? unitColor(u) : ctx.patchColor(name);
+  };
+
+  // Pick the unit first, then tap — the same order the Lines tab picks a kind
+  // before drawing one. A patch then arrives already carrying the right name,
+  // and therefore the colour that unit is already shaded in everywhere else.
+  const active = ctx.shadeUnit();
+  if (names.size) {
+    wrap.appendChild(el('div', { class: 'unit-chips' }, [...names.values()].map((n) => el('button', {
+      class: `unit-chip ${n === active ? 'on' : ''}`, type: 'button',
+      onclick: () => ctx.setShadeUnit(n === active ? '' : n),
+    }, [
+      el('span', { class: 'unit-dot', style: `background:${colorOf(n)}` }),
+      el('span', { text: n }),
+    ]))));
+  }
+  wrap.appendChild(el('div', { class: 'unit-new' }, [
+    el('input', {
+      class: 'name-input', type: 'text', value: '', placeholder: 'or a new unit name…',
+      autocapitalize: 'words', autocomplete: 'off', spellcheck: 'false',
+      onchange: (e) => { ctx.setShadeUnit(e.target.value); },
+    }),
+  ]));
+
+  const arming = ctx.shadeMode();
+  wrap.appendChild(el('button', {
+    class: `btn wide ${arming ? 'armed' : ''}`, type: 'button',
+    text: arming
+      ? (active ? `Tap inside ${active} — tap here to stop` : 'Tap inside a unit — tap here to stop')
+      : (active ? `Shade ${active}` : 'Shade a unit'),
+    onclick: () => ctx.toggleShadeMode(),
+  }));
+  wrap.appendChild(el('div', { class: 'ctl-hint standalone', text:
+    'Tap inside an area your contacts enclose and it fills out to them. Draw a Map boundary line to close the open ends of your mapping and units will fill against that too.' }));
+
+  const note = ctx.patchNote && ctx.patchNote();
+  if (note) wrap.appendChild(el('div', { class: 'notice' }, [el('p', { text: note })]));
+
+  if (!patches.length) return wrap;
+
+  wrap.appendChild(el('div', { class: 'unit-list' }, patches.map((p) => {
     const broad = wide.has(p.id);
-    const card = el('div', { class: `line-card ${broad ? 'warn' : ''}` });
-    card.appendChild(el('div', { class: 'line-row' }, [
-      el('span', {
-        class: 'unit-dot',
-        style: `background:${unit ? unitColor(unit) : ctx.patchColor(p.unitName)}${broad ? ';opacity:.35' : ''}`,
-      }),
-      el('span', { class: 'line-name', text: p.unitName || 'unnamed unit' }),
+    const swatch = el('input', {
+      class: 'unit-swatch', type: 'color', value: toHex(colorOf(p.unitName)),
+      title: p.unitName ? `Colour for ${p.unitName} — every outcrop of it` : 'Name the unit first',
+      disabled: !String(p.unitName || '').trim(),
+      onchange: (e) => ctx.setUnitColor(p.unitName, e.target.value),
+    });
+    const name = el('input', {
+      class: 'unit-name-input', type: 'text', value: p.unitName || '',
+      placeholder: 'unnamed', list: names.size ? 'field-unit-names' : null,
+      autocapitalize: 'words', autocomplete: 'off', spellcheck: 'false',
+      onchange: (e) => ctx.editPatch(p.id, (x) => { x.unitName = e.target.value.trim(); }),
+    });
+    return el('div', { class: `unit-row ${broad ? 'warn' : ''}` }, [
+      swatch,
+      name,
       el('span', { class: 'line-sub', text: broad
-        ? 'not shaded — no boundary'
+        ? 'no boundary'
         : areaText(counts.get(p.id) || 0, cell, p.lat) }),
       el('button', {
         class: 'row-x', type: 'button', text: '×', 'aria-label': 'Remove this shading',
         onclick: () => ctx.deletePatch(p.id),
       }),
-    ]));
-    card.appendChild(textRow({
-      label: 'Unit', value: p.unitName, placeholder: 'e.g. Poleta Fm',
-      list: known.length ? 'field-unit-names' : null,
-      onChange: (v) => ctx.editPatch(p.id, (x) => { x.unitName = v.trim(); }),
-    }));
-    // The colour belongs to the unit, so setting it here colours every outcrop
-    // of it at once rather than this one patch.
-    if (String(p.unitName || '').trim()) {
-      const swatch = el('input', {
-        class: 'unit-color', type: 'color',
-        value: toHex(unit ? unitColor(unit) : ctx.patchColor(p.unitName)),
-        onchange: (e) => ctx.setUnitColor(p.unitName, e.target.value),
-      });
-      card.appendChild(el('div', { class: 'ctl' }, [
-        el('div', { class: 'ctl-head' }, [
-          el('label', { class: 'ctl-label', text: `Colour for ${p.unitName}` }),
-        ]),
-        el('div', { class: 'unit-color-row' }, [
-          swatch,
-          el('span', { class: 'ctl-hint', text: 'Every outcrop of this unit, here and in the block.' }),
-        ]),
-      ]));
-    }
-    if (broad) {
-      card.appendChild(el('div', { class: 'ctl-hint standalone', text:
-        'This one filled most of the sheet, so it is not shaded — a wash over the whole map would hide the very contacts you need to see to fix it. There is no boundary around this point yet. Draw the contact that bounds it, or move the tap inside an area your contacts already enclose.' }));
-    }
-    wrap.appendChild(card);
+    ]);
+  })));
+
+  if ([...wide].length) {
+    wrap.appendChild(el('div', { class: 'ctl-hint standalone', text:
+      'A patch marked “no boundary” has nothing enclosing it, so it is not shaded — a wash over the whole map would hide the contacts you need to see. Draw the contact that bounds it, or a Map boundary round your mapping.' }));
   }
 
-  if (known.length) {
+  if (names.size) {
     wrap.appendChild(el('datalist', { id: 'field-unit-names' },
-      known.map((k) => el('option', { value: k.name }))));
+      [...names.values()].map((n) => el('option', { value: n }))));
   }
   return wrap;
 }

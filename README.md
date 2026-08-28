@@ -538,9 +538,11 @@ other, because three panes is not a layout a phone has room for.
 A geologic map is mostly polygons, and until now this one had only the lines
 round them, leaving the units to be held in your head.
 
-**Lines → Units → Shade a unit**, then tap anywhere inside an area your
-contacts enclose. It fills out to them and takes the colour of whatever unit
-you name.
+**Lines → Units**: pick the unit from the chips, then **Shade a unit** and tap
+inside an area your contacts enclose. It fills out to them in that unit's own
+colour — the same order the Lines tab picks a kind before drawing one, and it
+means a new patch arrives already carrying the colour that unit is shaded in
+everywhere else. Type a name instead to start a unit that does not exist yet.
 
 The polygon is **not stored**. A unit patch is a name and a point inside it,
 and the area is flooded out to the contacts every time it is drawn — so it
@@ -565,9 +567,10 @@ structure is fitted to, and never allowed to stretch the area the fit thinks
 you covered. It says where you stopped looking, which is a fact about the
 survey rather than about the rock.
 
-**Colours belong to the unit, not the patch.** Set one from any patch and every
-outcrop of that unit follows, on the map and in the block's column — and the
-unit is created for you if you only ever named it on an outcrop.
+**Colours belong to the unit, not the patch.** Tap the swatch on any shaded
+area and every outcrop of that unit follows, on the map and in the block's
+column — and the unit is created for you if you only ever named it on an
+outcrop.
 
 Tapping ground that is already shaded does not add a second patch. The flood
 knows which patch owns that cell, so it says which one it is and leaves the

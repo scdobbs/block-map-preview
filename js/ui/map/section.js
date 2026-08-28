@@ -52,8 +52,12 @@ export class MapSection {
     // geometry and re-flooded only when that actually changes.
     this._shadeKey = null;
     this._shade = null;
-    // Armed to drop a unit patch on the next tap.
+    // Armed to drop a unit patch on the next tap, and the unit it will carry.
+    // Chosen before tapping rather than inherited from whatever was shaded
+    // last, so a new patch arrives with the right name and therefore the right
+    // colour already on it.
     this.shadeMode = false;
+    this.shadeUnit = '';
     // The line being drawn. Held outside the document until it is finished,
     // so an abandoned line leaves nothing behind and every tap does not land
     // on the undo stack.
@@ -1188,6 +1192,11 @@ export class MapSection {
 
   shading() { return this._shade; }
 
+  setShadeUnit(name) {
+    this.shadeUnit = String(name || '').trim();
+    this.rebuild();
+  }
+
   toggleShadeMode(on = null) {
     this.shadeMode = on == null ? !this.shadeMode : on;
     if (this.shadeMode && this.placeMode) this.togglePlace();
@@ -1195,7 +1204,8 @@ export class MapSection {
     if (this.shadeMode) {
       clear(this.modeBanner);
       this.modeBanner.append(
-        el('span', { text: 'Tap inside a unit to shade it' }),
+        el('span', { text: this.shadeUnit
+        ? `Tap inside ${this.shadeUnit}` : 'Tap inside a unit to shade it' }),
         el('button', {
           class: 'banner-done', type: 'button', text: 'Done',
           onclick: () => this.toggleShadeMode(false),
@@ -1220,14 +1230,8 @@ export class MapSection {
       return;
     }
     this._patchNote = null;
-    const last = (this.store.doc.patches || [])[this.store.doc.patches.length - 1];
     this.store.edit((d) => {
-      d.patches = [...(d.patches || []), makePatch({
-        lon, lat,
-        // The unit most recently shaded, because a student colouring a map
-        // works one unit at a time across its several outcrops.
-        unitName: (last && last.unitName) || '',
-      })];
+      d.patches = [...(d.patches || []), makePatch({ lon, lat, unitName: this.shadeUnit || '' })];
     });
     this.rebuild();
   }
@@ -1574,6 +1578,8 @@ export class MapSection {
 
       patches: () => this.store.doc.patches || [],
       shadeMode: () => this.shadeMode,
+      shadeUnit: () => this.shadeUnit,
+      setShadeUnit: (n) => this.setShadeUnit(n),
       toggleShadeMode: (v) => this.toggleShadeMode(v),
       placePatch: (lon, lat) => this.placePatch(lon, lat),
       editPatch: (id, fn) => this.editPatch(id, fn),
