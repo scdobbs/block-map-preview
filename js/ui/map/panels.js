@@ -599,6 +599,81 @@ function stationEditor(ctx, st) {
 // Lines
 // ---------------------------------------------------------------------------
 
+/**
+ * Shading the units between the contacts.
+ *
+ * A patch is a name and a point inside the area, and the area is flooded out
+ * to the surrounding contacts every time it is drawn — so nothing here edits a
+ * polygon, and nothing can drift out of step with the lines.
+ */
+function unitsBlock(ctx, doc) {
+  const wrap = el('div', {});
+  wrap.appendChild(el('div', { class: 'sub-head', text: 'Units' }));
+
+  const arming = ctx.shadeMode();
+  wrap.appendChild(el('button', {
+    class: `btn wide ${arming ? 'armed' : ''}`, type: 'button',
+    text: arming ? 'Tap inside a unit — tap here to stop' : 'Shade a unit',
+    onclick: () => ctx.toggleShadeMode(),
+  }));
+  wrap.appendChild(el('div', { class: 'ctl-hint standalone', text:
+    'Tap anywhere inside an area your contacts enclose and it fills out to them. The colour is worked out from the lines every time, so moving a contact moves the shading with it — there is no outline to keep in step.' }));
+
+  const patches = ctx.patches();
+  if (!patches.length) return wrap;
+
+  const wide = ctx.widePatches();
+  const counts = ctx.patchCounts();
+  const cell = ctx.patchCell();
+  const known = knownUnitNames(doc);
+
+  for (const p of patches) {
+    const unit = (doc.units || []).find(
+      (u) => String(u.name || '').trim().toLowerCase() === String(p.unitName || '').trim().toLowerCase(),
+    );
+    const broad = wide.has(p.id);
+    const card = el('div', { class: `line-card ${broad ? 'warn' : ''}` });
+    card.appendChild(el('div', { class: 'line-row' }, [
+      el('span', {
+        class: 'unit-dot',
+        style: `background:${unit ? unitColor(unit) : ctx.patchColor(p.unitName)}${broad ? ';opacity:.35' : ''}`,
+      }),
+      el('span', { class: 'line-name', text: p.unitName || 'unnamed unit' }),
+      el('span', { class: 'line-sub', text: broad
+        ? 'not shaded — no boundary'
+        : areaText(counts.get(p.id) || 0, cell, p.lat) }),
+      el('button', {
+        class: 'row-x', type: 'button', text: '×', 'aria-label': 'Remove this shading',
+        onclick: () => ctx.deletePatch(p.id),
+      }),
+    ]));
+    card.appendChild(textRow({
+      label: 'Unit', value: p.unitName, placeholder: 'e.g. Poleta Fm',
+      list: known.length ? 'field-unit-names' : null,
+      onChange: (v) => ctx.editPatch(p.id, (x) => { x.unitName = v.trim(); }),
+    }));
+    if (broad) {
+      card.appendChild(el('div', { class: 'ctl-hint standalone', text:
+        'This one filled most of the sheet, so it is not shaded — a wash over the whole map would hide the very contacts you need to see to fix it. There is no boundary around this point yet. Draw the contact that bounds it, or move the tap inside an area your contacts already enclose.' }));
+    }
+    wrap.appendChild(card);
+  }
+
+  if (known.length) {
+    wrap.appendChild(el('datalist', { id: 'field-unit-names' },
+      known.map((k) => el('option', { value: k.name }))));
+  }
+  return wrap;
+}
+
+/** Cells to ground area. Mercator stretches with latitude, so undo that. */
+function areaText(cells, cellWorld, lat) {
+  if (!cells || !cellWorld) return '';
+  const m = cellWorld * 2 * Math.PI * 6378137 * Math.cos((lat || 0) * Math.PI / 180);
+  const a = cells * m * m;
+  return a > 1e6 ? `${(a / 1e6).toFixed(2)} km²` : `${Math.round(a / 100) * 100} m²`;
+}
+
 export function linesPanel(ctx) {
   const doc = ctx.doc();
   const node = el('div', { class: 'panel' });
@@ -743,6 +818,7 @@ export function linesPanel(ctx) {
     node.appendChild(card);
   }
 
+  node.appendChild(unitsBlock(ctx, doc));
   node.appendChild(exportBlock(ctx, { lines: true }));
   return node;
 }

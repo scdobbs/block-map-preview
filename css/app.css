@@ -1270,3 +1270,10 @@ html, body {
 /* Per-station unit disagreements: a short list, not a table. */
 .unit-check { display: grid; gap: 4px; margin: 6px 0 2px; }
 .unit-check .stat-value { font-weight: 600; font-size: 12.5px; }
+
+/* A unit patch's colour chip in the Lines panel. */
+.unit-dot {
+  width: 13px; height: 13px; border-radius: 3px; flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, .25);
+}
+.line-card.warn { border-color: var(--warn, #ffc857); }

@@ -59,7 +59,12 @@ export class MapCanvas {
     this.draftLine = null;      // the one being drawn right now
     this.activeVertex = null;   // { target, index } — the one last touched
     this.units = [];
+    this.patches = [];
     this.areas = [];
+    // The flooded shading, rebuilt only when the lines or the seeds change.
+    // It is derived from the contacts, so it has no business being stored and
+    // every business being cached.
+    this._shade = null;
     this.selectedId = null;
     this.labelStations = true;
     this.showStations = true;
@@ -228,6 +233,9 @@ export class MapCanvas {
     this._drawBase(ctx, cov);
     if (this.showHillshade || this.showContours) this._drawTerrain(ctx);
     this._drawAreas(ctx);
+    // Unit shading goes under the lines it was flooded to, the way a printed
+    // map lays colour under its contacts rather than over them.
+    this._drawUnits(ctx);
     // Lines go under the stations: a contact is context for a reading, and a
     // reading should never be hidden by the line it helped place.
     this._drawLines(ctx);
@@ -398,6 +406,32 @@ export class MapCanvas {
         }
       }
     }
+  }
+
+  /**
+   * Translucent unit colour, the way a geologic map is printed over its base:
+   * the topo sheet or the photograph has to read through it, or the map stops
+   * being a map of anywhere.
+   *
+   * Drawn from a grid in world coordinates, which is linear in screen space,
+   * so the whole thing is one drawImage however far it is panned or zoomed.
+   */
+  _drawUnits(ctx) {
+    const shade = this._shade;
+    if (!shade || !shade.canvas) return;
+    const a = this.worldToScreen(shade.box.x0, shade.box.y0);
+    const b = this.worldToScreen(shade.box.x1, shade.box.y1);
+    ctx.save();
+    ctx.globalAlpha = 0.46;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(shade.canvas, a.x, a.y, b.x - a.x, b.y - a.y);
+    ctx.restore();
+  }
+
+  /** Hand in a rendered shading grid, or null to clear it. */
+  setUnitShading(shade) {
+    this._shade = shade;
+    this.invalidate();
   }
 
   _drawAreas(ctx) {

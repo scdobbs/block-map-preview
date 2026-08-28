@@ -13,7 +13,7 @@ import { measureView } from './measureView.js';
 import { niceScaleBar } from './symbols.js';
 import { FieldStore, loadWorkspace, readProject, writeProject, writeIndex,
   removeProject, projectMeta } from '../../field/store.js';
-import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea,
+import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea, makePatch,
   nextStationName, toGeoJSON, toCSV, toKML, toLinesCSV, isLinearFeature, makeLine,
   lineKind, lineIsDrawable, lineLength, formatAttitude } from '../../field/model.js';
 import { Clinometer, GeoWatch, fixAge } from '../../field/sensors.js';
@@ -23,6 +23,7 @@ import { downloadArea, verifyArea, deleteArea, requestPersistence,
 import { elevationAt } from '../../field/dem.js';
 import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
 import { cutBlock, surveyExtent } from '../../field/cutblock.js';
+import { buildShading, shadingKey, patchColorCss } from './shading.js';
 
 const TABS = [
   { id: 'measure', label: 'Measure', build: measurePanel },
@@ -47,6 +48,12 @@ export class MapSection {
     // notes, and a stale one must never look like part of the record.
     this._blockReport = null;
     this._blockBuilding = null;
+    // Shading is derived from the contacts, so it is cached against their
+    // geometry and re-flooded only when that actually changes.
+    this._shadeKey = null;
+    this._shade = null;
+    // Armed to drop a unit patch on the next tap.
+    this.shadeMode = false;
     // The line being drawn. Held outside the document until it is finished,
     // so an abandoned line leaves nothing behind and every tap does not land
     // on the undo stack.
@@ -372,7 +379,9 @@ export class MapSection {
     this.map.lines = doc.lines;
     this.map.selectedLineId = this.selectedLineId;
     this.map.units = doc.units;
+    this.map.patches = doc.patches;
     this.map.areas = doc.areas;
+    this._syncShading(doc);
     this.map.selectedId = this.selectedStationId;
     if (layerChanged) this.map.invalidate();
     this.map.invalidate();
@@ -440,6 +449,7 @@ export class MapSection {
 
   onTap({ lon, lat }, screen) {
     if (this.drawing) { this.addVertex(lon, lat); return; }
+    if (this.shadeMode) { this.placePatch(lon, lat); return; }
     if (this.placeMode) {
       this.placeStation(lon, lat, { source: 'manual', bySight: true });
       return;
@@ -1152,6 +1162,76 @@ export class MapSection {
   }
 
   // -------------------------------------------------------------------------
+  // Map units
+  // -------------------------------------------------------------------------
+
+  /**
+   * Re-flood only when the lines or the seeds have moved.
+   *
+   * Panning must never trigger this, and neither must dropping a station: the
+   * shading is a function of the contacts and the patch points and nothing
+   * else, so that is exactly what the key is built from.
+   */
+  _syncShading(doc) {
+    const key = shadingKey(doc);
+    if (key === this._shadeKey) return;
+    this._shadeKey = key;
+    this._shade = (doc.patches || []).length ? buildShading(doc) : null;
+    this.map.setUnitShading(this._shade);
+    if (this.activeTab === 'lines') this.rebuild();
+  }
+
+  /** Fills that took most of the sheet — too few contacts to say much. */
+  widePatches() {
+    return this._shade ? this._shade.wide : new Set();
+  }
+
+  shading() { return this._shade; }
+
+  toggleShadeMode(on = null) {
+    this.shadeMode = on == null ? !this.shadeMode : on;
+    if (this.shadeMode && this.placeMode) this.togglePlace();
+    this.modeBanner.classList.toggle('hidden', !this.shadeMode);
+    if (this.shadeMode) {
+      clear(this.modeBanner);
+      this.modeBanner.append(
+        el('span', { text: 'Tap inside a unit to shade it' }),
+        el('button', {
+          class: 'banner-done', type: 'button', text: 'Done',
+          onclick: () => this.toggleShadeMode(false),
+        }),
+      );
+    }
+    this.rebuild();
+  }
+
+  placePatch(lon, lat) {
+    const last = (this.store.doc.patches || [])[this.store.doc.patches.length - 1];
+    this.store.edit((d) => {
+      d.patches = [...(d.patches || []), makePatch({
+        lon, lat,
+        // The unit most recently shaded, because a student colouring a map
+        // works one unit at a time across its several outcrops.
+        unitName: (last && last.unitName) || '',
+      })];
+    });
+    this.rebuild();
+  }
+
+  editPatch(id, fn) {
+    this.store.edit((d) => {
+      const p = (d.patches || []).find((x) => x.id === id);
+      if (p) fn(p);
+    });
+    this.rebuild();
+  }
+
+  deletePatch(id) {
+    this.store.edit((d) => { d.patches = (d.patches || []).filter((p) => p.id !== id); });
+    this.rebuild();
+  }
+
+  // -------------------------------------------------------------------------
   // Cutting a block
   // -------------------------------------------------------------------------
 
@@ -1459,6 +1539,17 @@ export class MapSection {
       removeVertex: (id, i) => this.removeVertex(id, i),
       deleteLine: (id) => this.deleteLine(id),
       goToLine: (id) => this.goToLine(id),
+
+      patches: () => this.store.doc.patches || [],
+      shadeMode: () => this.shadeMode,
+      toggleShadeMode: (v) => this.toggleShadeMode(v),
+      placePatch: (lon, lat) => this.placePatch(lon, lat),
+      editPatch: (id, fn) => this.editPatch(id, fn),
+      deletePatch: (id) => this.deletePatch(id),
+      widePatches: () => this.widePatches(),
+      patchColor: (name) => patchColorCss(name),
+      patchCounts: () => (this._shade ? this._shade.counts : new Map()),
+      patchCell: () => (this._shade ? this._shade.cell : 0),
 
       selection: () => this.selection(),
       beginSelection: () => this.beginSelection(),

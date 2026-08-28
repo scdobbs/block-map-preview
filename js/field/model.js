@@ -304,6 +304,30 @@ export function makeLine(over = {}) {
   };
 }
 
+/**
+ * A shaded map unit: a name, and a point inside the area it covers.
+ *
+ * The area itself is never stored. It is flooded out to the surrounding
+ * contacts whenever it is drawn, so it cannot disagree with the lines — there
+ * is only one copy of that geometry and it belongs to the contacts. Drag a
+ * contact and every patch touching it follows.
+ *
+ * One unit crops out in many places: both limbs of a fold, either side of a
+ * fault. So a patch carries a unit name rather than a unit owning a polygon,
+ * and a unit may have as many patches as it has outcrops.
+ */
+export function makePatch(over = {}) {
+  return {
+    id: newFieldId('pt'),
+    unitName: '',
+    lon: 0,
+    lat: 0,
+    note: '',
+    at: new Date().toISOString(),
+    ...over,
+  };
+}
+
 /** Ground length of a line, in meters. */
 export function lineLength(line) {
   const p = line.points || [];
@@ -366,6 +390,7 @@ export function defaultFieldDocument() {
     createdAt: new Date().toISOString(),
     stations: [],
     lines: [],
+    patches: [],
     units: [],
     areas: [],
     settings: {
@@ -429,6 +454,9 @@ export function migrateFieldDoc(doc) {
       delete line.unitB;
       return line;
     });
+  out.patches = (Array.isArray(doc.patches) ? doc.patches : [])
+    .filter((p) => p && Number.isFinite(p.lon) && Number.isFinite(p.lat))
+    .map((p) => ({ ...makePatch(), ...p }));
   out.units = (Array.isArray(doc.units) ? doc.units : [])
     .filter((u) => u && typeof u === 'object')
     .map((u) => ({ ...makeUnit(), ...u }));

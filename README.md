@@ -515,6 +515,40 @@ other, because three panes is not a layout a phone has room for.
 
 ---
 
+## Shading the units
+
+A geologic map is mostly polygons, and until now this one had only the lines
+round them, leaving the units to be held in your head.
+
+**Lines → Units → Shade a unit**, then tap anywhere inside an area your
+contacts enclose. It fills out to them and takes the colour of whatever unit
+you name.
+
+The polygon is **not stored**. A unit patch is a name and a point inside it,
+and the area is flooded out to the contacts every time it is drawn — so it
+cannot go stale. Drag a contact and the shading follows it, because there is
+only ever one copy of that geometry and it belongs to the lines. A whole
+geologic map costs a few dozen points of storage.
+
+Contacts, unconformities, faults and dikes stop a fill. A traverse does not:
+where you walked is not a boundary.
+
+**The edge of the sheet is a boundary too**, exactly as on a printed map. Real
+contacts almost never close on each other — they run off the side of the
+ground you walked, and the band between two of them is open at both ends. A
+fill that stopped only at contacts would escape from nearly every real map.
+
+One unit crops out in many places, so a patch carries a unit name rather than a
+unit owning a polygon, and a unit has as many patches as it has outcrops. A
+unit you set up in advance brings its own colour; one that exists only because
+you typed it on the outcrop gets a stable colour of its own, so the shading is
+useful before any of that is filled in.
+
+A fill that swallows most of the sheet is **not drawn**. It means there is no
+boundary round that point yet, and a wash over the whole map would hide the
+very contacts you need to see to fix it — so the panel says so in words
+instead.
+
 ## Getting the work out
 
 Four buttons, on both the Stations and the Lines tab, because they go to
