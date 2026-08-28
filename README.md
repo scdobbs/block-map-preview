@@ -556,6 +556,23 @@ contacts almost never close on each other — they run off the side of the
 ground you walked, and the band between two of them is open at both ends. A
 fill that stopped only at contacts would escape from nearly every real map.
 
+Better still, draw one yourself. **Map boundary** is a line kind like any
+other: the neat line round the ground you are claiming to have mapped. It
+stops a fill the way a contact does, so units can be filled in against it —
+and it is deliberately invisible to everything that reasons about geology. It
+is never read as a contact or a fault, never counted among the surfaces a
+structure is fitted to, and never allowed to stretch the area the fit thinks
+you covered. It says where you stopped looking, which is a fact about the
+survey rather than about the rock.
+
+**Colours belong to the unit, not the patch.** Set one from any patch and every
+outcrop of that unit follows, on the map and in the block's column — and the
+unit is created for you if you only ever named it on an outcrop.
+
+Tapping ground that is already shaded does not add a second patch. The flood
+knows which patch owns that cell, so it says which one it is and leaves the
+list alone.
+
 One unit crops out in many places, so a patch carries a unit name rather than a
 unit owning a polygon, and a unit has as many patches as it has outcrops. A
 unit you set up in advance brings its own colour; one that exists only because

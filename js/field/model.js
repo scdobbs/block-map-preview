@@ -120,6 +120,15 @@ export const LINE_KINDS = [
     hint: 'Where you walked. Not a geologic boundary.',
   },
   {
+    // The edge of the ground you are claiming to have mapped — a neat line,
+    // not a contact. It bounds the shading so a unit can be filled in against
+    // it, and it is deliberately invisible to everything that reasons about
+    // geology: it says where you stopped looking, which is a fact about the
+    // survey and not about the rock.
+    id: 'boundary', label: 'Map boundary', color: '#6b7b86', weight: 1.6,
+    hint: 'The edge of your map. Bounds the shading; means nothing to the geology.',
+  },
+  {
     id: 'other', label: 'Other', color: '#2f3a42', weight: 2.2,
     hint: 'Anything else worth a line.',
   },

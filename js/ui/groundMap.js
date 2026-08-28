@@ -203,6 +203,7 @@ export class GroundMap {
     for (const ln of survey.lines || []) {
       const kind = lineKind(ln.kind);
       const fault = ln.kind === 'fault';
+      const neat = ln.kind === 'boundary';
       ctx.save();
       ctx.setLineDash(DASH[ln.certainty] || []);
       ctx.lineJoin = 'round';
@@ -211,11 +212,13 @@ export class GroundMap {
       // A pale halo, not a dark one. These are the map's own colours — a
       // near-black contact, a red fault — and on grey hillshade crossed by
       // brown contours a dark line needs light around it to be found at all.
-      ctx.strokeStyle = 'rgba(255,255,255,.75)';
-      ctx.lineWidth = fault ? 5 : 3.6;
-      ctx.stroke();
+      if (!neat) {
+        ctx.strokeStyle = 'rgba(255,255,255,.75)';
+        ctx.lineWidth = fault ? 5 : 3.6;
+        ctx.stroke();
+      }
       ctx.strokeStyle = kind.color;
-      ctx.lineWidth = fault ? 2.4 : 1.7;
+      ctx.lineWidth = fault ? 2.4 : neat ? 1.1 : 1.7;
       ctx.stroke();
       ctx.restore();
     }
@@ -228,11 +231,11 @@ export class GroundMap {
   _drawKey(ctx, doc, right, y) {
     const bits = [];
     const lines = (doc.survey && doc.survey.lines) || [];
-    if (this.showDrawn && lines.length) {
-      // The colour the lines were actually drawn in, so the key cannot promise
-      // one thing while the map shows another.
-      bits.push([lineKind(lines[0].kind).color, 'walked']);
-    }
+    // The colour a real mapped line was drawn in, so the key cannot promise
+    // one thing while the map shows another — and never the neat line, which
+    // is not something anybody walked.
+    const first = lines.find((l) => l.kind !== 'boundary');
+    if (this.showDrawn && first) bits.push([lineKind(first.kind).color, 'walked']);
     if (this.showPredicted && this._traces && this._traces.runs.length) bits.push(['#57b6e0', 'predicted']);
     if (!bits.length) return;
     ctx.save();

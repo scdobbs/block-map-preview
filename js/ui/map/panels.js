@@ -619,6 +619,11 @@ function unitsBlock(ctx, doc) {
   wrap.appendChild(el('div', { class: 'ctl-hint standalone', text:
     'Tap anywhere inside an area your contacts enclose and it fills out to them. The colour is worked out from the lines every time, so moving a contact moves the shading with it — there is no outline to keep in step.' }));
 
+  const note = ctx.patchNote && ctx.patchNote();
+  if (note) {
+    wrap.appendChild(el('div', { class: 'notice' }, [el('p', { text: note })]));
+  }
+
   const patches = ctx.patches();
   if (!patches.length) return wrap;
 
@@ -652,6 +657,24 @@ function unitsBlock(ctx, doc) {
       list: known.length ? 'field-unit-names' : null,
       onChange: (v) => ctx.editPatch(p.id, (x) => { x.unitName = v.trim(); }),
     }));
+    // The colour belongs to the unit, so setting it here colours every outcrop
+    // of it at once rather than this one patch.
+    if (String(p.unitName || '').trim()) {
+      const swatch = el('input', {
+        class: 'unit-color', type: 'color',
+        value: toHex(unit ? unitColor(unit) : ctx.patchColor(p.unitName)),
+        onchange: (e) => ctx.setUnitColor(p.unitName, e.target.value),
+      });
+      card.appendChild(el('div', { class: 'ctl' }, [
+        el('div', { class: 'ctl-head' }, [
+          el('label', { class: 'ctl-label', text: `Colour for ${p.unitName}` }),
+        ]),
+        el('div', { class: 'unit-color-row' }, [
+          swatch,
+          el('span', { class: 'ctl-hint', text: 'Every outcrop of this unit, here and in the block.' }),
+        ]),
+      ]));
+    }
     if (broad) {
       card.appendChild(el('div', { class: 'ctl-hint standalone', text:
         'This one filled most of the sheet, so it is not shaded — a wash over the whole map would hide the very contacts you need to see to fix it. There is no boundary around this point yet. Draw the contact that bounds it, or move the tap inside an area your contacts already enclose.' }));
@@ -664,6 +687,13 @@ function unitsBlock(ctx, doc) {
       known.map((k) => el('option', { value: k.name }))));
   }
   return wrap;
+}
+
+/** A colour input needs #rrggbb, and a unit's colour may arrive as rgb(). */
+function toHex(c) {
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(String(c || ''));
+  if (!m) return /^#[\da-f]{6}$/i.test(c) ? c : '#9aa7b2';
+  return `#${[1, 2, 3].map((i) => Number(m[i]).toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** Cells to ground area. Mercator stretches with latitude, so undo that. */

@@ -1277,3 +1277,10 @@ html, body {
   border: 1px solid rgba(255, 255, 255, .25);
 }
 .line-card.warn { border-color: var(--warn, #ffc857); }
+
+/* A unit's colour, set from the patch that is on screen. */
+.unit-color-row { display: flex; align-items: center; gap: 10px; }
+.unit-color {
+  width: 40px; height: 28px; padding: 0; flex: 0 0 auto; cursor: pointer;
+  background: none; border: 1px solid var(--line); border-radius: 6px;
+}

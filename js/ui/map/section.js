@@ -13,7 +13,7 @@ import { measureView } from './measureView.js';
 import { niceScaleBar } from './symbols.js';
 import { FieldStore, loadWorkspace, readProject, writeProject, writeIndex,
   removeProject, projectMeta } from '../../field/store.js';
-import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea, makePatch,
+import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea, makePatch, makeUnit,
   nextStationName, toGeoJSON, toCSV, toKML, toLinesCSV, isLinearFeature, makeLine,
   lineKind, lineIsDrawable, lineLength, formatAttitude } from '../../field/model.js';
 import { Clinometer, GeoWatch, fixAge } from '../../field/sensors.js';
@@ -23,7 +23,7 @@ import { downloadArea, verifyArea, deleteArea, requestPersistence,
 import { elevationAt } from '../../field/dem.js';
 import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
 import { cutBlock, surveyExtent } from '../../field/cutblock.js';
-import { buildShading, shadingKey, patchColorCss } from './shading.js';
+import { buildShading, shadingKey, patchColorCss, patchAt } from './shading.js';
 
 const TABS = [
   { id: 'measure', label: 'Measure', build: measurePanel },
@@ -1206,6 +1206,20 @@ export class MapSection {
   }
 
   placePatch(lon, lat) {
+    // One patch per area. Tapping the same ground twice used to add a second
+    // one, which put a duplicate in the list and changed nothing on the map —
+    // the flood already knows who owns that cell, so ask it rather than
+    // guessing from how far apart two taps were.
+    const already = patchAt(this._shade, lon, lat);
+    if (already) {
+      const p = (this.store.doc.patches || []).find((x) => x.id === already);
+      this._patchNote = p
+        ? `That area is already shaded${p.unitName ? ` as ${p.unitName}` : ''}. Change or remove it in the list below rather than adding a second one.`
+        : null;
+      this.rebuild();
+      return;
+    }
+    this._patchNote = null;
     const last = (this.store.doc.patches || [])[this.store.doc.patches.length - 1];
     this.store.edit((d) => {
       d.patches = [...(d.patches || []), makePatch({
@@ -1214,6 +1228,24 @@ export class MapSection {
         // works one unit at a time across its several outcrops.
         unitName: (last && last.unitName) || '',
       })];
+    });
+    this.rebuild();
+  }
+
+  /**
+   * A unit's colour belongs to the unit, not to the patch that happens to be
+   * on screen — set it once and every outcrop of that unit follows, on the map
+   * and in the block's column. Creating the unit if it does not exist yet is
+   * the point: naming a unit on an outcrop is how most of them come into
+   * being, and a student should not have to go to Setup first to colour one.
+   */
+  setUnitColor(name, color) {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key) return;
+    this.store.edit((d) => {
+      const found = (d.units || []).find((u) => String(u.name || '').trim().toLowerCase() === key);
+      if (found) found.color = color;
+      else d.units = [...(d.units || []), makeUnit({ name: String(name).trim(), color })];
     });
     this.rebuild();
   }
@@ -1548,6 +1580,9 @@ export class MapSection {
       deletePatch: (id) => this.deletePatch(id),
       widePatches: () => this.widePatches(),
       patchColor: (name) => patchColorCss(name),
+      patchNote: () => this._patchNote,
+      clearPatchNote: () => { this._patchNote = null; },
+      setUnitColor: (name, color) => this.setUnitColor(name, color),
       patchCounts: () => (this._shade ? this._shade.counts : new Map()),
       patchCell: () => (this._shade ? this._shade.cell : 0),
 

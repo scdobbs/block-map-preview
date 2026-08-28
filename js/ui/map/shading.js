@@ -102,7 +102,14 @@ export function buildShading(doc, { res = 640 } = {}) {
   canvas.height = ny;
   canvas.getContext('2d').putImageData(img, 0, 0);
 
-  return { canvas, box, wide: flood.wide, counts: flood.counts, cell: flood.cell };
+  return {
+    canvas, box, wide: flood.wide, counts: flood.counts, cell: flood.cell,
+    // Kept so a later tap can be asked which patch, if any, already owns the
+    // ground under it — the flood is the only thing that knows, and asking it
+    // is exact where a distance test would only be a guess.
+    owner: flood.owner, nx: flood.nx, ny: flood.ny,
+    ids: patches.map((p) => p.id),
+  };
 }
 
 /**
@@ -138,4 +145,16 @@ function hexToRgb(hex) {
 export function patchColorCss(name) {
   const [r, g, b] = colorFor(String(name || '').trim().toLowerCase());
   return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** Which patch already covers this point, if any. */
+export function patchAt(shade, lon, lat) {
+  if (!shade) return null;
+  const [x, y] = toWorld(lon, lat);
+  const { box, nx, ny, owner } = shade;
+  const i = Math.floor(((x - box.x0) / (box.x1 - box.x0)) * nx);
+  const j = Math.floor(((y - box.y0) / (box.y1 - box.y0)) * ny);
+  if (i < 0 || j < 0 || i >= nx || j >= ny) return null;
+  const o = owner[j * nx + i];
+  return o < 0 ? null : shade.ids[o];
 }

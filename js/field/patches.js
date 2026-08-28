@@ -24,8 +24,14 @@
 // metres to turn a patch into evidence, and neither has to know about the
 // other.
 
-/** Line kinds that stop a fill. A traverse is where you walked, not a boundary. */
-export const BARRIER_KINDS = new Set(['contact', 'unconformity', 'fault', 'dike']);
+/**
+ * Line kinds that stop a fill.
+ *
+ * A traverse is where you walked, not a boundary, so it does not. A map
+ * boundary does — it is the neat line, and drawing one is how you close the
+ * open ends of a real map so its units can be filled in at all.
+ */
+export const BARRIER_KINDS = new Set(['contact', 'unconformity', 'fault', 'dike', 'boundary']);
 
 /**
  * Flood every seed out to the surrounding barriers.
@@ -63,10 +69,14 @@ export function floodPatches({ lines, seeds, box, res = 512 }) {
   const owner = new Int16Array(nx * ny).fill(-1);
   const wide = new Set();
   const counts = new Map();
-  // Not an escape hatch — the edge is a wall — but a fill that swallows most
-  // of the sheet means there are not enough contacts around it to say
-  // anything, and that is worth flagging even though it is drawn.
-  const broad = Math.floor(nx * ny * 0.6);
+  // Not an escape hatch — the edge is a wall — but a fill that swallows very
+  // nearly the whole sheet means nothing bounded it at all.
+  //
+  // The threshold has to clear a legitimately large unit. Somebody who draws a
+  // map boundary and shades the ground inside it can easily fill seventy per
+  // cent of the sheet and be entirely right; only a fill with no boundary
+  // anywhere reaches the middle nineties.
+  const broad = Math.floor(nx * ny * 0.88);
 
   // Each seed floods its own region without regard to the others, and only
   // then are overlaps resolved.

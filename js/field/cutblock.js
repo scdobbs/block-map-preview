@@ -67,7 +67,11 @@ export function projectNotes(doc, g, ground) {
       id: ln.id, name: ln.name || '', kind: ln.kind, pts,
       unitUpper: ln.unitUpper || '', unitLower: ln.unitLower || '',
       certainty: ln.certainty,
-      use: ln.kind !== 'traverse',
+      // Neither a traverse nor a map boundary is evidence about the rock: one
+      // is where somebody walked and the other is where they stopped looking.
+      // The boundary still bounds the shading — that is read off `kind`, not
+      // off this — but nothing that fits a structure may see it.
+      use: ln.kind !== 'traverse' && ln.kind !== 'boundary',
     });
   }
 
@@ -469,7 +473,7 @@ export function surveyExtent(fieldDoc, bbox) {
     if (hasAttitude(st) && !isLinearFeature(st.feature) && st.feature === FITTABLE_FEATURE) bedding++;
     else other++;
   }
-  const lines = { contact: 0, fault: 0, other: 0, unnamed: 0 };
+  const lines = { contact: 0, fault: 0, boundary: 0, other: 0, unnamed: 0 };
   for (const ln of fieldDoc.lines || []) {
     const inside = (ln.points || []).some(([lon, lat]) => {
       const [x, y] = toBlock(g, lon, lat);
@@ -480,6 +484,7 @@ export function surveyExtent(fieldDoc, bbox) {
       lines.contact++;
       if (!String(ln.unitUpper || '').trim() || !String(ln.unitLower || '').trim()) lines.unnamed++;
     } else if (ln.kind === 'fault') lines.fault++;
+    else if (ln.kind === 'boundary') lines.boundary++;
     else lines.other++;
   }
   return { georef: g, bedding, other, lines };
