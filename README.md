@@ -428,6 +428,29 @@ It also lets the column be checked. The unit beneath one contact is the unit
 above the next one down, so the two names have to agree; when they do not, the
 mapping does not join up and the app says which pair disagrees.
 
+### The units you logged are a second opinion
+
+The column is built from the contacts and nothing else — how far apart the
+surfaces are is all the contacts can say. The unit you name while standing on
+an outcrop is never consulted in building it, which makes it a genuinely
+independent check, and **Field → Units you logged** runs it: at every station
+that carries a unit name, which unit does the block think crops out there?
+
+It is a check and never a correction. A disagreement can mean the column is
+hung at the wrong level or that a station was logged in the wrong unit, and
+only the person who walked it can say which. The shape of the disagreement
+tells you which to suspect: the same offset running through every station is a
+column hung wrong, and one station disagreeing on its own is that station.
+
+Where the ground sits in the column is a real parameter and it is fitted, not
+assumed. Stratigraphic depth is measured down from the top of the column, so a
+contact can perfectly well come out *above* that zero — at a negative depth —
+and there is no way to express that by adjusting the top unit's thickness,
+because a thickness cannot be negative. The ground is what moves instead:
+lowering the sampled heightfield raises every stratigraphic depth by the same
+amount, and adding it back to the datum leaves every reported elevation
+untouched.
+
 ### Where it says it cannot answer
 
 Which is most of what it is for.

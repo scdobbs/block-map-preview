@@ -17,7 +17,7 @@ import { quadrantBearing } from '../geo/math.js';
 import { formatReading, FLAT_DIP } from '../render/markers.js';
 import { formatLine, formatPlane } from '../geo/stereonet.js';
 import { surfaceRange, niceContourInterval, isDemSurface } from '../geo/surfaces.js';
-import { misfit as fitMisfit } from '../geo/infer.js';
+import { misfit as fitMisfit, unitCheck } from '../geo/infer.js';
 import { formatLonLat } from '../field/geo.js';
 
 // ---------------------------------------------------------------------------
@@ -913,6 +913,33 @@ function fitReport(ctx, doc) {
 
   root.appendChild(el('div', { class: 'ctl-hint standalone', text:
     'Both numbers are live. Change an event on the History tab and they answer for the block you have now, not the one that was fitted — which is the fastest way to find out whether your correction is an improvement.' }));
+
+  // Does the block agree with the units you logged? Nothing in building the
+  // column consults them, so this is the one place the two are held together.
+  const uc = unitCheck(doc);
+  if (uc) {
+    const all = uc.agree === uc.n;
+    root.appendChild(el('div', { class: 'sub-head', text: 'Units you logged' }));
+    root.appendChild(el('div', { class: 'stats' }, [
+      el('div', { class: 'stat' }, [
+        el('span', { class: 'stat-label', text: 'Block agrees at' }),
+        el('span', { class: `stat-value ${all ? 'good' : 'warn'}`,
+          text: `${uc.agree} of ${uc.n}` }),
+      ]),
+    ]));
+    if (!all) {
+      const wrong = uc.rows.filter((r) => !r.ok).slice(0, 8);
+      root.appendChild(el('div', { class: 'unit-check' }, wrong.map((r) => el('div', { class: 'stat' }, [
+        el('span', { class: 'stat-label', text: `Station ${r.name || r.id}` }),
+        el('span', { class: 'stat-value warn', text: `you ${r.mapped} · block ${r.block || '—'}` }),
+      ]))));
+      root.appendChild(el('div', { class: 'ctl-hint standalone', text:
+        'The column is built from the contacts and never consults the unit you named at a station, so this is a genuine second opinion rather than a restatement. If the same offset runs through all of them the column is hung wrong; if one station disagrees on its own, look at that station.' }));
+    } else {
+      root.appendChild(el('div', { class: 'ctl-hint standalone', text:
+        'The unit this block puts at each station is the one you logged there. That is an independent agreement: nothing in building the column consulted these names.' }));
+    }
+  }
 
   // Ninety degrees per reading is also what a broken observation looks like,
   // so say when that is what is happening rather than letting it read as a

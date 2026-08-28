@@ -1266,3 +1266,7 @@ html, body {
   border: 1px solid var(--line);
 }
 .ground-toggle.on { color: var(--ink); border-color: var(--ink-faint); }
+
+/* Per-station unit disagreements: a short list, not a table. */
+.unit-check { display: grid; gap: 4px; margin: 6px 0 2px; }
+.unit-check .stat-value { font-weight: 600; font-size: 12.5px; }

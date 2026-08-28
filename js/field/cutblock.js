@@ -171,6 +171,53 @@ export function columnFor(column, fieldDoc, warnings = []) {
   return { layers, units: all };
 }
 
+
+/**
+ * Put the ground at the right height in the column.
+ *
+ * Stratigraphic depth is measured down from the top of the column, which sits
+ * at the block's own zero — so a contact can perfectly well come out at a
+ * NEGATIVE depth, meaning it crops out above that zero. There is no way to
+ * express that by adjusting the top unit's thickness, because a thickness
+ * cannot be negative; trying squashes the roof to nothing and shifts every
+ * unit on the map to something too young.
+ *
+ * The free parameter is not a thickness, it is how deep in the column the
+ * ground has been eroded to — so the ground is what moves. Lowering the
+ * heightfield by a constant raises every stratigraphic depth by the same
+ * constant, which is exactly the shift needed, and adding that constant back
+ * to the datum leaves every reported elevation untouched.
+ *
+ * The stations and the mapped lines move with the ground, or the misfit would
+ * afterwards be scoring readings against a surface they are no longer on.
+ */
+function hangColumn(ground, notes, column) {
+  const cs = column.contacts;
+  if (!cs.length) return 0;
+
+  // A roof thick enough to read, and in proportion to the units beneath it.
+  const gaps = [];
+  for (let i = 0; i < cs.length - 1; i++) gaps.push(cs[i + 1].depth - cs[i].depth);
+  const typical = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 200;
+  const roof = Math.max(20, Math.round(typical));
+
+  const shift = roof - cs[0].depth;
+  if (Math.abs(shift) < 0.5) return 0;
+
+  for (let k = 0; k < ground.grid.length; k++) ground.grid[k] -= shift;
+  ground.datum += shift;
+  // The cached min/max belongs to the old samples.
+  delete ground._range;
+  // The lid is a different lid now, so anything keyed on its identity has to
+  // know — the renderer caches its geometry against exactly this.
+  ground.id = `${ground.id}+${Math.round(shift)}`;
+
+  for (const st of notes.stations) st.z -= shift;
+  for (const ln of notes.lines) for (const p of ln.pts) p[2] -= shift;
+  for (const c of cs) c.depth += shift;
+  return shift;
+}
+
 /**
  * Cut a block from a field project.
  *
@@ -199,6 +246,8 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     );
   }
   const column = fit.events.length ? columnFrom(fit.events, notes) : { contacts: [], units: [] };
+  // Hang the column before anything is built from it. See hangColumn().
+  hangColumn(ground, notes, column);
   const built = columnFor(column, fieldDoc, fit.warnings);
 
   const doc = defaultDocument();
@@ -248,6 +297,10 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
       // scores as ninety degrees and makes a good block look hopeless.
       x: r1(s.x), y: r1(s.y), z: r1(s.z),
       strike: r1(s.strike), dip: r1(s.dip),
+      // What the student said the rock was, so the block can be asked whether
+      // it agrees. Without this the column is built from the contacts alone
+      // and never once checked against the unit somebody actually stood on.
+      unit: s.unitName || '',
     })),
     lines: notes.lines.map((l) => ({
       id: l.id, name: l.name, kind: l.kind, certainty: l.certainty,
@@ -264,12 +317,11 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     levels: column.contacts.map((c) => ({ key: c.id, name: c.name, depth: r1(c.depth) })),
   };
 
-  // The column is hung so that the shallowest contact lands where it was
-  // mapped. Get this wrong and the geometry is right while every unit on the
-  // map is the wrong one.
-  if (column.contacts.length && built.units.length) {
-    const top = column.contacts[0].depth;
-    doc.layers[0].thickness = Math.max(5, Math.round(doc.layers[0].thickness + top));
+  // The roof unit reaches exactly down to the shallowest contact, which
+  // hangColumn() has already put at a positive depth. Anything else and the
+  // geometry is right while every unit on the map is the wrong one.
+  if (column.contacts.length && doc.layers.length) {
+    doc.layers[0].thickness = Math.max(5, Math.round(column.contacts[0].depth));
   }
 
   // What the fit decided, on the document itself.

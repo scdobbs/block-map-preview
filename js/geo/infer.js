@@ -28,7 +28,7 @@
 //
 // Nothing here consults the answer it is trying to find.
 
-import { compileHistory, stratDepth, beddingAt } from './unmake.js';
+import { compileHistory, stratDepth, beddingAt, rockAt } from './unmake.js';
 import { fitBedding, poleOf } from './stereonet.js';
 import { makeEvent, makeLayer, faultKindFromRake } from './model.js';
 import { surfaceHeight } from './surfaces.js';
@@ -604,6 +604,44 @@ export function columnFrom(events, obs) {
     });
   }
   return { contacts: seen, units };
+}
+
+/**
+ * Does the block agree with the unit the student wrote down?
+ *
+ * The column is built from the contacts, and the contacts alone say only how
+ * far apart the surfaces are — nothing in that chain ever consults the unit
+ * somebody named while standing on the outcrop. So this asks the block, at
+ * every station that carries a unit name, which unit it thinks crops out
+ * there, and counts the agreements.
+ *
+ * It is a check and never a correction. A disagreement can mean the column is
+ * hung wrong, or that a station was logged in the wrong unit, and only the
+ * person who walked it can say which.
+ */
+export function unitCheck(doc) {
+  const survey = doc.survey;
+  if (!survey || !doc.layers) return null;
+  const named = (survey.stations || []).filter((s) => String(s.unit || '').trim());
+  if (!named.length) return null;
+
+  const h = compileHistory({
+    events: doc.events,
+    layers: doc.layers,
+    basementRockId: doc.basementRockId,
+  });
+  const norm = (v) => String(v || '').trim().toLowerCase();
+
+  const rows = [];
+  let agree = 0;
+  for (const s of named) {
+    const r = rockAt(h, [s.x, s.y, s.z - 0.5]);
+    const says = r.kind === 'layer' ? (doc.layers[r.index] || {}).name || '' : r.kind;
+    const ok = norm(says) === norm(s.unit);
+    if (ok) agree++;
+    rows.push({ id: s.id, name: s.name, mapped: s.unit, block: says, ok });
+  }
+  return { n: named.length, agree, rows };
 }
 
 // ---------------------------------------------------------------------------
