@@ -103,7 +103,8 @@ export function buildShading(doc, { res = 640 } = {}) {
   canvas.getContext('2d').putImageData(img, 0, 0);
 
   return {
-    canvas, box, wide: flood.wide, counts: flood.counts, cell: flood.cell,
+    canvas, box, wide: flood.wide, outside: flood.outside,
+    counts: flood.counts, cell: flood.cell,
     // Kept so a later tap can be asked which patch, if any, already owns the
     // ground under it — the flood is the only thing that knows, and asking it
     // is exact where a distance test would only be a guess.
@@ -157,4 +158,51 @@ export function patchAt(shade, lon, lat) {
   if (i < 0 || j < 0 || i >= nx || j >= ny) return null;
   const o = owner[j * nx + i];
   return o < 0 ? null : shade.ids[o];
+}
+
+/**
+ * Which unit a flooded area is, read off the stations standing in it.
+ *
+ * A student who has walked an area has already said what the rock is at every
+ * station in it — asking them to name it again when they shade it is asking
+ * for the same fact twice, and giving them a second chance to disagree with
+ * themselves. So the area is named from the readings inside it.
+ *
+ * A tie or a disagreement is reported rather than resolved. Two different
+ * units named inside one area bounded by contacts is a real contradiction —
+ * either a contact is missing between them or one station is logged wrong —
+ * and quietly taking the majority would bury exactly the thing worth seeing.
+ */
+export function unitFromStations(shade, patchId, stations) {
+  const votes = new Map();
+  let inside = 0;
+  for (const st of stations || []) {
+    const n = String(st.unitName || '').trim();
+    if (!n) continue;
+    if (patchAt(shade, st.lon, st.lat) !== patchId) continue;
+    inside++;
+    votes.set(n, (votes.get(n) || 0) + 1);
+  }
+  if (!inside) return { name: '', inside: 0, votes, conflict: false };
+  const ranked = [...votes.entries()].sort((a, b) => b[1] - a[1]);
+  return {
+    name: ranked[0][0],
+    inside,
+    votes,
+    conflict: ranked.length > 1,
+  };
+}
+
+/** Plain words for what the readings in an area said. */
+export function unitVerdictText(v, assigned) {
+  if (!v || !v.inside) return '';
+  const parts = [...v.votes.entries()].map(([n, c]) => `${n} (${c})`).join(', ');
+  if (v.conflict) {
+    return `The readings inside this area do not agree: ${parts}. One area bounded by contacts should be one unit — either a contact between them has not been drawn, or one of those stations is logged in the wrong unit.`;
+  }
+  const n = v.inside;
+  if (assigned && assigned.toLowerCase() !== v.name.toLowerCase()) {
+    return `Shaded as ${assigned}, but the ${n} reading${n === 1 ? '' : 's'} inside say ${v.name}.`;
+  }
+  return `Named from ${n} reading${n === 1 ? '' : 's'} inside it.`;
 }

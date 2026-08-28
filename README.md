@@ -538,11 +538,22 @@ other, because three panes is not a layout a phone has room for.
 A geologic map is mostly polygons, and until now this one had only the lines
 round them, leaving the units to be held in your head.
 
-**Lines → Units**: pick the unit from the chips, then **Shade a unit** and tap
-inside an area your contacts enclose. It fills out to them in that unit's own
-colour — the same order the Lines tab picks a kind before drawing one, and it
-means a new patch arrives already carrying the colour that unit is shaded in
-everywhere else. Type a name instead to start a unit that does not exist yet.
+**Lines → Units → Shade a unit**, then tap inside an area your contacts
+enclose. It fills out to them — and **names itself from the readings standing
+inside it**.
+
+That is the point: you already said what the rock was at every station you
+stood on. Asking again when you shade the area is asking for the same fact
+twice, and giving you a second chance to disagree with yourself. So there is
+usually nothing to choose. The chips above are there to overrule the readings,
+or to name ground you never took one in.
+
+Two different units named inside one area is reported rather than resolved.
+That is a real contradiction — either a contact between them has not been
+drawn, or one of those stations is logged in the wrong unit — and quietly
+taking the majority would bury the one thing worth seeing. The same check runs
+on every shaded area afterwards, so a patch that stops agreeing with the
+readings in it says so.
 
 The polygon is **not stored**. A unit patch is a name and a point inside it,
 and the area is flooded out to the contacts every time it is drawn — so it

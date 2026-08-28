@@ -45,6 +45,7 @@ export const BARRIER_KINDS = new Set(['contact', 'unconformity', 'fault', 'dike'
  *             counts: Map<string, number> }}
  *   `wide` names any fill that took most of the sheet — drawn, but a sign
  *   there are too few contacts around it for the answer to mean much.
+ *   `outside` names any seed that fell off the sheet altogether.
  *   `owner` holds the index into `seeds` for each cell, or -1.
  */
 export function floodPatches({ lines, seeds, box, res = 512 }) {
@@ -89,10 +90,18 @@ export function floodPatches({ lines, seeds, box, res = 512 }) {
   const stamp = new Int32Array(nx * ny);
   const regions = [];
 
+  const outside = new Set();
   seeds.forEach((seed, index) => {
     const si = toI(seed.x);
     const sj = toJ(seed.y);
-    if (si < 0 || sj < 0 || si >= nx || sj >= ny) { regions.push(null); return; }
+    // A seed off the sheet cannot be flooded against anything. Named rather
+    // than silently skipped: it is nearly always a point somewhere the mapping
+    // is not, and the person who tapped it deserves to be told which.
+    if (si < 0 || sj < 0 || si >= nx || sj >= ny) {
+      outside.add(seed.id);
+      regions.push(null);
+      return;
+    }
     const start = free(blocked, stamp, index + 1, nx, ny, si, sj);
     if (start < 0) { regions.push(null); return; }
 
@@ -130,7 +139,7 @@ export function floodPatches({ lines, seeds, box, res = 512 }) {
     for (const at of regions[index]) owner[at] = index;
   }
 
-  return { owner, nx, ny, box, cell, wide, counts };
+  return { owner, nx, ny, box, cell, wide, counts, outside };
 }
 
 /** The nearest unblocked cell to a seed that landed on a line. */
@@ -207,12 +216,22 @@ export function samplePatches(flood, seeds, perPatch = 160) {
   });
 }
 
-/** A bounding box round everything worth flooding, with a margin. */
+/**
+ * The sheet: a box round the mapping, with a margin.
+ *
+ * Built from the LINES and not from the seeds, because the seeds are wherever
+ * somebody tapped and the sheet is what they mapped. One stray station — a
+ * reading taken at a desk three hundred kilometres away, which every real
+ * notebook accumulates — would otherwise stretch the sheet across four degrees
+ * of longitude, make every cell most of a kilometre across, and collapse every
+ * contact on the map into the same region. Seeds are only consulted when there
+ * are no lines at all to define anything.
+ */
 export function extentOf(lines, seeds, pad = 0.04) {
   const xs = [];
   const ys = [];
   for (const ln of lines) for (const p of ln.pts || []) { xs.push(p[0]); ys.push(p[1]); }
-  for (const s of seeds) { xs.push(s.x); ys.push(s.y); }
+  if (!xs.length) for (const s of seeds) { xs.push(s.x); ys.push(s.y); }
   if (!xs.length) return null;
   const x0 = Math.min(...xs);
   const x1 = Math.max(...xs);

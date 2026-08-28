@@ -23,7 +23,8 @@ import { downloadArea, verifyArea, deleteArea, requestPersistence,
 import { elevationAt } from '../../field/dem.js';
 import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
 import { cutBlock, surveyExtent } from '../../field/cutblock.js';
-import { buildShading, shadingKey, patchColorCss, patchAt } from './shading.js';
+import { buildShading, shadingKey, patchColorCss, patchAt,
+  unitFromStations, unitVerdictText } from './shading.js';
 
 const TABS = [
   { id: 'measure', label: 'Measure', build: measurePanel },
@@ -1192,6 +1193,16 @@ export class MapSection {
 
   shading() { return this._shade; }
 
+  /** What the readings inside each shaded area say it is. */
+  patchVerdicts() {
+    const out = new Map();
+    if (!this._shade) return out;
+    for (const p of this.store.doc.patches || []) {
+      out.set(p.id, unitFromStations(this._shade, p.id, this.store.doc.stations));
+    }
+    return out;
+  }
+
   setShadeUnit(name) {
     this.shadeUnit = String(name || '').trim();
     this.rebuild();
@@ -1229,10 +1240,29 @@ export class MapSection {
       this.rebuild();
       return;
     }
-    this._patchNote = null;
-    this.store.edit((d) => {
-      d.patches = [...(d.patches || []), makePatch({ lon, lat, unitName: this.shadeUnit || '' })];
-    });
+    const doc = this.store.doc;
+    const patch = makePatch({ lon, lat });
+
+    // Flood with the new patch in place before committing anything, because
+    // the question "which unit is this" can only be asked of a region that
+    // exists — and the region is what the readings have to be inside of.
+    const probe = buildShading({ ...doc, patches: [...(doc.patches || []), patch] });
+    if (probe && probe.outside && probe.outside.has(patch.id)) {
+      this._patchNote = 'That point is outside the ground you have mapped, so there is nothing to fill it against. Shade somewhere inside your contacts.';
+      this.rebuild();
+      return;
+    }
+    const said = unitFromStations(probe, patch.id, doc.stations);
+
+    // A unit chosen from the chips is an instruction and wins. Otherwise the
+    // readings standing in the area name it, which is the usual case and the
+    // one worth not asking about: the student already wrote it down.
+    patch.unitName = this.shadeUnit || said.name || '';
+    this._patchNote = said.inside
+      ? unitVerdictText(said, this.shadeUnit || said.name)
+      : 'No readings inside this area, so it could not be named from them. Pick a unit above, or type its name on the row below.';
+
+    this.store.edit((d) => { d.patches = [...(d.patches || []), patch]; });
     this.rebuild();
   }
 
@@ -1587,6 +1617,8 @@ export class MapSection {
       widePatches: () => this.widePatches(),
       patchColor: (name) => patchColorCss(name),
       patchNote: () => this._patchNote,
+      patchVerdicts: () => this.patchVerdicts(),
+      unitVerdictText: (v, a) => unitVerdictText(v, a),
       clearPatchNote: () => { this._patchNote = null; },
       setUnitColor: (name, color) => this.setUnitColor(name, color),
       patchCounts: () => (this._shade ? this._shade.counts : new Map()),

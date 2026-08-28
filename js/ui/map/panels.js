@@ -659,16 +659,29 @@ function unitsBlock(ctx, doc) {
       : (active ? `Shade ${active}` : 'Shade a unit'),
     onclick: () => ctx.toggleShadeMode(),
   }));
-  wrap.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'Tap inside an area your contacts enclose and it fills out to them. Draw a Map boundary line to close the open ends of your mapping and units will fill against that too.' }));
+  wrap.appendChild(el('div', { class: 'ctl-hint standalone', text: active
+    ? `Tap inside an area your contacts enclose and it fills out to them, shaded as ${active}.`
+    : 'Tap inside an area your contacts enclose and it fills out to them. It takes its name from the readings standing inside it, so there is usually nothing to choose — pick a unit above only to overrule them, or for ground you have not taken a reading in.' }));
 
   const note = ctx.patchNote && ctx.patchNote();
   if (note) wrap.appendChild(el('div', { class: 'notice' }, [el('p', { text: note })]));
 
   if (!patches.length) return wrap;
 
+  const verdicts = ctx.patchVerdicts ? ctx.patchVerdicts() : new Map();
+  const quarrels = [];
+
   wrap.appendChild(el('div', { class: 'unit-list' }, patches.map((p) => {
     const broad = wide.has(p.id);
+    const said = verdicts.get(p.id);
+    // A shaded area disagreeing with the readings standing in it is worth
+    // saying out loud: it is either a missing contact or a mis-logged station,
+    // and both are the student's to settle.
+    const quarrel = said && said.inside && (
+      said.conflict
+      || String(said.name).toLowerCase() !== String(p.unitName || '').trim().toLowerCase()
+    );
+    if (quarrel) quarrels.push(ctx.unitVerdictText(said, p.unitName));
     const swatch = el('input', {
       class: 'unit-swatch', type: 'color', value: toHex(colorOf(p.unitName)),
       title: p.unitName ? `Colour for ${p.unitName} — every outcrop of it` : 'Name the unit first',
@@ -681,18 +694,24 @@ function unitsBlock(ctx, doc) {
       autocapitalize: 'words', autocomplete: 'off', spellcheck: 'false',
       onchange: (e) => ctx.editPatch(p.id, (x) => { x.unitName = e.target.value.trim(); }),
     });
-    return el('div', { class: `unit-row ${broad ? 'warn' : ''}` }, [
+    return el('div', { class: `unit-row ${broad || quarrel ? 'warn' : ''}` }, [
       swatch,
       name,
       el('span', { class: 'line-sub', text: broad
         ? 'no boundary'
-        : areaText(counts.get(p.id) || 0, cell, p.lat) }),
+        : quarrel
+          ? 'readings disagree'
+          : `${areaText(counts.get(p.id) || 0, cell, p.lat)}${said && said.inside ? ` · ${said.inside}✓` : ''}` }),
       el('button', {
         class: 'row-x', type: 'button', text: '×', 'aria-label': 'Remove this shading',
         onclick: () => ctx.deletePatch(p.id),
       }),
     ]);
   })));
+
+  for (const q of quarrels) {
+    wrap.appendChild(el('div', { class: 'notice warn' }, [el('p', { text: q })]));
+  }
 
   if ([...wide].length) {
     wrap.appendChild(el('div', { class: 'ctl-hint standalone', text:
