@@ -128,12 +128,77 @@ export function misfit(events, obs) {
   }
   spread = usable ? spread / usable : 0;
 
+  // Shaded units say something the contacts cannot: not where a surface runs,
+  // but what crops out over a whole area. A unit lies between the two contacts
+  // that bound it, so every point inside its patch must have a stratigraphic
+  // depth inside that interval — which pins where the column sits, rather than
+  // leaving it to be inferred from a handful of contact depths.
+  let area = 0;
+  let patches = 0;
+  const bounds = unitBounds(h, obs);
+  for (const p of obs.patches || []) {
+    const b = bounds.get(String(p.unit || '').trim().toLowerCase());
+    if (!b || !p.pts || !p.pts.length) continue;
+    let out = 0;
+    for (const q of p.pts) {
+      const d = stratDepth(h, q);
+      if (!Number.isFinite(d)) continue;
+      // Zero anywhere inside the unit. Only being outside it costs, and by how
+      // far outside — a point one metre past a contact is nearly right.
+      out += Math.max(0, b.top - d, d - b.base);
+    }
+    area += out / p.pts.length;
+    patches++;
+  }
+  area = patches ? area / patches : 0;
+
   return {
-    angle, spread, n: counted, lines, blind,
+    angle, spread, n: counted, lines, blind, area, patches,
     // Surfaces that could actually be scored, not merely drawn.
     surfaces: usable,
-    total: angle + spread / METRES_PER_DEGREE,
+    total: angle + (spread + area) / METRES_PER_DEGREE,
   };
+}
+
+/**
+ * The depth interval each named unit occupies, for one candidate history.
+ *
+ * Read off the contacts: the shallowest contact naming a unit as its lower
+ * side is that unit's top, and the deepest naming it as its upper side is its
+ * base. A unit with only one of those is open-ended on the other side, which
+ * is the honest answer for the youngest and oldest units on any map — nothing
+ * mapped says how far they go.
+ */
+function unitBounds(h, obs) {
+  const out = new Map();
+  const at = [];
+  for (const g of contactGroups(obs)) {
+    if (!g.named) continue;
+    const d = g.pts
+      .filter((p) => Number.isFinite(p[2]))
+      .map((p) => stratDepth(h, p))
+      .filter(Number.isFinite);
+    if (!d.length) continue;
+    at.push({ depth: d.reduce((a, b) => a + b, 0) / d.length, upper: g.upper, lower: g.lower });
+  }
+  for (const c of at) {
+    for (const [name, side] of [[c.lower, 'top'], [c.upper, 'base']]) {
+      const key = String(name || '').trim().toLowerCase();
+      if (!key) continue;
+      if (!out.has(key)) out.set(key, { top: -Infinity, base: Infinity });
+      const b = out.get(key);
+      // A unit's top is the shallowest contact that puts it underneath;
+      // its base is the deepest contact that puts it on top.
+      if (side === 'top') b.top = Math.max(b.top, c.depth);
+      else b.base = Math.min(b.base, c.depth);
+    }
+  }
+  // Open-ended sides cost nothing rather than everything.
+  for (const b of out.values()) {
+    if (!Number.isFinite(b.top)) b.top = -Infinity;
+    if (!Number.isFinite(b.base)) b.base = Infinity;
+  }
+  return out;
 }
 
 export function contactsOf(obs) {

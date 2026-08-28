@@ -21,6 +21,7 @@ import { inferHistory, columnFrom, misfit, contactGroups } from '../geo/infer.js
 import { defaultDocument, makeLayer, makeMarker, rock, ROCKS } from '../geo/model.js';
 import { surfaceHeight, surfaceRange } from '../geo/surfaces.js';
 import { hasAttitude, isLinearFeature } from './model.js';
+import { floodPatches, samplePatches, extentOf, BARRIER_KINDS } from './patches.js';
 
 /** Only planar readings of bedding are evidence about the shape of the beds. */
 const FITTABLE_FEATURE = 'bedding';
@@ -70,7 +71,36 @@ export function projectNotes(doc, g, ground) {
     });
   }
 
-  return { stations, lines, dropped };
+  // Shaded units, flooded again in block metres.
+  //
+  // Re-flooded rather than carried over from the map, because the block's
+  // frame is the one the fit works in and a region is only as good as the
+  // lines it was bounded by — the same lines, in the same coordinates, or the
+  // patch and the contacts would be describing slightly different places.
+  const patches = [];
+  const seeds = [];
+  for (const p of doc.patches || []) {
+    const [x, y] = toBlock(g, p.lon, p.lat);
+    seeds.push({ id: p.id, x, y, unit: p.unitName || '' });
+  }
+  if (seeds.length) {
+    const barriers = lines.filter((l) => BARRIER_KINDS.has(l.kind));
+    // The block's own footprint is the sheet, so a unit running off the side
+    // of it closes against the edge exactly as it does on the map.
+    const box = { x0: -g.width / 2, y0: -g.depth / 2, x1: g.width / 2, y1: g.depth / 2 };
+    const flood = floodPatches({ lines: barriers, seeds, box, res: 320 });
+    const sampled = samplePatches(flood, seeds, 140);
+    seeds.forEach((seed, i) => {
+      if (!seed.unit.trim()) return;
+      // A fill with no boundary round it covers the sheet and constrains
+      // nothing, so it is left out rather than allowed to dominate the fit.
+      if (flood.wide.has(seed.id)) return;
+      const pts = sampled[i].map(([x, y]) => [x, y, zOf(x, y)]);
+      if (pts.length >= 4) patches.push({ id: seed.id, unit: seed.unit, pts });
+    });
+  }
+
+  return { stations, lines, patches, dropped };
 }
 
 /**
@@ -214,6 +244,7 @@ function hangColumn(ground, notes, column) {
 
   for (const st of notes.stations) st.z -= shift;
   for (const ln of notes.lines) for (const p of ln.pts) p[2] -= shift;
+  for (const pt of notes.patches || []) for (const p of pt.pts) p[2] -= shift;
   for (const c of cs) c.depth += shift;
   return shift;
 }
@@ -315,6 +346,12 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     // The depths the fitted structure puts each mapped surface at, which is
     // what the predicted trace is contoured from.
     levels: column.contacts.map((c) => ({ key: c.id, name: c.name, depth: r1(c.depth) })),
+    // Shaded units, thinned again, so the live misfit can keep scoring them
+    // against whatever the history says now.
+    patches: notes.patches.map((p) => ({
+      id: p.id, unit: p.unit,
+      pts: thin(p.pts, 60).map((q) => [r1(q[0]), r1(q[1]), r1(q[2])]),
+    })),
   };
 
   // The roof unit reaches exactly down to the shallowest contact, which
@@ -347,6 +384,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     warnings: fit.warnings,
     units: built.units,
     counts: {
+      patches: notes.patches.length,
       stations: notes.stations.length,
       dropped: notes.dropped,
       surfaces: contactGroups(notes).length,
@@ -365,6 +403,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
       column,
       units: built.units,
       counts: {
+        patches: notes.patches.length,
         stations: notes.stations.length,
         dropped: notes.dropped,
         surfaces: contactGroups(notes).length,

@@ -428,6 +428,24 @@ It also lets the column be checked. The unit beneath one contact is the unit
 above the next one down, so the two names have to agree; when they do not, the
 mapping does not join up and the app says which pair disagrees.
 
+### A shaded unit is evidence, not decoration
+
+A contact constrains the model along a **line**. A shaded unit constrains it
+over an **area**: every point inside the patch has to have a stratigraphic
+depth between the two contacts that bound that unit. That is far more
+information than the boundary alone, and it is what pins where the column sits
+— the thing a handful of contact depths leaves loose.
+
+The three terms are independent, and that is the point of having them. On a
+real notebook, halving the fitted fold's amplitude *improves* how tightly the
+contacts hold to one surface and makes the shaded units markedly worse: the
+contacts alone would have preferred the wrong answer.
+
+The patches are flooded again in block metres rather than carried over from the
+map, because a region is only as good as the lines that bounded it, and the fit
+works in the block's frame. A fill with no boundary around it constrains
+nothing and is left out rather than allowed to dominate.
+
 ### The units you logged are a second opinion
 
 The column is built from the contacts and nothing else — how far apart the

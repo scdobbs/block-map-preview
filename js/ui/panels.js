@@ -881,6 +881,11 @@ function fitReport(ctx, doc) {
     stats.push(el('div', { class: 'stat' }, [
       el('span', { class: 'stat-label', text: 'Contacts held to' }), spreadVal]));
   }
+  const areaVal = el('span', { class: 'stat-value' });
+  if (now.patches) {
+    stats.push(el('div', { class: 'stat' }, [
+      el('span', { class: 'stat-label', text: 'Shaded units off by' }), areaVal]));
+  }
   stats.push(statRow('Readings used', String(now.n)));
   stats.push(statRow('Contacts used', String(now.surfaces)));
   root.appendChild(el('div', { class: 'stats' }, stats));
@@ -893,6 +898,10 @@ function fitReport(ctx, doc) {
     if (m.surfaces) {
       spreadVal.textContent = `±${Math.round(m.spread)} m`;
       spreadVal.className = `stat-value ${m.spread < 40 ? 'good' : 'warn'}`;
+    }
+    if (m.patches) {
+      areaVal.textContent = m.area < 0.5 ? 'inside' : `${Math.round(m.area)} m out`;
+      areaVal.className = `stat-value ${m.area < 15 ? 'good' : 'warn'}`;
     }
   };
   paint(now);
@@ -911,8 +920,9 @@ function fitReport(ctx, doc) {
     root.appendChild(el('div', { class: 'ctl-hint standalone', text: drift.join(' ') }));
   }
 
-  root.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'Both numbers are live. Change an event on the History tab and they answer for the block you have now, not the one that was fitted — which is the fastest way to find out whether your correction is an improvement.' }));
+  root.appendChild(el('div', { class: 'ctl-hint standalone', text: now.patches
+    ? 'All three are live. Change an event on the History tab and they answer for the block you have now, not the one that was fitted. A shaded unit says what crops out over a whole area rather than along a line, which is what pins where the column sits — "inside" means every sampled point lands in the right unit.'
+    : 'Both numbers are live. Change an event on the History tab and they answer for the block you have now, not the one that was fitted — which is the fastest way to find out whether your correction is an improvement.' }));
 
   // Does the block agree with the units you logged? Nothing in building the
   // column consults them, so this is the one place the two are held together.
