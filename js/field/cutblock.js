@@ -20,6 +20,7 @@ import { georef, georefRecord, georefFromBbox, groundFor, toBlock, inBlock } fro
 import { inferHistory, columnFrom, misfit, contactGroups } from '../geo/infer.js';
 import { defaultDocument, makeLayer, makeMarker, rock, ROCKS } from '../geo/model.js';
 import { surfaceHeight, surfaceRange } from '../geo/surfaces.js';
+import { compileHistory, stratDepth } from '../geo/unmake.js';
 import { hasAttitude, isLinearFeature } from './model.js';
 import { floodPatches, samplePatches, extentOf, BARRIER_KINDS } from './patches.js';
 
@@ -364,6 +365,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
   if (column.contacts.length && doc.layers.length) {
     doc.layers[0].thickness = Math.max(5, Math.round(column.contacts[0].depth));
   }
+  deepenFloor(doc, ground);
 
   // What the fit decided, on the document itself.
   //
@@ -445,6 +447,50 @@ function thin(pts, max) {
   for (let i = 0; i < max - 1; i++) out.push(pts[Math.round((i * (pts.length - 1)) / (max - 1))]);
   out.push(pts[pts.length - 1]);
   return out;
+}
+
+/**
+ * Make the oldest unit reach the oldest rock that actually crops out.
+ *
+ * The unit below the deepest contact is open-ended: nothing anybody mapped
+ * says how thick it is, so it starts as a placeholder the width of its
+ * neighbours. Where a fold core exhumes deeper than that placeholder, the
+ * column simply runs out and the block answers "basement" — a small nose of
+ * crystalline rock in the middle of an anticline that no reading, no contact
+ * and no shaded unit ever suggested.
+ *
+ * That is the placeholder showing through, not a finding, and basement is far
+ * too strong a claim to make by accident. So the floor is grown until it
+ * covers the deepest rock the ground exposes. It is still a guess about
+ * thickness — it is only ever a lower bound, and it is labelled as one — but
+ * "at least this thick" is a guess the mapping supports, and "exactly as thick
+ * as its neighbours, and then basement" is not.
+ *
+ * The roof needs no such help: the block already extends its youngest unit
+ * upward above the top of the column.
+ */
+function deepenFloor(doc, ground) {
+  if (!doc.layers.length || !doc.events.length) return;
+  const h = compileHistory(doc);
+  const { width: W, depth: D } = doc.block;
+  let deepest = -Infinity;
+  const n = 64;
+  for (let j = 0; j <= n; j++) {
+    const y = -D / 2 + (j / n) * D;
+    for (let i = 0; i <= n; i++) {
+      const x = -W / 2 + (i / n) * W;
+      const d = stratDepth(h, [x, y, surfaceHeight(ground, x, y) - 0.5]);
+      if (Number.isFinite(d) && d > deepest) deepest = d;
+    }
+  }
+  if (!Number.isFinite(deepest)) return;
+
+  const above = doc.layers.slice(0, -1).reduce((a, l) => a + l.thickness, 0);
+  const floor = doc.layers[doc.layers.length - 1];
+  // A margin, because the sampling grid can step over the very bottom of a
+  // narrow fold core between two of its nodes.
+  const wanted = Math.ceil(deepest - above + Math.max(10, (deepest - above) * 0.08));
+  if (wanted > floor.thickness) floor.thickness = wanted;
 }
 
 /** How deep the fitted structure reaches, so the block can be cut to hold it. */

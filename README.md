@@ -400,9 +400,18 @@ the same depth.
 
 It also means the **column falls out of the contacts for free**. Two contacts at
 a known structure differ by the thickness of what lies between them, so the
-thicknesses are read off the map rather than measured with a tape. The units at
-the top and bottom of the column are open-ended and are labelled as guesses,
-because nothing in the box says how thick they are.
+thicknesses are read off the map rather than measured with a tape.
+
+The units at the top and bottom are open-ended: nothing in the box says how
+thick they are, so both are **lower bounds** rather than measurements. The
+oldest one is grown until it reaches the oldest rock the ground actually
+exposes. Left as a placeholder the width of its neighbours, a fold core that
+exhumes deeper than the guess runs the column out and the block answers
+*basement* — a nose of crystalline rock in the middle of an anticline that no
+reading, no contact and no shaded unit ever suggested. That is the placeholder
+showing through rather than a finding, and basement is far too strong a claim
+to make by accident. The youngest unit needs no such help: the block already
+extends it upward above the top of the column.
 
 ### Naming the units is a measurement
 

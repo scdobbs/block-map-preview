@@ -986,10 +986,10 @@ function fitReport(ctx, doc) {
     root.appendChild(el('div', { class: 'stats' }, fit.units.map((u) => el('div', { class: 'stat' }, [
       el('span', { class: 'stat-label', text: u.name || 'unnamed' }),
       el('span', { class: `stat-value ${u.measured ? '' : 'dim'}`,
-        text: `${Math.round(u.thickness)} m${u.measured ? '' : ' (guessed)'}` }),
+        text: `${Math.round(u.thickness)} m${u.measured ? '' : ' (at least)'}` }),
     ]))));
     root.appendChild(el('div', { class: 'ctl-hint standalone', text:
-      'Two contacts at a known structure differ by the thickness between them, so these were read off the map rather than measured with a tape. The top and bottom units are open-ended — nothing you mapped says how thick they are.' }));
+      'Two contacts at a known structure differ by the thickness between them, so these were read off the map rather than measured with a tape. The top and bottom units are open-ended: nothing you mapped says how thick they are, so those two are lower bounds — enough to reach the oldest and youngest rock that actually crops out, and no claim beyond it.' }));
   }
 
   const c = fit.counts || {};
