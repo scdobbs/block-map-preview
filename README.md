@@ -580,7 +580,10 @@ Which is most of what it is for.
 - **A fault nothing measures the throw of** gets zero slip and says the fault is
   drawn, not solved — telling "you never found this contact again" apart from
   "you stopped drawing it at the fault", since those are different things to go
-  and fix.
+  and fix. It **keeps the sense you observed and any rake your slickenlines
+  give**, because those are observations and only the distance is missing: a
+  thrust whose throw nobody measured is a thrust with an unknown offset, and it
+  must never come back reported as a normal fault.
 - **A slip the data barely prefers** is reported as undetermined. After the
   search settles, the offset is walked across its whole range and the fit is
   asked how much it actually minds: when the answer is less than half a degree,

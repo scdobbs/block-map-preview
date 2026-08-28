@@ -743,10 +743,17 @@ export function inferHistory(obs, { extent = 4000, localFolds = false } = {}) {
       : (Number.isFinite(ln.dip) ? { dip: ln.dip, dipDir: ln.dipDir } : null);
     const plane = faultFromTrace(ln.pts, given);
 
+    // The sense is an OBSERVATION and goes on the event from the start, not a
+    // conclusion the slip search is allowed to hand back. A fault whose throw
+    // nothing measures is a fault of known sense and unknown offset, and it
+    // must not come back reported as the opposite of what somebody watched
+    // in the field. The ids in FAULT_SENSES are the model's own kinds, so a
+    // declared sense is passed straight through; obliquity zero makes it the
+    // pure form of that sense, which is what "thrust" on its own means.
     const ev = makeEvent('fault', {
       strike: plane.strike, dip: plane.dip,
       centerX: plane.centerX, centerY: plane.centerY, centerZ: plane.centerZ,
-      slip: 0, kind: 'normal', obliquity: 0,
+      slip: 0, kind: SENSE_RAKE[ln.sense] ? ln.sense : 'normal', obliquity: 0,
       name: label,
     });
     fitted.push({ ev, plane, line: ln, seen, onOutcrop });
@@ -1112,30 +1119,11 @@ function fitSlip(fitted, events, obs, extent, notes, warnings) {
   };
 
   for (const f of fitted) {
-    const cross = crossesFault(f.ev, obs);
-    // Units named across a dipping fault measure the separation on their own:
-    // it is what "older on younger" means, said in the column's own metres.
-    const named = f.plane.dip < 89
-      && !!String(f.line.unitUpper || '').trim()
-      && !!String(f.line.unitLower || '').trim();
-
-    if (!cross.crosses && !named) {
-      f.ev.slip = 0;
-      const unnamed = contactGroups(obs).filter((g) => !g.named).length;
-      warnings.push(
-        (cross.grazed
-          ? `No contact is mapped on both sides of ${f.ev.name} — one runs up to it and a point or two past it, which is the end of a trace rather than the same contact found again in the other block.`
-          : `No single contact is mapped on both sides of ${f.ev.name}, so nothing measures how far it moved.`)
-        + ' Its offset is left at zero — the fault is drawn, not solved.'
-        + (unnamed
-          ? ` ${unnamed} contact${unnamed === 1 ? ' has' : 's have'} no units named on either side, and an unnamed contact cannot be recognised as the same surface where it crops out again across the fault.`
-          : '')
-        + ' Two things fix this: carry a contact across the fault and map it in both blocks, or set the fault\u2019s dip and name the unit on each side of it, which measures the separation without needing the same contact twice.',
-      );
-      continue;
-    }
-
-    // What the rock itself said about the direction of slip.
+    // What the rock itself said about the direction of slip. Worked out before
+    // asking whether the DISTANCE is measurable, because these are separate
+    // questions: striae and an observed sense fix which way the hanging wall
+    // went whether or not anything says how far, and both belong on the event
+    // either way.
     const striae = f.seen.lines
       .map((o) => rakeOf(f.plane.strike, f.plane.dip, o.trend, o.plunge))
       .filter((r) => r != null);
@@ -1153,6 +1141,34 @@ function fitSlip(fitted, events, obs, extent, notes, warnings) {
       else {
         warnings.push(`The slickenlines on ${f.ev.name} rake at ${Math.round(pinned)}\u00b0 in its plane, which is not a ${sense} fault however it moved along them. One of the two is wrong — most often the plane, because a rake is measured in it. Both directions along the striae were tried.`);
       }
+    }
+    // A rake measured on the surface outranks the pure form of a declared
+    // sense, so it is written on now rather than only if the slip is solved.
+    if (candidates.length === 1) put(f, candidates[0], f.ev.slip);
+
+    const cross = crossesFault(f.ev, obs);
+    // Units named across a dipping fault measure the separation on their own:
+    // it is what "older on younger" means, said in the column's own metres.
+    const named = f.plane.dip < 89
+      && !!String(f.line.unitUpper || '').trim()
+      && !!String(f.line.unitLower || '').trim();
+
+    if (!cross.crosses && !named) {
+      f.ev.slip = 0;
+      const unnamed = contactGroups(obs).filter((g) => !g.named).length;
+      warnings.push(
+        (cross.grazed
+          ? `No contact is mapped on both sides of ${f.ev.name} — one runs up to it and a point or two past it, which is the end of a trace rather than the same contact found again in the other block.`
+          : `No single contact is mapped on both sides of ${f.ev.name}, so nothing measures how far it moved.`)
+        + ` Its offset is left at zero${sense || candidates.length
+          ? `, though it keeps the ${sense ? `${sense === 'reverse' ? 'thrust' : sense} sense you observed` : 'rake your slickenlines give'} — what is missing is how FAR it moved, not which way`
+          : ' — the fault is drawn, not solved'}.`
+        + (unnamed
+          ? ` ${unnamed} contact${unnamed === 1 ? ' has' : 's have'} no units named on either side, and an unnamed contact cannot be recognised as the same surface where it crops out again across the fault.`
+          : '')
+        + ' Two things fix this: carry a contact across the fault and map it in both blocks, or name the unit on each side of the fault itself, which measures the separation without needing the same contact twice.',
+      );
+      continue;
     }
 
     const sc = (v) => { put(f, v[0], v[1]); return total(); };
