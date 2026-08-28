@@ -1,10 +1,27 @@
-// The stereonet: a lower-hemisphere plot of the student's bedding readings,
-// and the girdle fit that pulls a fold axis out of them.
+// The stereonet: a lower-hemisphere plot of bedding, and the girdle fit that
+// pulls a fold axis out of it.
 //
 // It is a pane beside the block, not a page over it. A net has to be square
 // and big enough to read a pole off, so it cannot live in the bottom sheet —
 // but covering the block with it would waste the best thing about having both:
 // drag a fold's plunge and the girdle swings while you watch.
+//
+// There can be two sets of poles on it, and keeping them apart is the whole
+// honesty of the thing.
+//
+// A marker stores only where it stands; its attitude is read back out of the
+// geology beneath it. On a block somebody built that is exactly right — the
+// block is the ground, and a marker is a student going and looking at it. On a
+// block that was FITTED to a notebook it is circular: the poles are the fit's
+// own answer handed back to it, and they will lie on a flawless girdle no
+// matter what the outcrop did, because the thing they were read off is one
+// cylindrical fold by construction.
+//
+// So when a block carries a survey, the readings that survey was made of are
+// plotted too, straight from the notebook and untouched by the fit. Those are
+// the only poles on the net that can disagree with the block. Where the two
+// sets say different things — and here they usually do — that difference is
+// the result, and it is put first.
 
 import { el, svg, clear } from './widgets.js';
 import {
@@ -21,8 +38,9 @@ const NET = '#8ecae6';   // the whole-map answer, when it is asked for
 
 /**
  * @param {object} ctx  the panel context, plus:
- *   readings()     the marker readings
+ *   readings()     the marker readings, read out of the model
  *   mapFit()       the same fit run over a dense grid, or null
+ *   surveyFit()    { beds, fit } measured in the field, or { beds: [] }
  *   selectMarker(id)
  */
 export function stereonet(ctx) {
@@ -68,10 +86,14 @@ export function stereonet(ctx) {
     const beds = ctx.readings().filter((r) => r.dip != null);
     const fit = ctx.fit();
     const mapFit = compare ? ctx.mapFit() : null;
+    // Only a block cut from a field area has one. Everywhere else this is
+    // empty and the net behaves exactly as it always did.
+    const survey = ctx.surveyFit ? ctx.surveyFit() : { beds: [] };
+    const measured = survey.beds && survey.beds.length ? survey : null;
 
-    drawNet(face, kind, beds, fit, mapFit, showPlanes, ctx);
+    drawNet(face, kind, beds, fit, mapFit, showPlanes, ctx, measured);
     drawSide(side, doc, kind, beds, fit, mapFit, ctx, {
-      compare, setCompare: (v) => { compare = v; build(); },
+      compare, setCompare: (v) => { compare = v; build(); }, measured,
     });
   };
 
@@ -98,7 +120,7 @@ function pathOf(points) {
   return points.map((p, i) => `${i ? 'L' : 'M'} ${sx(p).toFixed(2)} ${sy(p).toFixed(2)}`).join(' ');
 }
 
-function drawNet(face, kind, beds, fit, mapFit, showPlanes, ctx) {
+function drawNet(face, kind, beds, fit, mapFit, showPlanes, ctx, measured) {
   clear(face);
 
   face.appendChild(svg('circle', { cx: C, cy: C, r: R, class: 'net-face' }));
@@ -173,6 +195,12 @@ function drawNet(face, kind, beds, fit, mapFit, showPlanes, ctx) {
       class: 'net-girdle map',
     }));
   }
+  if (measured && measured.fit && measured.fit.kind === 'girdle') {
+    face.appendChild(svg('path', {
+      d: pathOf(greatCircle(measured.fit.girdle.strike, measured.fit.girdle.dip, kind)),
+      class: 'net-girdle measured',
+    }));
+  }
 
   const poles = svg('g', { class: 'net-poles' });
   for (const b of beds) {
@@ -192,6 +220,25 @@ function drawNet(face, kind, beds, fit, mapFit, showPlanes, ctx) {
     poles.appendChild(hit);
   }
   face.appendChild(poles);
+
+  // The measured poles go on last and are drawn as crosses, not dots: two
+  // sets of round marks in two colours is a legend problem, and the shape has
+  // to carry the difference for anyone who cannot rely on the colour. They
+  // take no clicks — there is no marker under them to select.
+  if (measured) {
+    const g = svg('g', { class: 'net-measured' });
+    for (const b of measured.beds) {
+      const p = project(poleOf(b.strike, b.dip), kind);
+      const x = sx(p), y = sy(p), s = 4.5;
+      g.appendChild(svg('path', {
+        d: `M ${x - s} ${y - s} L ${x + s} ${y + s} M ${x - s} ${y + s} L ${x + s} ${y - s}`,
+      }));
+    }
+    face.appendChild(g);
+    if (measured.fit && measured.fit.kind === 'girdle') {
+      face.appendChild(axisMark(measured.fit.axis, kind, 'net-axis measured', 8));
+    }
+  }
 
   // --- the answers --------------------------------------------------------
   // The map's answer goes on first and a size larger, so that when the two
@@ -260,17 +307,45 @@ function drawSide(side, doc, kind, beds, fit, mapFit, ctx, opts) {
 
   const total = ctx.readings().length;
   const dropped = total - beds.length;
+  const measured = opts.measured;
 
-  side.appendChild(verdict(fit, mapFit));
+  if (measured) {
+    // The measurements come first because they are the evidence and the block
+    // is the claim. Reading only the top box should leave a student with the
+    // right answer, not with the model's opinion of itself.
+    side.appendChild(el('div', { class: 'stereo-band', text: 'What you measured' }));
+    side.appendChild(measured.fit
+      ? verdict(measured.fit, null)
+      : el('div', { class: 'stereo-verdict few' }, [
+        el('div', { class: 'stereo-title', text: 'Not enough yet' }),
+        el('p', { text: `${measured.beds.length} bedding reading${measured.beds.length === 1 ? '' : 's'} came onto this block. Three is the minimum for a girdle.` }),
+      ]));
+    side.appendChild(el('div', { class: 'stereo-band', text: 'What this block does there' }));
+  }
 
-  side.appendChild(el('p', { class: 'stereo-count' }, [
-    `${beds.length} of ${total} reading${total === 1 ? '' : 's'} plotted`,
-    dropped ? el('span', { text: ` · ${dropped} with no bedding left off` }) : null,
-  ]));
+  side.appendChild(verdict(fit, mapFit, !!measured));
+
+  if (measured) side.appendChild(disagreement(measured, fit));
+
+  if (measured) {
+    side.appendChild(el('p', { class: 'stereo-count' }, [
+      `${measured.beds.length} measured · ${beds.length} read off the block`,
+    ]));
+  } else {
+    side.appendChild(el('p', { class: 'stereo-count' }, [
+      `${beds.length} of ${total} reading${total === 1 ? '' : 's'} plotted`,
+      dropped ? el('span', { text: ` · ${dropped} with no bedding left off` }) : null,
+    ]));
+  }
 
   side.appendChild(el('div', { class: 'stereo-legend' }, [
-    legendRow('pole', 'Pole to bedding — the normal, plotted downward'),
-    fit.kind === 'girdle' ? legendRow('girdle', 'Best-fit girdle through the poles') : null,
+    measured ? legendRow('measured', 'Pole to bedding you measured — from the notebook') : null,
+    legendRow('pole', measured
+      ? 'Pole to bedding this block puts at the same place'
+      : 'Pole to bedding — the normal, plotted downward'),
+    measured && measured.fit && measured.fit.kind === 'girdle'
+      ? legendRow('girdle-measured', 'Girdle and axis through the measured poles') : null,
+    fit.kind === 'girdle' ? legendRow('girdle', `Best-fit girdle through the ${measured ? "block's" : ''} poles`.replace('  ', ' ')) : null,
     fit.kind === 'girdle' ? legendRow('axis', 'Fold axis — the pole of that girdle') : null,
     fit.kind === 'cluster' ? legendRow('mean', 'Mean pole to bedding') : null,
     fit.kind === 'conical' ? legendRow('cone', 'Small circle the poles fall on') : null,
@@ -302,7 +377,9 @@ function drawSide(side, doc, kind, beds, fit, mapFit, ctx, opts) {
     el('button', {
       class: `chip ${opts.compare ? 'on' : ''}`, type: 'button',
       text: 'Check the whole map',
-      title: 'Read bedding on a grid across the block and fit the same girdle to it.',
+      title: opts.measured
+        ? 'Read bedding on a grid across the block and fit the same girdle to it. Both sides of that comparison come out of this block, so it says whether your stations sampled it fairly — not whether the block is right.'
+        : 'Read bedding on a grid across the block and fit the same girdle to it.',
       onclick: () => opts.setCompare(!opts.compare),
     }),
   ]));
@@ -310,7 +387,18 @@ function drawSide(side, doc, kind, beds, fit, mapFit, ctx, opts) {
   if (fit.n >= 3) side.appendChild(numbers(fit));
 }
 
-function verdict(fit, mapFit) {
+/**
+ * What one set of poles amounts to, in words.
+ *
+ * `modelled` says these poles were read out of the block rather than off an
+ * outcrop, which changes what several of these verdicts mean. A modelled set
+ * that lands on a perfect girdle has demonstrated nothing: a block built as
+ * one cylindrical fold has bedding that wraps around one axis everywhere,
+ * necessarily, and sampling it cannot fail to find that out. Saying so is not
+ * a disclaimer — it is the difference between a measurement and a tautology,
+ * and a student who cannot tell those apart will believe any model they build.
+ */
+function verdict(fit, mapFit, modelled = false) {
   const box = el('div', { class: `stereo-verdict ${fit.kind}` });
 
   if (fit.kind === 'few') {
@@ -363,7 +451,9 @@ function verdict(fit, mapFit) {
       el('strong', { text: formatLine(fit.axis) }),
       el('span', { text: ' trend / plunge' }),
     ]),
-    el('p', { text: `${howWell(fit.misfit)}, covering ${Math.round(fit.spread)}° of it. The pole of that girdle is the hinge line: bedding wraps around it, so it is the one direction the fold does not bend.` }),
+    el('p', { text: modelled
+      ? `${howWell(fit.misfit)}, covering ${Math.round(fit.spread)}° of it — as it was bound to. These poles were read out of a block whose one structural event is a cylindrical fold, so they can only ever wrap around its axis. It is a description of the model, not a finding about the ground.`
+      : `${howWell(fit.misfit)}, covering ${Math.round(fit.spread)}° of it. The pole of that girdle is the hinge line: bedding wraps around it, so it is the one direction the fold does not bend.` }),
   );
 
   if (mapFit) {
@@ -382,6 +472,52 @@ function verdict(fit, mapFit) {
   }
   return box;
 }
+
+/**
+ * The two sets of poles, held against each other.
+ *
+ * This is the point of plotting both, and it is deliberately blunt. The
+ * commonest way for a fitted block to mislead is not to look wrong — it is to
+ * look like a clean answer while the readings it was built from say something
+ * else entirely, with nothing on the screen putting the two side by side.
+ */
+function disagreement(measured, fit) {
+  const box = el('div', { class: 'stereo-check-box' });
+  box.appendChild(el('div', { class: 'stereo-title', text: 'Held against each other' }));
+
+  const mf = measured.fit;
+  if (!mf) {
+    box.appendChild(el('p', { text: 'Too few readings came onto this block to fit anything to them, so there is nothing to hold the block against here. The Field tab still scores it reading by reading.' }));
+    return box;
+  }
+
+  if (mf.kind === 'girdle' && fit.kind === 'girdle') {
+    const off = angleBetween(mf.axis, fit.axis);
+    box.appendChild(el('p', {}, [
+      el('span', { text: 'Your readings give a hinge at ' }),
+      el('strong', { text: formatLine(mf.axis) }),
+      el('span', { text: `, the block ${formatLine(fit.axis)} — ${off < 0.5 ? 'the same line' : `${off.toFixed(1)}° apart`}.` }),
+    ]));
+  } else if (mf.kind === 'scattered') {
+    box.appendChild(el('p', { text: `Your readings do not lie on one girdle — they miss any single one by ${Math.round(mf.misfit)}° — and the block is a single ${fit.kind === 'girdle' ? 'cylindrical fold' : 'structure'}. A block of one structure cannot reproduce readings that are not of one structure, so some of the difference between it and your notebook is not an error to be tuned away: it is a structure the block does not contain.` }));
+  } else if (mf.kind === 'conical') {
+    box.appendChild(el('p', { text: 'Your readings lie on a small circle — a dome or a basin, which has no hinge line at all. Check that the block was fitted as one, because a cylindrical fold cannot reproduce it.' }));
+  } else if (mf.kind !== fit.kind) {
+    box.appendChild(el('p', { text: `Your readings say ${nameOf(mf.kind)}; the block is ${nameOf(fit.kind)}. Those are different structures, not a difference of degree.` }));
+  } else {
+    box.appendChild(el('p', { text: 'The two agree on what kind of structure this is.' }));
+  }
+
+  box.appendChild(el('p', { class: 'dim', text: 'The Field tab carries the number this is worth: how far the block sits from each reading, in degrees, live as you edit the history.' }));
+  return box;
+}
+
+const KIND_NAMES = {
+  girdle: 'one cylindrical fold', cluster: 'one attitude, unfolded',
+  conical: 'a dome or a basin', scattered: 'not one structure',
+  few: 'too little to say',
+};
+function nameOf(kind) { return KIND_NAMES[kind] || 'something it could not name'; }
 
 /** How closely the poles sit on the fitted circle, said in words. */
 function howWell(misfit) {

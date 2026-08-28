@@ -46,6 +46,7 @@ export class App {
     this._readings = null;
     this._fit = null;
     this._mapFit = null;
+    this._surveyFit = null;
     this._mapView = null;   // null so the first sync always applies the setting
     this._showNet = null;
     this._showGround = null;
@@ -88,6 +89,7 @@ export class App {
       groundAvailable: () => GroundMap.available(this.store.doc),
       fit: () => this.fit(),
       mapFit: () => this.mapFit(),
+      surveyFit: () => this.surveyFit(),
     };
 
     // Built after ctx, because it reads the readings and the selection through
@@ -329,6 +331,7 @@ export class App {
     this._readings = null;
     this._fit = null;
     this._mapFit = null;
+    this._surveyFit = null;
     // A deleted marker must not stay selected, or the chip outlives it.
     if (this.selectedMarkerId && !(doc.markers || []).some((m) => m.id === this.selectedMarkerId)) {
       this.selectedMarkerId = null;
@@ -479,6 +482,36 @@ export class App {
       this._mapFit = fitBedding(beddingGrid(this.history(), doc.topo, footprint(doc.block), 14));
     }
     return this._mapFit;
+  }
+
+  /**
+   * The bedding somebody actually measured, when this block was cut out of a
+   * mapped area.
+   *
+   * Everything else the stereonet plots is read out of the model. A marker
+   * stores only where it stands and recovers its attitude from the geology
+   * beneath it, which is exactly right when the block IS the ground — put a
+   * marker on a fold you built and it tells you what that fold does there. It
+   * is not right when the block was fitted to a notebook, because then the
+   * poles on the net are the fit's own answer being read back to it, and they
+   * will lie on a perfect girdle whatever the outcrop did.
+   *
+   * These are the readings themselves, carried onto the block by cutblock and
+   * never touched by it. They are the only thing on the net that can disagree
+   * with the block, so they are the reason there is a net at all.
+   */
+  surveyFit() {
+    if (!this._surveyFit) {
+      const st = (this.store.doc.survey && this.store.doc.survey.stations) || null;
+      if (!st || !st.length) { this._surveyFit = { beds: [] }; }
+      else {
+        const beds = st
+          .filter((s) => Number.isFinite(s.strike) && Number.isFinite(s.dip))
+          .map((s, i) => ({ id: `survey:${s.id || i}`, strike: s.strike, dip: s.dip }));
+        this._surveyFit = { beds, fit: beds.length >= 3 ? fitBedding(beds) : null };
+      }
+    }
+    return this._surveyFit;
   }
 
   /**
