@@ -7,6 +7,7 @@ import { layersPanel, historyPanel, terrainPanel, viewPanel, fieldPanel } from '
 import { stereonet } from './stereonet.js';
 import { groundMapPane, GroundMap } from './groundMap.js';
 import { MapSection } from './map/section.js';
+import { StratSection } from './strat/section.js';
 import { BlockScene } from '../render/scene.js';
 import { Store, loadSaved, exportJSON, importJSON } from '../store.js';
 import { defaultDocument, rock, makeMarker } from '../geo/model.js';
@@ -41,8 +42,13 @@ export class App {
     // sensors and sizes its canvas.
     this.mode = 'block';
     this.mapSection = null;
+    // The column is the map's third view of the same field project — its units
+    // ARE the map's units — so it borrows that section's store rather than
+    // opening a second one over the same database.
+    this.stratSection = null;
     this.sheetState = 'half';   // 'peek' | 'half' | 'full'
     this.blockFull = false;     // block over the whole screen, panel hidden
+    this.stratFull = false;     // the section over the whole screen
     this._history = null;
     this._readings = null;
     this._fit = null;
@@ -110,6 +116,9 @@ export class App {
     window.addEventListener('resize', () => {
       this.scene.resize();
       this.mapSection?.resize();
+      // The section redraws rather than merely reflowing: how many of its
+      // columns fit is a decision taken at draw time from the width it has.
+      if (this.mode === 'strata') this.stratSection?.resize();
     });
     // Field notes are the one thing here that cannot be rebuilt from anything
     // else, so they are written out the moment the app goes to the back.
@@ -122,7 +131,8 @@ export class App {
     this.scene.frame(this.store.doc);
     this._loop();
 
-    if (loadMode() === 'map') this.setMode('map');
+    const last = loadMode();
+    if (last !== 'block') this.setMode(last);
   }
 
   // -------------------------------------------------------------------------
@@ -187,7 +197,7 @@ export class App {
 
   _renderModeSwitch() {
     clear(this.modeSwitch);
-    for (const [id, label] of [['block', 'Block'], ['map', 'Map']]) {
+    for (const [id, label] of [['block', 'Block'], ['map', 'Map'], ['strata', 'Strata']]) {
       this.modeSwitch.appendChild(el('button', {
         class: `mode-btn ${this.mode === id ? 'on' : ''}`, type: 'button',
         'aria-selected': this.mode === id ? 'true' : 'false',
@@ -261,16 +271,35 @@ export class App {
     return !window.matchMedia('(min-aspect-ratio: 4/3)').matches;
   }
 
+  /**
+   * The map section, built on first use.
+   *
+   * Two sections need it now, and only one of them is the map: the column is
+   * a view of the same field project and reads the same store. Constructing it
+   * starts nothing — the GPS and the compass are opened by `activate`, not by
+   * the constructor — so a student who only ever opens the Strata tab does not
+   * pay for a map they never looked at.
+   */
+  fieldSection() {
+    if (!this.mapSection) {
+      this.mapSection = new MapSection(this);
+      this.stage.insertBefore(this.mapSection.pane, this.modeSwitch);
+    }
+    return this.mapSection;
+  }
+
   setMode(mode) {
     if (this.mode === mode) return;
     this.mode = mode;
     saveMode(mode);
 
-    if (mode === 'map' && !this.mapSection) {
-      this.mapSection = new MapSection(this);
-      this.stage.insertBefore(this.mapSection.pane, this.modeSwitch);
+    if (mode === 'map' || mode === 'strata') this.fieldSection();
+    if (mode === 'strata' && !this.stratSection) {
+      this.stratSection = new StratSection(this, this.mapSection);
+      this.stage.insertBefore(this.stratSection.pane, this.modeSwitch);
     }
     this.root.classList.toggle('mode-map', mode === 'map');
+    this.root.classList.toggle('mode-strata', mode === 'strata');
 
     if (mode === 'map') {
       if (this.markerMode) this.setMarkerMode(null);
@@ -278,25 +307,55 @@ export class App {
     } else {
       this.mapSection?.deactivate();
     }
+    if (mode === 'strata') this.stratSection.activate();
+    else this.stratSection?.deactivate();
 
     this._renderModeSwitch();
     this._renderTabs();
     requestAnimationFrame(() => {
       if (mode === 'block') { this.scene.resize(); this.scene.frame(this.store.doc); }
-      else this.mapSection.resize();
+      else if (mode === 'map') this.mapSection.resize();
+      else this.stratSection.resize();
     });
   }
 
-  /** The panel the map section currently has on screen, if it is showing. */
-  get sectionPanel() { return this.mode === 'map' ? this.panels.map : null; }
+  /** The section over the whole screen, panel down to its handle. */
+  setStratFull(on) {
+    this.stratFull = on;
+    this.root.classList.toggle('strat-full', on);
+    this._setSheet(on ? 'peek' : 'half');
+  }
 
-  /** Asked for by the map section when its own state changes shape. */
-  renderSectionPanel() { if (this.mode === 'map') this._renderPanel(); }
+  /** The section, map or strata, that currently owns the sheet. */
+  get section() {
+    if (this.mode === 'map') return this.mapSection;
+    if (this.mode === 'strata') return this.stratSection;
+    return null;
+  }
 
-  _tabSet() { return this.mode === 'map' ? this.mapSection.tabs : TABS; }
+  /** The panel that section currently has on screen, if it is showing. */
+  get sectionPanel() { return this.section ? this.panels[this.mode] : null; }
+
+  /** Asked for by a section when its own state changes shape. */
+  renderSectionPanel() { if (this.section) this._renderPanel(); }
+
+  /**
+   * The field document has been opened, or swapped for another project's.
+   *
+   * Two sections read it and both have to be told. The column in particular
+   * cannot wait for its own panel to be rebuilt: the drawing is in the stage,
+   * not in the sheet, and it is drawn from a document that arrives a moment
+   * after the section does.
+   */
+  fieldOpened() {
+    this.stratSection?.refresh();
+    this.renderSectionPanel();
+  }
+
+  _tabSet() { return this.section ? this.section.tabs : TABS; }
 
   _activeTabId() {
-    return this.mode === 'map' ? this.mapSection.activeTab : this.activeTab;
+    return this.section ? this.section.activeTab : this.activeTab;
   }
 
   _renderTabs() {
@@ -317,9 +376,10 @@ export class App {
 
   _renderPanel() {
     clear(this.sheetBody);
-    if (this.mode === 'map') {
-      const panel = this.mapSection.buildPanel(this.mapSection.activeTab);
-      this.panels.map = panel;
+    const section = this.section;
+    if (section) {
+      const panel = section.buildPanel(section.activeTab);
+      this.panels[this.mode] = panel;
       this.sheetBody.appendChild(panel);
       return;
     }
@@ -330,9 +390,10 @@ export class App {
   }
 
   setTab(id) {
-    if (this.mode === 'map') {
-      if (this.mapSection.activeTab === id && this.sheetState === 'peek') { this._setSheet('half'); return; }
-      this.mapSection.activeTab = id;
+    const section = this.section;
+    if (section) {
+      if (section.activeTab === id && this.sheetState === 'peek') { this._setSheet('half'); return; }
+      section.activeTab = id;
       if (this.sheetState === 'peek') this._setSheet('half');
       this._renderTabs();
       return;
@@ -854,9 +915,12 @@ export class App {
 // not decide which screen somebody else opens on.
 const MODE_KEY = 'blockdiagram.mode';
 
+const MODES = new Set(['block', 'map', 'strata']);
+
 function loadMode() {
   try {
-    return localStorage.getItem(MODE_KEY) === 'map' ? 'map' : 'block';
+    const m = localStorage.getItem(MODE_KEY);
+    return MODES.has(m) ? m : 'block';
   } catch { return 'block'; }
 }
 

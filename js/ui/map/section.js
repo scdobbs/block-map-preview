@@ -24,6 +24,7 @@ import { downloadArea, verifyArea, deleteArea, requestPersistence,
 import { elevationAt } from '../../field/dem.js';
 import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
 import { cutBlock, surveyExtent } from '../../field/cutblock.js';
+import { recordModelThicknesses, planModelThicknesses } from '../../strat/model.js';
 import { buildShading, shadingKey, patchColorCss, patchAt,
   unitFromStations, unitVerdictText } from './shading.js';
 
@@ -50,6 +51,10 @@ export class MapSection {
     // notes, and a stale one must never look like part of the record.
     this._blockReport = null;
     this._blockBuilding = null;
+    // What the last build wrote into the stratigraphic column, so the Block
+    // tab can say so rather than leaving a number to change behind the
+    // student's back.
+    this._columnNote = null;
     // Shading is derived from the contacts, so it is cached against their
     // geometry and re-flooded only when that actually changes.
     this._shadeKey = null;
@@ -101,7 +106,7 @@ export class MapSection {
       this.store.projectId = id;
       this._adoptDocument(doc);
       this.ready = true;
-      this.host.renderSectionPanel();
+      this.host.fieldOpened();
     });
 
     this.store.subscribe((doc, info) => this._onChange(doc, info));
@@ -1310,9 +1315,19 @@ export class MapSection {
   /**
    * Build a block from the box, and hand it to the other half.
    *
-   * The field notes are read and never written: a block is an interpretation
+   * The field notes are read and never rewritten: a block is an interpretation
    * of a record, and an interpretation that edits the record it came from is
-   * not evidence of anything. So nothing here touches this.store.
+   * not evidence of anything. Nothing here changes a station, a line or a
+   * patch.
+   *
+   * The one thing it does write is the thickness the block measured, into the
+   * column's own `modelThickness` field — beside what the student said, never
+   * over it. That is not the interpretation editing the record, it is the
+   * interpretation being filed next to it so the two can be compared, which is
+   * the whole point of having measured it. The exception, and it is deliberate,
+   * is a unit with no thickness at all: there the block's number is adopted
+   * outright and stamped as having come from a model, because "I do not know"
+   * and "the block says 180 m" are not in conflict.
    */
   async buildBlock() {
     const bbox = this.map.selection;
@@ -1330,6 +1345,7 @@ export class MapSection {
       });
       this._blockReport = report;
       this._blockBuilding = null;
+      this._recordThicknesses(report);
       this.map.clearSelection();
       this._draftArea = null;
       this.host.adoptBlock(doc);
@@ -1344,6 +1360,27 @@ export class MapSection {
         : alert(`Could not build the block: ${err.message}`);
     }
   }
+
+  /**
+   * File what the block measured against the column.
+   *
+   * Its own undo step, and taken only when something actually changed — a
+   * build that told the column nothing it did not already know should not
+   * leave an entry on the stack for a student to undo and wonder about.
+   */
+  _recordThicknesses(report) {
+    const units = report?.units;
+    if (!Array.isArray(units) || !units.length) return;
+    // Asked before it is done, so a build with nothing to add leaves no undo
+    // step behind it.
+    const plan = planModelThicknesses(this.store.doc, units);
+    if (!plan.steps.length) return;
+    this.store.edit((doc) => { recordModelThicknesses(doc, units); }, { structural: true });
+    this._columnNote = plan;
+  }
+
+  /** What the last build told the column, for the Block tab to report. */
+  columnNote() { return this._columnNote; }
 
   /** Live download progress, tagged with which area it belongs to. */
   downloadProgress() {
@@ -1634,6 +1671,8 @@ export class MapSection {
       buildBlock: () => this.buildBlock(),
       blockReport: () => this._blockReport,
       blockBuilding: () => this._blockBuilding,
+      columnNote: () => this._columnNote,
+      showColumn: () => this.host.setMode('strata'),
       showBlock: () => this.host.setMode('block'),
       draftArea: () => this.draftArea(),
       setDraftArea: (p) => this.setDraftArea(p),

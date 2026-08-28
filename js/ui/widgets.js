@@ -129,6 +129,136 @@ function fmt(v, step) {
   return Number(v).toFixed(dec);
 }
 
+/** Label and a single-line text box, committed on blur rather than per key. */
+export function textRow({ label, value, placeholder, onChange, hint, list }) {
+  const input = el('input', {
+    class: 'name-input', type: 'text', value: value || '',
+    placeholder: placeholder || '', list: list || false,
+    autocapitalize: 'words', autocomplete: 'off', spellcheck: 'false',
+  });
+  // `change` not `input`: committing on every keystroke would push an undo
+  // step per letter and save to the database forty times a word.
+  input.addEventListener('change', () => onChange(input.value));
+  const row = el('div', { class: 'ctl' }, [
+    el('div', { class: 'ctl-head' }, [el('label', { class: 'ctl-label', text: label })]),
+    input,
+    hint ? el('div', { class: 'ctl-hint', text: hint }) : null,
+  ]);
+  row.input = input;
+  return row;
+}
+
+/** The same, with room for a sentence or two. */
+export function noteRow({ label, value, placeholder, onChange, rows = 3 }) {
+  const area = el('textarea', {
+    class: 'name-input note-input', rows, placeholder: placeholder || '',
+  });
+  area.value = value || '';
+  area.addEventListener('change', () => onChange(area.value));
+  const row = el('div', { class: 'ctl' }, [
+    el('div', { class: 'ctl-head' }, [el('label', { class: 'ctl-label', text: label })]),
+    area,
+  ]);
+  row.input = area;
+  return row;
+}
+
+/**
+ * Drag a row up or down its list by its grip. Used by the block's timeline
+ * and layer list, and by the Strata section's column.
+ *
+ * The dragged row is only translated, never re-parented mid-drag — a drop
+ * line marks where it will land. That keeps the geometry stable while the
+ * finger is down, which matters because the list is inside a scroller.
+ *
+ * `commit` is handed the row ids in the order they now appear on screen, and
+ * the id of the row that was actually dragged — which the column needs,
+ * because where a unit was DROPPED decides whether it is still a member of
+ * the formation it came out of, and that question is about one row and not
+ * about the order. Each
+ * list maps that onto the model itself: the timeline is drawn youngest-first
+ * so its model order is the reverse, while the column is already in model
+ * order. `rowSel` has to exclude any decoration sharing the row class — the
+ * column's basement row and unconformity dividers are not draggable.
+ */
+export function enableDragReorder(list, { rowSel, gripSel, idKey, commit }) {
+  let drag = null;
+  const line = el('div', { class: 'drop-line' });
+  const rows = () => [...list.querySelectorAll(rowSel)];
+  const others = () => rows().filter((r) => r !== drag.row);
+
+  list.addEventListener('pointerdown', (e) => {
+    const grip = e.target.closest(gripSel);
+    if (!grip || drag) return;
+    const row = grip.closest(rowSel);
+    if (!row || rows().length < 2) return;
+
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    drag = { row, grip, pointerId: e.pointerId, startY: e.clientY, target: null };
+    row.classList.add('dragging');
+  });
+
+  list.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    drag.row.style.transform = `translateY(${e.clientY - drag.startY}px)`;
+
+    const rest = others();
+    let idx = rest.length;
+    for (let i = 0; i < rest.length; i++) {
+      const b = rest[i].getBoundingClientRect();
+      if (e.clientY < b.top + b.height / 2) { idx = i; break; }
+    }
+    drag.target = idx;
+    // Placed relative to the last row rather than appended, so the line lands
+    // above the column's basement row instead of below it.
+    if (idx < rest.length) list.insertBefore(line, rest[idx]);
+    else rest[rest.length - 1].after(line);
+  });
+
+  const finish = (e) => {
+    if (!drag || (e && e.pointerId !== drag.pointerId)) return;
+    const { row, target } = drag;
+    row.classList.remove('dragging');
+    row.style.transform = '';
+    line.remove();
+    drag = null;
+
+    if (target == null) return;
+    const shown = rows().map((r) => r.dataset[idKey]);
+    const id = row.dataset[idKey];
+    const without = shown.filter((x) => x !== id);
+    without.splice(target, 0, id);   // target === length appends
+    commit(without, id);
+  };
+
+  list.addEventListener('pointerup', finish);
+  list.addEventListener('pointercancel', finish);
+}
+
+/** A row of tap targets, for a short list where a dropdown would be a step. */
+export function chipsRow({ label, value, options, onChange, hint }) {
+  const wrap = el('div', { class: 'chips' });
+  const paint = () => {
+    clear(wrap);
+    for (const o of options) {
+      wrap.appendChild(el('button', {
+        class: `chip ${o.id === value ? 'on' : ''}`, type: 'button',
+        title: o.hint || o.label,
+        onclick: () => { value = o.id; paint(); onChange(o.id); },
+      }, [el('span', { text: o.label })]));
+    }
+  };
+  paint();
+  const row = el('div', { class: 'ctl' }, [
+    label ? el('div', { class: 'ctl-head' }, [el('label', { class: 'ctl-label', text: label })]) : null,
+    wrap,
+    hint ? el('div', { class: 'ctl-hint', text: hint }) : null,
+  ]);
+  row.setValue = (v) => { value = v; paint(); };
+  return row;
+}
+
 export function selectRow({ label, value, options, onChange }) {
   const sel = el('select', { class: 'select' },
     options.map((o) => el('option', {

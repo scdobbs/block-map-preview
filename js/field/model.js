@@ -288,6 +288,35 @@ export function makeUnit(over = {}) {
     rockId: 'sandstone',
     color: null,            // null means take the rock's own color
     note: '',
+
+    // --- the column -------------------------------------------------------
+    // A unit is also an entry in the stratigraphic column, and the two are
+    // deliberately the same record. Naming a unit to log a station in and
+    // naming one to draw a column are the same act; two lists would be two
+    // lists that disagree by Wednesday.
+    //
+    // Everything here is allowed to be empty. A unit that is only a name is a
+    // real unit — it is what a student has after reading the field guide and
+    // before walking anywhere — and the column is built to draw exactly that
+    // rather than to demand a thickness before it will show anything.
+    //
+    // Order in `doc.units` IS the column, youngest first, matching the block's
+    // own layer order so handing one to the other is not a reversal waiting to
+    // be got wrong.
+    rank: 'formation',      // one of RANKS in strat/model.js
+    parentId: null,         // the unit this is a member of, when it is one
+    thickness: null,        // metres. Null is "not known yet", not zero.
+    thicknessSource: null,  // null | 'student' | 'block' — where it came from
+    // What a block cut from the map measured. Kept beside the student's own
+    // number rather than over it: when the two disagree that is a finding, and
+    // resolving it by overwriting would delete the finding.
+    modelThickness: null,
+    modelAt: null,
+    // Grain size up the unit, as [{ at: 0..1 from its base, g: step index }].
+    // Empty means flat, at whatever the rock type implies.
+    grains: [],
+    contactBelow: 'conformable',   // how it sits on the unit beneath it
+    description: '',        // the long one, for the column's right-hand margin
     ...over,
   };
 }
@@ -298,20 +327,36 @@ export function unitColor(unit) {
   return (ROCK_BY_ID[unit.rockId] || ROCK_BY_ID.sandstone).color;
 }
 
-/** Names already used, list or free text, for the autocomplete. */
+/**
+ * Names already used, list or free text, for the autocomplete.
+ *
+ * Units that are in the column come first and IN COLUMN ORDER, youngest at the
+ * top, because that is the order they are in on the outcrop and the order the
+ * student has them in their head while walking up a hill. Sorting them by how
+ * often each has been logged puts the succession in an order nothing in the
+ * world shares, and makes the list rearrange itself as the day goes on.
+ *
+ * Names typed on the outcrop and never promoted into the column follow, most
+ * used first, which for that half of the list is the right rule: they have no
+ * order to preserve and the one being used is the one to offer.
+ */
 export function knownUnitNames(doc) {
   const names = new Map();
   for (const u of doc.units || []) {
-    if (u.name) names.set(u.name.toLowerCase(), { name: u.name, unit: u, count: 0 });
+    if (u.name) names.set(u.name.toLowerCase(), { name: u.name, unit: u, count: 0, inColumn: true });
   }
   for (const s of doc.stations || []) {
     const n = (s.unitName || '').trim();
     if (!n) continue;
     const key = n.toLowerCase();
     if (names.has(key)) names.get(key).count++;
-    else names.set(key, { name: n, unit: null, count: 1 });
+    else names.set(key, { name: n, unit: null, count: 1, inColumn: false });
   }
-  return [...names.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const all = [...names.values()];
+  const listed = all.filter((x) => x.inColumn);
+  const loose = all.filter((x) => !x.inColumn)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return [...listed, ...loose];
 }
 
 export function makeLine(over = {}) {
@@ -491,6 +536,11 @@ export function defaultFieldDocument() {
     lines: [],
     patches: [],
     units: [],
+    // Fossils, trace fossils and sedimentary structures annotating the column.
+    // Kept as their own list rather than inside each unit so that a symbol
+    // dragged from one unit to the next is one field changing, not two arrays
+    // being rewritten.
+    marks: [],
     areas: [],
     settings: {
       baseLayer: 'topo',
@@ -515,6 +565,13 @@ export function defaultFieldDocument() {
       // A station placed on a fix worse than this is placed on a guess.
       minAccuracy: 15,
       units: 'metric',
+      // The column's own settings. The grain-size axis is a project-wide
+      // choice rather than a per-unit one because it is the axis, and a
+      // drawing with two x axes on it is not a section.
+      grainScale: 'clastic',      // 'clastic' | 'carbonate'
+      columnScale: 0,             // metres per 100 px; 0 fits the whole column
+      columnDescriptions: true,   // the right-hand margin of text
+      columnMarks: true,          // fossils and structures in the gutter
     },
     view: { lon: -109.549, lat: 38.573, zoom: 13 },
   };
@@ -563,7 +620,41 @@ export function migrateFieldDoc(doc) {
     .map((p) => ({ ...makePatch(), ...p }));
   out.units = (Array.isArray(doc.units) ? doc.units : [])
     .filter((u) => u && typeof u === 'object')
-    .map((u) => ({ ...makeUnit(), ...u }));
+    .map((u) => {
+      const unit = { ...makeUnit(), ...u };
+      // The column fields arrived after units did, so every unit in every
+      // notebook written before them comes through here. They fill in as
+      // "not known", which is exactly what those notebooks say about them.
+      unit.grains = (Array.isArray(unit.grains) ? unit.grains : [])
+        .filter((g) => g && Number.isFinite(g.at) && Number.isFinite(g.g));
+      // A parent that has been deleted, or one pointing at itself, would hang
+      // a unit off nothing and take it out of the column entirely.
+      if (unit.parentId === unit.id) unit.parentId = null;
+      return unit;
+    });
+  const unitIds = new Set(out.units.map((u) => u.id));
+  for (const u of out.units) if (u.parentId && !unitIds.has(u.parentId)) u.parentId = null;
+  // The column is two tiers deep. A file written before that was enforced —
+  // or edited by hand — can carry a member of a member, which has no bracket
+  // to be drawn in. Re-hang it on the top of its own chain rather than
+  // dropping it, so the unit survives and only the extra tier goes.
+  const byId = new Map(out.units.map((u) => [u.id, u]));
+  for (const u of out.units) {
+    let hops = 0;
+    while (u.parentId && byId.get(u.parentId)?.parentId && hops++ < 8) {
+      u.parentId = byId.get(u.parentId).parentId;
+    }
+    if (u.parentId === u.id) u.parentId = null;
+  }
+  out.marks = (Array.isArray(doc.marks) ? doc.marks : [])
+    .filter((m) => m && typeof m === 'object' && unitIds.has(m.unitId))
+    .map((m) => ({
+      id: m.id || newFieldId('mk'),
+      unitId: m.unitId,
+      at: Number.isFinite(m.at) ? Math.max(0, Math.min(1, m.at)) : 0.5,
+      symbol: String(m.symbol || 'burrow'),
+      note: String(m.note || ''),
+    }));
   out.areas = (Array.isArray(doc.areas) ? doc.areas : [])
     .filter((a) => a && Array.isArray(a.bbox) && a.bbox.length === 4)
     .map((a) => ({ ...makeArea(), ...a }));

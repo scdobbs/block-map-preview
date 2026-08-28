@@ -7,12 +7,14 @@
 // reading both update several times a second, and rebuilding the panel around
 // a half-typed note would throw the note away.
 
-import { el, clear, numberRow, selectRow, toggleRow, compassDial, protractor } from '../widgets.js';
+import { el, clear, numberRow, selectRow, toggleRow, textRow, noteRow,
+  chipsRow, compassDial, protractor } from '../widgets.js';
 import { swatchEl } from '../swatch.js';
 import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, CERTAINTIES, ROCKS, rockOf,
   unitColor, knownUnitNames, makeUnit, hasAttitude, isLinearFeature,
   formatAttitude, LINE_KINDS, LINE_CERTAINTY, lineKind, lineCertainty,
   lineLength, FAULT_SENSES, dipChoices } from '../../field/model.js';
+import { contactPairs } from '../../strat/model.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
 import { SOURCES, BASE_SOURCES, estimateArea, storageReport } from '../../field/tiles.js';
@@ -22,38 +24,6 @@ import { formatDistance, formatBytes, formatLonLat, formatDDM, distance,
 // ---------------------------------------------------------------------------
 // Small local controls
 // ---------------------------------------------------------------------------
-
-function textRow({ label, value, placeholder, onChange, hint, list }) {
-  const input = el('input', {
-    class: 'name-input', type: 'text', value: value || '',
-    placeholder: placeholder || '', list: list || false,
-    autocapitalize: 'words', autocomplete: 'off', spellcheck: 'false',
-  });
-  // `change` not `input`: committing on every keystroke would push an undo
-  // step per letter and save to the database forty times a word.
-  input.addEventListener('change', () => onChange(input.value));
-  const row = el('div', { class: 'ctl' }, [
-    el('div', { class: 'ctl-head' }, [el('label', { class: 'ctl-label', text: label })]),
-    input,
-    hint ? el('div', { class: 'ctl-hint', text: hint }) : null,
-  ]);
-  row.input = input;
-  return row;
-}
-
-function noteRow({ label, value, placeholder, onChange }) {
-  const area = el('textarea', {
-    class: 'name-input note-input', rows: 3, placeholder: placeholder || '',
-  });
-  area.value = value || '';
-  area.addEventListener('change', () => onChange(area.value));
-  const row = el('div', { class: 'ctl' }, [
-    el('div', { class: 'ctl-head' }, [el('label', { class: 'ctl-label', text: label })]),
-    area,
-  ]);
-  row.input = area;
-  return row;
-}
 
 /**
  * An azimuth as three digits, which is how a bearing is written in a notebook.
@@ -68,28 +38,6 @@ function azimuth(a) {
 }
 
 /** A row of tap targets, for a short list where a dropdown would be a step. */
-function chipsRow({ label, value, options, onChange, hint }) {
-  const wrap = el('div', { class: 'chips' });
-  const paint = () => {
-    clear(wrap);
-    for (const o of options) {
-      wrap.appendChild(el('button', {
-        class: `chip ${o.id === value ? 'on' : ''}`, type: 'button',
-        title: o.hint || o.label,
-        onclick: () => { value = o.id; paint(); onChange(o.id); },
-      }, [el('span', { text: o.label })]));
-    }
-  };
-  paint();
-  const row = el('div', { class: 'ctl' }, [
-    label ? el('div', { class: 'ctl-head' }, [el('label', { class: 'ctl-label', text: label })]) : null,
-    wrap,
-    hint ? el('div', { class: 'ctl-hint', text: hint }) : null,
-  ]);
-  row.setValue = (v) => { value = v; paint(); };
-  return row;
-}
-
 function statLine(label, value, cls = '') {
   const v = el('span', { class: `stat-value ${cls}`, text: value });
   const row = el('div', { class: 'stat' }, [
@@ -965,6 +913,28 @@ export function linesPanel(ctx) {
         ]));
         box.appendChild(el('div', { class: 'ctl-hint standalone', text:
           'Which unit sits on top of the other in the column — the younger one where the beds are the right way up, whatever the ground does. Naming them this way is what lets a thickness be read between two contacts, and what recognises the same contact again on the far side of a fault.' }));
+
+        // Straight off the column, if there is one. Two units that touch in
+        // the column are the only pairs a contact can have, so offering them
+        // is not merely less typing on a phone — it is what stops a pair going
+        // in upside down, which is the error the block fit otherwise has to
+        // spend a paragraph explaining afterwards.
+        const pairs = contactPairs(doc);
+        if (pairs.length) {
+          box.appendChild(el('div', { class: 'ctl' }, [
+            el('div', { class: 'ctl-head' },
+              [el('label', { class: 'ctl-label', text: 'From your column' })]),
+            el('div', { class: 'unit-chips' }, pairs.map((p) => el('button', {
+              class: `unit-chip${p.upper === line.unitUpper && p.lower === line.unitLower ? ' on' : ''}`,
+              type: 'button',
+              text: `${p.upper} / ${p.lower}`,
+              onclick: () => ctx.editLine(line.id, (l) => {
+                l.unitUpper = p.upper; l.unitLower = p.lower;
+              }),
+            }))),
+          ]));
+        }
+
         if (known.length) {
           box.appendChild(el('datalist', { id: 'field-unit-names' },
             known.map((u) => el('option', { value: u.name }))));

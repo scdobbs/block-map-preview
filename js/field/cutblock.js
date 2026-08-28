@@ -212,14 +212,28 @@ export function columnFor(column, fieldDoc, warnings = []) {
   }
 
   // A roof and a floor, so the measured units are not left hanging in nothing.
+  //
+  // Nothing in the box says how thick either of them is — the map runs out
+  // before they do — so they were guessed at the size of their neighbours.
+  // But the student may well have written a thickness for them in their
+  // stratigraphic column, out of a memoir or off a tape somewhere else, and
+  // using a number somebody actually has beats using the average of two other
+  // units. Still not `measured`: it was not measured HERE, and the block must
+  // not hand it back to the column as though it had been.
   const typical = named.length
     ? named.reduce((a, u) => a + u.thickness, 0) / named.length
     : 200;
+  const capThickness = (name) => {
+    const hit = known.get(String(name || '').trim().toLowerCase());
+    const said = hit && Number.isFinite(hit.thickness) && hit.thickness > 0 ? hit.thickness : null;
+    return { thickness: Math.round(said ?? typical), fromColumn: said != null };
+  };
   const all = cs.length
     ? [
-      { name: (cs[0].upper || '').trim(), thickness: Math.round(typical), measured: false },
+      { name: (cs[0].upper || '').trim(), ...capThickness(cs[0].upper), measured: false },
       ...named,
-      { name: (cs[cs.length - 1].lower || '').trim(), thickness: Math.round(typical), measured: false },
+      { name: (cs[cs.length - 1].lower || '').trim(),
+        ...capThickness(cs[cs.length - 1].lower), measured: false },
     ]
     : [];
 

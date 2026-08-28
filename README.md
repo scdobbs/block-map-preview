@@ -2,7 +2,7 @@
 
 By **Stephen Dobbs** · [AGPL-3.0](LICENSE)
 
-An offline-first phone app for geology students, in two halves.
+An offline-first phone app for geology students, in three sections.
 
 **Block** builds and interrogates 3D geologic block diagrams. Rotate the block
 in any direction, stack a stratigraphic column, apply a history of tilts,
@@ -14,13 +14,21 @@ US topographic and aerial map downloaded before you leave, your position on
 it from the satellites, strike and dip measured by laying the phone on the
 bedding, and a record of what each reading was taken in.
 
-**Build a block** joins the two. Draw a box around the ground you have mapped
+**Strata** is the succession itself — a measured section you can start writing
+before you have measured anything. Units in order, grain size across the page,
+fossils and sedimentary structures in the margin, formations bracketed beside
+their members. What you name here is what you can tap on the map and what the
+block is built out of.
+
+**Build a block** joins them. Draw a box around the ground you have mapped
 and the app cuts a block from it: the real topography as its lid, your readings
 standing on it, and a geologic history fitted to what you actually measured —
 then draws the map that history predicts, over the one you walked, so you can
-see where the two disagree.
+see where the two disagree. The thicknesses it reads off your contacts come
+back to the column and are set beside your own, and where the two disagree it
+says so rather than picking a winner.
 
-Both run with **no signal** — that is the whole point of them.
+All of it runs with **no signal** — that is the whole point of it.
 
 ---
 
@@ -830,6 +838,177 @@ about a gigabyte, so a dozen field areas fit comfortably.
 
 ---
 
+# The Strata section
+
+A third section, reached by the same switch. The map is a record of an outcrop
+that exists and the block is an invention meant to explain it; this is the
+**succession** — which is the one of the three you can write down before
+leaving the room, and the one the other two then refer to.
+
+It shares the map's project. Every unit here is a unit on the map: name the
+Poleta once and it is in both, tappable when you log a station and offerable
+when you name the two sides of a contact. There is nothing to import.
+
+## Building a column before you have measured anything
+
+Add units in order, youngest at the top, and give them nothing but names. That
+is a real column — it is what you have after reading the field guide and
+before walking anywhere — and the section draws it: a unit with no thickness
+gets a box the size of the median of the ones you *have* measured, drawn
+dashed, labelled **thickness?**, and counted in the panel as outstanding.
+
+Nothing here will make you invent a number to get past a form.
+
+**Drag a unit by its grip** to move it through the column — the same handle,
+the same drop line and the same gesture as the block's layers and its timeline,
+because they are the same act on three lists and learning it once should be
+enough.
+
+Where a unit lands decides more than the order. **Pull a member clear of its
+formation and it comes out as a formation in its own right**, which is what a
+unit that is part of nothing is; drop one between two members and it joins
+them. Nudging the top or bottom member of a formation leaves it where it is, so
+tidying the order inside a formation never ejects anything by accident. A
+formation's card is a label for its bracket, so dragging it takes its members
+with it.
+
+**Rank** is what makes "the Poleta has eight units" drawable. Set a unit's
+*Part of* to a formation and it becomes a member: the formation stops drawing a
+box of its own and becomes the bracket down the side of its members, with their
+total on it. That total is not stored — it is their sum, and storing it twice
+means storing it wrong. Members are pulled next to each other when you assign
+them, because a bracket spanning something that is not part of the formation is
+a bracket claiming rock it does not have; if you separate them afterwards, the
+bracket goes dashed and the Legend tab says so.
+
+**The column is two tiers and no more.** A member cannot hold members: *Add a
+member* is only offered on something that can hold them, the *Part of* list
+only offers units that can, and the rank dropdown only offers ranks consistent
+with what a unit holds and what holds it. A member of a member of a member is
+not deeper stratigraphy, it is a data structure — and there is nowhere to draw
+it, since the bracket column has room for exactly one nesting. A group gets
+formations; a formation gets members. An older notebook carrying a deeper chain
+is re-hung on the top of it rather than having the units dropped.
+
+## Grain size is the x axis
+
+The horizontal axis is grain size, and the ragged right edge that produces is
+the reason a section is drawn rather than tabulated: a coarsening-up cycle is a
+shape you see across a metre of paper and never see in a list of numbers.
+
+**Grain size -> Draw on the section**, then drag inside a unit. Left is fine,
+right is coarse. The stroke is quantised to a point every twentieth of the
+unit, so a drag leaves a profile rather than a thousand vertices, and the
+whole drag is one undo step. The same points are listed in the panel with a
+height and a size that can be typed, for when a drag is not precise enough.
+
+Heights are stored as a **fraction of the unit**, not as metres, so a thickness
+corrected later keeps the shape you drew instead of stretching it off the end.
+Two points at the same height are a sharp break rather than a ramp — which is
+what the base of a channel looks like, and what a ramp could never say.
+
+Drawing is armed rather than always on. The section is taller than the screen
+and dragging it is normally how you scroll.
+
+Two axes, because two kinds of rock are logged two different ways: **Wentworth**
+for siliciclastics and **Dunham** for carbonates. One per section — a drawing
+with two x axes on it is not a section — and switching between them keeps the
+profiles you have drawn.
+
+## Fossils, traces and structures
+
+A column with no symbols on it is a bar chart of thicknesses. The **Marks** tab
+holds about fifty conventional marks in three groups — body fossils, trace
+fossils, sedimentary structures — drawn rather than borrowed from a font,
+because a symbol that merely gestures at a fossil is worse than none: the
+reader will believe it.
+
+Pick one, then tap the section at the height you saw it. Symbols are laid out
+in lanes in their own gutter so four things recorded in one shelly bed do not
+land on top of each other — and a symbol never moves up or down the section to
+make room, because its height is the observation.
+
+The **base of each unit** is drawn as the kind of contact you said it is:
+conformable, sharp, gradational, erosional, unconformable, faulted or covered.
+That line is where a column carries its sequence stratigraphy, and one that
+draws every contact as the same rule has thrown that away.
+
+## Into the block
+
+**Sheet -> Send to the block** replaces the block's layers with your column and
+leaves its history — every fold and fault you built — exactly as it is. The
+point is to deform your own succession rather than the default one.
+
+Units with no thickness go in at the nominal one and the panel says how many.
+Over the block's twenty-layer cap the *lowest* units are merged rather than
+dropped, since the top of a column is what a map is drawn on.
+
+## Out of the block, and the argument that follows
+
+This is the half worth reading twice.
+
+When you build a block from a mapped area, the fit reads a thickness for every
+unit between two contacts — off the map, the way a student is otherwise asked
+to do it by hand off a structure section. Those thicknesses come back here.
+
+What happens to them depends on what you already had:
+
+- **No thickness at all.** The block's number is adopted, stamped as having
+  come from a model, and marked in the drawing with a small green dot. "I do
+  not know" and "the block says 180 m" are not in conflict. Type over it the
+  moment you measure it for real.
+- **A thickness that agrees.** The block's number is filed beside yours and
+  nothing changes. Agreement is to within a tenth, because a block's thickness
+  comes from contacts traced across ten-metre elevation data and that is as
+  close as the two can be expected to get.
+- **A thickness that does not agree.** Both are kept. The unit gets a ring in
+  the drawing, and the panel puts the two numbers side by side with the
+  difference between them and offers you the choice: *take the block's*, or
+  *keep mine*.
+
+That last case is the point. A disagreement is a **finding**, not an error to
+be resolved by overwriting one number with the other: either the contacts are
+drawn in the wrong place, or the structure the block fitted is repeating or
+cutting out section, or the thickness you were given is not the thickness here.
+Nothing in the app will decide it for you, and nothing will quietly pick a
+winner while you are not looking.
+
+The roof and floor of a cut block are exempt. Those are open-ended by
+construction — the map says nothing about how thick the youngest and oldest
+units are — so they are never written back as measurements. It works the other
+way instead: if your column has a thickness for them, the block *uses* it, and
+labels it **(your column)** rather than **(guessed)**.
+
+Names are matched loosely. "Poleta Fm" and "Poleta Formation" are the same rock.
+
+## Getting it out
+
+**Save section** on the Sheet tab: pick a format, then press it. Four buttons
+that each fire the moment they are touched read as four choices but behave as
+four triggers — there is no way to look at them, decide, and then commit. So
+choosing and doing are separate, and the sentence under the chips says what you
+would get before you get it.
+
+| | |
+|---|---|
+| **PDF** | The sheet as it is meant to be handed in: section, explanation and scale caption on one page, in vector. It opens the print dialog — choose *Save as PDF* there. The page is as wide as A4 and as tall as the column needs, so nothing is shrunk to fit a shape the section is not. |
+| **SVG** | The same drawing as a file to edit, in Illustrator or Inkscape, at whatever size a report wants. |
+| **PNG** | The same sheet as a bitmap at 3x, for a document that will not take vector. |
+| **CSV** | The numbers: one row per unit, with both thicknesses, the grain-size range, the contact style and every symbol placed in it. |
+
+There is no PDF library in here and that is deliberate: writing one would mean
+writing an SVG-to-PDF converter, and every browser already contains a better
+one. The sheet goes into an offscreen frame with a page sized to it and the
+browser's own print path does the rest — which is also why the result is real
+vector with selectable text, rather than a screenshot at some guessed
+resolution.
+
+The legend is built from what is actually on the sheet and nothing else. A
+legend listing forty symbols of which six are used is a catalogue, and it
+teaches that a legend is boilerplate rather than a promise.
+
+---
+
 # Under the hood
 
 ## How the geology works
@@ -989,6 +1168,8 @@ js/
     declination.js    magnetic to true north
     ground.js         the frame the two halves share, and the sampled ground
     cutblock.js       a field area and a box -> a block document
+  strat/              the stratigraphic column's model — no DOM
+    model.js          rank, grain-size scales, layout, thicknesses and their argument
   ui/
     app.js            shell, section switch, tabs, identify tool, files
     panels.js         layers / history / terrain / field / view panels
@@ -1005,6 +1186,11 @@ js/
       panels.js       measure / stations / areas / setup panels
       symbols.js      station symbols and the position marker, on canvas
       blockPanel.js   the Block tab: cut a block out of the mapped area
+    strat/
+      section.js      the Strata section: the sheet, and what a tap on it means
+      column.js       the section as SVG, for the screen and for a saved file
+      panels.js       column / marks / legend / sheet panels
+      symbols.js      fossils, trace fossils and sedimentary structures
 ```
 
 Caps: 20 layers, 16 events. Both exist to keep the generated shader inside the
@@ -1240,6 +1426,38 @@ fragment uniform budget of older mobile GPUs.
   the terrain was missing is worse than one with no height at all.
 - Deleting an area keeps any tile another area also needs, because overlapping
   field areas are normal and deleting one should not punch a hole in another.
+
+### The Strata section
+
+- **One level of nesting**, enforced rather than merely advised: a member
+  cannot hold members, and the editor does not offer to give it any. A group
+  containing formations containing members would need the bracket column to
+  nest, and nothing so far has wanted it.
+- **The PDF goes through the print dialog**, so it inherits whatever that
+  dialog can do. A browser that ignores an explicit `@page` size prints the
+  sheet scaled onto its own default paper instead — it still fits, it is just
+  smaller.
+- **The column is drawn to one scale throughout.** There are no scale breaks,
+  so an eight-member formation of metre beds sitting under a 400 m quartzite
+  comes out as eight slivers — honestly, but not usefully. Set a fixed vertical
+  scale and scroll, which is what a paper log does about the same problem.
+- **A thickness is a single number, not a range.** "40 to 60 m, thickening
+  north" has to go in the description.
+- **The grain-size profile is stored as a step index**, so switching between
+  the Wentworth and Dunham axes keeps the shape and reinterprets it. Fine when
+  a section is logged on one axis, which is the normal case; a mixed
+  carbonate-siliciclastic succession has to pick one.
+- **Marks carry no size or abundance.** A symbol says the thing is there at
+  that height, not how much of it — no bioturbation index, no abundance
+  qualifier.
+- **Nothing here reaches the map's geometry.** The column orders the unit
+  pickers and offers the pairs a contact can have, and that is the whole of its
+  influence: it cannot move a line, and drawing a contact between two units the
+  column says do not touch is allowed, because the column may be the thing that
+  is wrong.
+- **Thicknesses come back from a block only for units between two mapped
+  contacts.** A unit you never bracketed with contacts is invisible to the fit,
+  however many stations stand in it.
 
 ---
 

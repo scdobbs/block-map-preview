@@ -26,6 +26,13 @@ function statLine(label, value, cls = '') {
   ]);
 }
 
+function listNames(rows) {
+  const names = rows.map((r) => r.name || 'an unnamed unit');
+  if (names.length <= 1) return names[0] || '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** Whether the Advanced fold is open. Screen state, not document state. */
@@ -229,11 +236,41 @@ function reportBlock(ctx, r) {
     const rows = r.units.map((u) => el('div', { class: 'stat' }, [
       el('span', { class: 'stat-label', text: u.name || 'unnamed' }),
       el('span', { class: `stat-value ${u.measured ? '' : 'dim'}`,
-        text: `${Math.round(u.thickness)} m${u.measured ? '' : ' (guessed)'}` }),
+        text: `${Math.round(u.thickness)} m${u.measured ? ''
+          : (u.fromColumn ? ' (your column)' : ' (guessed)')}` }),
     ]));
     wrap.appendChild(el('div', { class: 'stats' }, rows));
     wrap.appendChild(el('div', { class: 'ctl-hint standalone',
       text: 'Two contacts at a known structure differ by the thickness of what lies between them, so these were read off the map rather than measured with a tape. The top and bottom units are open-ended — nothing in the box says how thick they are.' }));
+  }
+
+  // What the build handed back to the stratigraphic column. Said here rather
+  // than left to be discovered, because a number changing in another section
+  // without anybody being told is exactly the kind of quiet edit that makes an
+  // app untrustworthy.
+  const note = ctx.columnNote && ctx.columnNote();
+  if (note && (note.adopted.length || note.clashed.length || note.noted.length)) {
+    wrap.appendChild(el('div', { class: 'sub-head', text: 'Into your column' }));
+    const lines = [];
+    if (note.adopted.length) {
+      lines.push(`${listNames(note.adopted)} had no thickness in your column and now `
+        + `${note.adopted.length === 1 ? 'has' : 'have'} the one this block measured, marked `
+        + 'as having come from a model. Type over it whenever you measure it for real.');
+    }
+    if (note.noted.length) {
+      lines.push(`${listNames(note.noted)} agreed with what you already had, to within the `
+        + 'ten metres the elevation data is good for.');
+    }
+    for (const c of note.clashed) {
+      lines.push(`${c.name}: you have ${Math.round(c.said)} m, this block makes it `
+        + `${Math.round(c.model)} m. Both are kept — that disagreement is a finding, and the `
+        + 'Strata section shows it beside the unit.');
+    }
+    for (const l of lines) wrap.appendChild(el('div', { class: 'ctl-hint standalone', text: l }));
+    wrap.appendChild(el('button', {
+      class: 'btn small', type: 'button', text: 'Open the column',
+      onclick: () => ctx.showColumn(),
+    }));
   }
 
   const dropped = r.counts && r.counts.dropped;

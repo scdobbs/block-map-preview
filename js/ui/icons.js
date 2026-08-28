@@ -177,6 +177,34 @@ export const TAB_ICONS = {
     svg('path', { d: 'M3 11.6 L12 16.6 L21 11.6', class: 'tabicon-line' }),
   ]),
 
+  // A column of three beds with a ragged right edge — a measured section, and
+  // the one silhouette that says "grain size" without a word on it.
+  column: tab(() => [
+    svg('path', { d: 'M4 4 H13 V9 H17 V14 H10 V20 H4 Z', class: 'tabicon-line' }),
+    svg('path', { d: 'M4 9 H13 M4 14 H17', class: 'tabicon-line' }),
+  ]),
+
+  // An ammonite: the mark everyone recognises, and the one this tab is for.
+  marks: tab(() => [
+    svg('path', {
+      d: 'M18 12 A 6.5 6.5 0 1 1 11.5 5.5 A 4.2 4.2 0 1 1 15.2 12 A 2.1 2.1 0 1 1 12.6 10.2',
+      class: 'tabicon-line',
+    }),
+  ]),
+
+  // A key: two swatches with their labels beside them.
+  legend: tab(() => [
+    svg('rect', { x: 3, y: 5, width: 5, height: 5, rx: 1, class: 'tabicon-fill' }),
+    svg('rect', { x: 3, y: 14, width: 5, height: 5, rx: 1, class: 'tabicon-line' }),
+    svg('path', { d: 'M11 7.5 H21 M11 16.5 H21', class: 'tabicon-line' }),
+  ]),
+
+  // A sheet of paper with a rule down it — the drawing, as an object.
+  sheet: tab(() => [
+    svg('path', { d: 'M5 3 H19 V21 H5 Z', class: 'tabicon-line' }),
+    svg('path', { d: 'M9 3 V21 M12 7 H16 M12 11 H16 M12 15 H16', class: 'tabicon-line' }),
+  ]),
+
   // Sliders.
   setup: tab(() => [
     svg('path', { d: 'M4 8 H20 M4 16 H20', class: 'tabicon-line' }),

@@ -4,10 +4,16 @@
 
 const CELL = 13;
 
-export function drawSwatch(canvas, color, pattern, scale = 1) {
+/**
+ * `size` is for a canvas that is not in the document and therefore has no
+ * layout to measure — the tiles the stratigraphic column fills its boxes with
+ * are built offscreen, and without it every one of them would come out at the
+ * 36px fallback whatever was asked for.
+ */
+export function drawSwatch(canvas, color, pattern, scale = 1, size = null) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = canvas.clientWidth || 36;
-  const h = canvas.clientHeight || 36;
+  const w = size || canvas.clientWidth || 36;
+  const h = size || canvas.clientHeight || 36;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
   const g = canvas.getContext('2d');
@@ -106,8 +112,12 @@ export function drawSwatch(canvas, color, pattern, scale = 1) {
 
   g.restore();
 
-  g.strokeStyle = 'rgba(0,0,0,0.35)';
-  g.strokeRect(0.5, 0.5, w - 1, h - 1);
+  // A swatch has an edge; a tile does not. Outlining a tile would put a grid
+  // of boxes across every unit in the stratigraphic column.
+  if (size == null) {
+    g.strokeStyle = 'rgba(0,0,0,0.35)';
+    g.strokeRect(0.5, 0.5, w - 1, h - 1);
+  }
 }
 
 /** A swatch element that redraws itself when told to. */

@@ -4,6 +4,7 @@
 
 import {
   el, svg, clear, numberRow, selectRow, toggleRow, compassDial, protractor,
+  enableDragReorder,
 } from './widgets.js';
 import { swatchEl, drawSwatch } from './swatch.js';
 import { surfaceEditor } from './surfaceEditor.js';
@@ -477,75 +478,6 @@ function summarise(ev, doc) {
     }
     default: return '';
   }
-}
-
-/**
- * Drag a row up or down its list by its grip. Used by both the timeline and
- * the stratigraphic column.
- *
- * The dragged row is only translated, never re-parented mid-drag — a drop
- * line marks where it will land. That keeps the geometry stable while the
- * finger is down, which matters because the list is inside a scroller.
- *
- * `commit` is handed the row ids in the order they now appear on screen. Each
- * list maps that onto the model itself: the timeline is drawn youngest-first
- * so its model order is the reverse, while the column is already in model
- * order. `rowSel` has to exclude any decoration sharing the row class — the
- * column's basement row and unconformity dividers are not draggable.
- */
-function enableDragReorder(list, { rowSel, gripSel, idKey, commit }) {
-  let drag = null;
-  const line = el('div', { class: 'drop-line' });
-  const rows = () => [...list.querySelectorAll(rowSel)];
-  const others = () => rows().filter((r) => r !== drag.row);
-
-  list.addEventListener('pointerdown', (e) => {
-    const grip = e.target.closest(gripSel);
-    if (!grip || drag) return;
-    const row = grip.closest(rowSel);
-    if (!row || rows().length < 2) return;
-
-    e.preventDefault();
-    grip.setPointerCapture(e.pointerId);
-    drag = { row, grip, pointerId: e.pointerId, startY: e.clientY, target: null };
-    row.classList.add('dragging');
-  });
-
-  list.addEventListener('pointermove', (e) => {
-    if (!drag || e.pointerId !== drag.pointerId) return;
-    drag.row.style.transform = `translateY(${e.clientY - drag.startY}px)`;
-
-    const rest = others();
-    let idx = rest.length;
-    for (let i = 0; i < rest.length; i++) {
-      const b = rest[i].getBoundingClientRect();
-      if (e.clientY < b.top + b.height / 2) { idx = i; break; }
-    }
-    drag.target = idx;
-    // Placed relative to the last row rather than appended, so the line lands
-    // above the column's basement row instead of below it.
-    if (idx < rest.length) list.insertBefore(line, rest[idx]);
-    else rest[rest.length - 1].after(line);
-  });
-
-  const finish = (e) => {
-    if (!drag || (e && e.pointerId !== drag.pointerId)) return;
-    const { row, target } = drag;
-    row.classList.remove('dragging');
-    row.style.transform = '';
-    line.remove();
-    drag = null;
-
-    if (target == null) return;
-    const shown = rows().map((r) => r.dataset[idKey]);
-    const id = row.dataset[idKey];
-    const without = shown.filter((x) => x !== id);
-    without.splice(target, 0, id);   // target === length appends
-    commit(without);
-  };
-
-  list.addEventListener('pointerup', finish);
-  list.addEventListener('pointercancel', finish);
 }
 
 /**
@@ -1047,7 +979,8 @@ function fitReport(ctx, doc) {
     root.appendChild(el('div', { class: 'stats' }, fit.units.map((u) => el('div', { class: 'stat' }, [
       el('span', { class: 'stat-label', text: u.name || 'unnamed' }),
       el('span', { class: `stat-value ${u.measured ? '' : 'dim'}`,
-        text: `${Math.round(u.thickness)} m${u.measured ? '' : ' (at least)'}` }),
+        text: `${Math.round(u.thickness)} m${u.measured ? ''
+          : (u.fromColumn ? ' (your column)' : ' (at least)')}` }),
     ]))));
     root.appendChild(el('div', { class: 'ctl-hint standalone', text:
       'Two contacts at a known structure differ by the thickness between them, so these were read off the map rather than measured with a tape. The top and bottom units are open-ended: nothing you mapped says how thick they are, so those two are lower bounds — enough to reach the oldest and youngest rock that actually crops out, and no claim beyond it.' }));
