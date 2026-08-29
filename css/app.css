@@ -213,6 +213,14 @@ html, body {
 .ctl-value { display: flex; align-items: baseline; gap: 3px; }
 .ctl-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
 .ctl-hint.standalone { margin: 0 0 10px; }
+/* The build and the project's fingerprint, quoted between devices — read off a
+   screen and typed into a message, so the digits are tabular and selectable
+   rather than styled to be skimmed past. */
+.ctl-hint.stamp {
+  font-variant-numeric: tabular-nums; letter-spacing: .02em;
+  color: var(--ink); user-select: text; -webkit-user-select: text;
+}
+.ctl-hint.warn { color: #ffc857; }
 .ctl-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 
 .num {

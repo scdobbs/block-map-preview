@@ -20,6 +20,8 @@ import { fixAge } from '../../field/sensors.js';
 import { SOURCES, BASE_SOURCES, estimateArea, storageReport } from '../../field/tiles.js';
 import { formatDistance, formatBytes, formatLonLat, formatDDM, distance,
   bboxSize } from '../../field/geo.js';
+import { APP_VERSION } from '../../version.js';
+import { docFingerprint } from '../../field/fingerprint.js';
 
 // ---------------------------------------------------------------------------
 // Small local controls
@@ -1376,6 +1378,37 @@ export function setupPanel(ctx) {
     title: 'Delete every station and line here, keeping the project and its map areas',
     onclick: () => ctx.clearAll(),
   }));
+
+  // --- version -------------------------------------------------------------
+  // Two questions, because a block fitted here and the same block fitted on
+  // another device can disagree for two independent reasons and the answers
+  // look identical. The left half is which build of the app is running; the
+  // right half is a hash of everything in this project the fit actually reads.
+  // Matching both means the two devices are being asked the same question.
+  node.appendChild(el('div', { class: 'sub-head', text: 'Version' }));
+  const stamp = el('div', { class: 'ctl-hint standalone stamp',
+    text: `${APP_VERSION} \u00b7 doc ${docFingerprint(doc)}` });
+  node.appendChild(stamp);
+  node.appendChild(el('div', { class: 'ctl-hint standalone', text:
+    'Quote both when comparing a fit between devices. The left is the app build, the right is this project\u2019s evidence \u2014 stations, lines, shaded units, the column, and the local-folds switch. Notes and colours are left out, because they change no answer. Two devices that agree here can still cut different blocks: the box you drag round your mapping sets the size of the block and the largest offset the fault search will consider, and it is drawn by hand.' }));
+
+  // Whether the code running is the code that was downloaded. The worker calls
+  // skipWaiting, so an update installs into the cache while this page carries
+  // on executing the modules it started with — the state in which a phone
+  // quietly disagrees with a laptop about the same map.
+  if (typeof caches !== 'undefined' && caches.keys) {
+    caches.keys().then((keys) => {
+      const cached = keys
+        .map((k) => /^blockdiagram-v(\d+)$/.exec(k))
+        .filter(Boolean)
+        .map((m) => Number(m[1]))
+        .sort((a, b) => b - a)[0];
+      const running = Number(String(APP_VERSION).replace(/^v/, ''));
+      if (!Number.isFinite(cached) || !Number.isFinite(running) || cached <= running) return;
+      stamp.textContent = `${APP_VERSION} \u00b7 doc ${docFingerprint(doc)} \u2014 v${cached} downloaded, not yet running`;
+      stamp.classList.add('warn');
+    }).catch(() => {});
+  }
 
   node.refreshReadings = () => {
     const src = doc.settings.declinationSource;

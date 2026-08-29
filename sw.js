@@ -2,7 +2,8 @@
 // the app has been opened with a connection it will keep opening without one
 // — which is the whole point of using it in the field.
 //
-// Bump CACHE when any precached file changes.
+// Bump CACHE when any precached file changes, and APP_VERSION in js/version.js
+// with it — tools/check-version.sh checks the two agree.
 //
 // KEEP is the other half of that rule and matters more. The sweep below
 // deletes every cache that is not the current one, which is right for the app
@@ -11,7 +12,7 @@
 // would not find out until they were standing in it with no signal. So the
 // tile cache is named without a version and listed here as untouchable.
 
-const CACHE = 'blockdiagram-v48';
+const CACHE = 'blockdiagram-v49';
 
 // Must match CACHE_NAME in js/field/tiles.js.
 const TILE_CACHE = 'field-tiles';
@@ -24,6 +25,7 @@ const ASSETS = [
   './css/app.css',
   './vendor/three.module.js',
   './js/main.js',
+  './js/version.js',
   './js/store.js',
   './js/geo/math.js',
   './js/geo/model.js',
@@ -57,6 +59,7 @@ const ASSETS = [
   './js/field/ground.js',
   './js/field/cutblock.js',
   './js/field/patches.js',
+  './js/field/fingerprint.js',
   './js/ui/map/section.js',
   './js/ui/map/canvas.js',
   './js/ui/map/panels.js',
