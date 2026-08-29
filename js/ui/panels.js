@@ -462,6 +462,7 @@ function summarise(ev, doc) {
       `axis ${formatLine(ev)}`,
       `λ ${Math.round(ev.wavelength)} m`,
       `A ${Math.round(ev.amplitude)} m`,
+      ev.profile && ev.profile.length ? 'fitted profile' : null,
       Math.abs(ev.vergence || 0) > 0.02 ? 'verging' : null,
       Math.abs(ev.hinge || 0) > 0.02 ? ((ev.hinge > 0) ? 'sharp hinges' : 'box hinges') : null,
       (ev.reachAlong > 0 || ev.reachAcross > 0) ? 'dies out' : null,
@@ -596,6 +597,16 @@ function buildEventControls(ctx, ev, index, body) {
       // which limb is steeper is not the same question as how sharp the hinge
       // is, and a fold can do one without the other.
       body.appendChild(el('div', { class: 'sub-head', text: 'Shape' }));
+      if (ev.profile && ev.profile.length) {
+        // A fitted profile is not a cosine and the sliders below shape a
+        // cosine, so say what the fold is carrying and offer the way back.
+        const wrap = el('div', { class: 'ctl-hint standalone' });
+        wrap.appendChild(el('span', { text: 'This fold\u2019s cross-section was solved from your mapping rather than assumed, as a series of harmonics. Wavelength above is the fundamental the series is built on, and amplitude its peak. Vergence and hinge shape still warp it. ' }));
+        const reset = el('button', { class: 'btn small', text: 'Replace with a plain cosine' });
+        reset.onclick = () => set('profile')([]);
+        wrap.appendChild(reset);
+        body.appendChild(wrap);
+      }
       const verge = numberRow({
         label: 'Vergence', value: ev.vergence || 0, min: -0.9, max: 0.9, step: 0.05,
         ends: vergenceEnds(ev),

@@ -257,6 +257,63 @@ export function foldWarpInverse(psi, vergence, hinge) {
 }
 
 /**
+ * How many harmonics a fitted fold profile carries. Fixed, because the shader
+ * declares the uniforms for exactly this many and cannot index them by a
+ * computed count. Eight of a fundamental twice the block wide resolves
+ * anything down to a quarter of the block, which is finer than a handful of
+ * stations can say anything about.
+ */
+export const FOLD_HARMONICS = 8;
+
+/**
+ * The shape of a fold across its axis, as a function of warped phase.
+ *
+ * Without a profile this is the cosine every fold has always been. With one
+ * it is a Fourier series in that same phase — `profile` holds
+ * [a1, b1, a2, b2, ...] for cos(n·psi) and sin(n·psi) — normalised so the
+ * event's `amplitude` still means the peak displacement in metres. Anything
+ * that is a function of the phase alone keeps the fold exactly invertible,
+ * which is the one property the whole model rests on, so this is the widest
+ * family the block can carry for free.
+ *
+ * The GLSL twin in geo/glsl.js evaluates the same sum, unrolled. Keep them
+ * in step.
+ */
+export function foldProfile(psi, profile) {
+  if (!profile || !profile.length) return Math.cos(psi);
+  let f = 0;
+  for (let n = 1; n <= FOLD_HARMONICS; n++) {
+    const a = profile[2 * n - 2] || 0;
+    const b = profile[2 * n - 1] || 0;
+    if (a || b) f += a * Math.cos(n * psi) + b * Math.sin(n * psi);
+  }
+  return f;
+}
+
+/**
+ * Where a profile crests and troughs, over one period of the unwarped phase
+ * t in [0, 2π). Each entry is { t, value }, value in units of the amplitude.
+ * A plain cosine gives t = 0 (crest, +1) and t = π (trough, −1); a fitted
+ * profile can have more, or unevenly spaced ones, which is the point of it.
+ */
+export function foldProfileExtrema(profile, vergence, hinge, steps = 720) {
+  const f = (t) => foldProfile(foldWarp(t, vergence, hinge), profile);
+  const out = [];
+  const step = (2 * Math.PI) / steps;
+  let prev = f(-step);
+  let cur = f(0);
+  for (let i = 0; i < steps; i++) {
+    const next = f((i + 1) * step);
+    if ((cur > prev && cur >= next) || (cur < prev && cur <= next)) {
+      out.push({ t: i * step, value: cur });
+    }
+    prev = cur;
+    cur = next;
+  }
+  return out;
+}
+
+/**
  * How much of its amplitude the fold still has at a point — 1 in the middle,
  * 0 outside its reach, tapered smoothly between.
  *

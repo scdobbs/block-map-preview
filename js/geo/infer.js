@@ -41,22 +41,104 @@
 // and a warning saying as much, which is why those are written out rather than
 // papered over with a fitted number that would look exactly as confident.
 
-import { compileHistory, stratDepth, beddingAt, rockAt } from './unmake.js';
+import { compileHistory, stratDepth, beddingAt, rockAt, undoAfter } from './unmake.js';
 import { fitBedding, poleOf } from './stereonet.js';
 import { makeEvent, makeLayer, faultKindFromRake } from './model.js';
 import { surfaceHeight } from './surfaces.js';
 import {
-  dot, cross, sub, add, scale, normalize, normalToStrikeDip, planeFrame,
-  azimuthVec, clamp, RAD, DEG, wrap360,
+  dot, cross, sub, add, scale, normalize, normalToStrikeDip, planeFrame, axisFrame,
+  azimuthVec, rotateAbout, foldProfile, foldProfileExtrema, FOLD_HARMONICS,
+  clamp, RAD, DEG, wrap360,
 } from './math.js';
 import { traceContours } from './marching.js';
 
 /**
- * A degree of attitude and ten metres of contact position are treated as
- * equally bad. Ten metres is the DEM's own resolution, so this says: do not
- * chase a contact tighter than the ground beneath it is known.
+ * How well each kind of observation is known. The misfit is a weighted sum of
+ * squares — each residual divided by the uncertainty of the thing it is a
+ * residual of — so these are what decide how hard each observation pulls, and
+ * there is no separate exchange rate between degrees and metres: a reading
+ * two sigma off costs the same whether the sigma was in degrees or metres.
+ *
+ *   attitude   a compass-and-clinometer reading of bedding on a real outcrop,
+ *              which wobbles by a few degrees over a bed that is not a plane
+ *   ground     the DEM's own resolution, in metres of height, which every
+ *              point on the lid inherits
+ *   position   how far across the map a drawn line may be from where the
+ *              contact really is, by the confidence the mapper gave it. A
+ *              concealed contact under alluvium is a guess to within a hundred
+ *              metres and a walked one is good to a few strides. What that
+ *              costs in stratigraphic depth depends on the dip: a hundred
+ *              metres sideways on flat beds is nothing, and on beds at sixty
+ *              degrees it is most of a unit, so the position error is turned
+ *              into a depth error through the local slope of the model
+ *   patch      a point sampled inside a shaded unit, which is only as well
+ *              placed as the fill that put it there
+ *   juxtaposition  a unit named across a fault, in metres of column
  */
-const METRES_PER_DEGREE = 10;
+export const SIGMA = {
+  attitude: 4,
+  ground: 10,
+  position: { certain: 8, approximate: 20, inferred: 50, concealed: 100 },
+  patch: 15,
+  juxtaposition: 25,
+};
+
+/**
+ * How far apart two points on a drawn line have to be before they are
+ * separate observations. A line digitised every ten metres on a ten-metre
+ * DEM is not fifty independent measurements of where the contact is, it is
+ * a handful, and letting every vertex vote would let one long contact
+ * outweigh every station on the map. Each point carries a weight of its
+ * spacing over this length, capped at one, so a line counts as about its
+ * length divided by this many independent points. The same applies by area
+ * to the points sampled inside a shaded unit.
+ */
+const CORRELATION_LENGTH = 50;
+
+/** How much of one independent observation each point of a line is worth. */
+function lineShare(pts) {
+  if (!pts || pts.length < 2) return 1;
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  }
+  return Math.min(1, (len / (pts.length - 1)) / CORRELATION_LENGTH);
+}
+
+/** The same for points sampled over an area. */
+function patchShare(pts) {
+  if (!pts || pts.length < 2) return 1;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const p of pts) {
+    x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]);
+    y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+  }
+  const perPoint = ((x1 - x0) * (y1 - y0)) / pts.length;
+  return Math.min(1, perPoint / (CORRELATION_LENGTH * CORRELATION_LENGTH));
+}
+
+/** The horizontal position error of a drawn line, from its confidence. */
+function positionSigma(line) {
+  return SIGMA.position[line && line.certainty] || SIGMA.position.certain;
+}
+
+/**
+ * The uncertainty in stratigraphic depth at a point, from a horizontal
+ * position error: the DEM's height error, plus the position error carried
+ * through the slope of the depth field there. `slope` is metres of depth per
+ * metre across the map — tan(dip), for a bed.
+ */
+function depthSigma(slope, positionErr) {
+  return Math.hypot(SIGMA.ground, positionErr * slope);
+}
+
+/** Metres of stratigraphic depth per metre across the map, at a point. */
+function depthSlope(h, p, d0, eps = 2) {
+  const gx = (stratDepth(h, [p[0] + eps, p[1], p[2]]) - d0) / eps;
+  const gy = (stratDepth(h, [p[0], p[1] + eps, p[2]]) - d0) / eps;
+  const g = Math.hypot(gx, gy);
+  return Number.isFinite(g) ? g : 0;
+}
 
 /**
  * How much of a trace's spread has to lie across it before it can be said to
@@ -107,9 +189,18 @@ function poleAngle(a, b) {
  * used before the column is known — and why, once a fault is in the history,
  * the same single number scores the fault's slip too: undo the fault correctly
  * and the two halves of a displaced contact come back to the same depth.
+ *
+ * Every residual is divided by the uncertainty of what it measures (see
+ * SIGMA), squared, and summed: a chi-squared. `total` is that sum per
+ * observation, so a history that explains the mapping to within its own
+ * errors scores about one, whatever mix of readings, contacts and shaded units
+ * it was scored on. `angle` and `spread` are kept in degrees and metres for
+ * people to read; the search reads `total`.
  */
 export function misfit(events, obs) {
   const h = compileHistory(docFor(events));
+  let chi2 = 0;
+  let count = 0;
 
   let angle = 0;
   let counted = 0;
@@ -129,8 +220,12 @@ export function misfit(events, obs) {
     // looks like, and "your block is hopeless" and "these readings never
     // reached it" must never print the same number with no way to tell them
     // apart.
-    if (b) angle += poleAngle(b, st); else { angle += 90; blind++; }
+    const off = b ? poleAngle(b, st) : 90;
+    if (!b) blind++;
+    angle += off;
+    chi2 += (off / SIGMA.attitude) ** 2;
     counted++;
+    count++;
   }
   angle = counted ? angle / counted : 0;
 
@@ -144,14 +239,30 @@ export function misfit(events, obs) {
     // A point with no height cannot be asked for a depth, and one NaN would
     // otherwise carry through the mean and print the whole misfit as NaN — a
     // number that looks like a verdict and is a bug.
-    const d = evidencePts(g, events)
-      .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]) && Number.isFinite(p[2]))
-      .map((p) => stratDepth(h, p))
-      .filter(Number.isFinite);
+    const d = [];
+    const w = [];
+    let eff = 0;
+    for (const { p, sigma, share } of evidencePts(g, events)) {
+      if (!Number.isFinite(p[0]) || !Number.isFinite(p[1]) || !Number.isFinite(p[2])) continue;
+      const depth = stratDepth(h, p);
+      if (!Number.isFinite(depth)) continue;
+      d.push(depth);
+      w.push(share / depthSigma(depthSlope(h, p, depth), sigma) ** 2);
+      eff += share;
+    }
     if (d.length < 2) continue;
-    const mean = d.reduce((a, b) => a + b, 0) / d.length;
+    // The surface's depth is the weighted mean, so a concealed stretch pulls
+    // less on where the contact sits than the part that was walked.
+    let sw = 0;
+    let swd = 0;
+    for (let i = 0; i < d.length; i++) { sw += w[i]; swd += w[i] * d[i]; }
+    const mean = swd / sw;
     let v = 0;
-    for (const x of d) v += (x - mean) * (x - mean);
+    for (let i = 0; i < d.length; i++) {
+      v += (d[i] - mean) * (d[i] - mean);
+      chi2 += w[i] * (d[i] - mean) * (d[i] - mean);
+    }
+    count += Math.max(1, eff - 1);
     spread += Math.sqrt(v / d.length);
     lines += g.lines.length;
     usable++;
@@ -170,12 +281,16 @@ export function misfit(events, obs) {
     const b = bounds.get(String(p.unit || '').trim().toLowerCase());
     if (!b || !p.pts || !p.pts.length) continue;
     let out = 0;
+    const share = patchShare(p.pts);
     for (const q of p.pts) {
       const d = stratDepth(h, q);
       if (!Number.isFinite(d)) continue;
       // Zero anywhere inside the unit. Only being outside it costs, and by how
       // far outside — a point one metre past a contact is nearly right.
-      out += Math.max(0, b.top - d, d - b.base);
+      const o = Math.max(0, b.top - d, d - b.base);
+      out += o;
+      if (o > 0) chi2 += share * (o / depthSigma(depthSlope(h, q, d), SIGMA.patch)) ** 2;
+      count += share;
     }
     area += out / p.pts.length;
     patches++;
@@ -186,8 +301,22 @@ export function misfit(events, obs) {
     angle, spread, n: counted, lines, blind, area, patches,
     // Surfaces that could actually be scored, not merely drawn.
     surfaces: usable,
-    total: angle + (spread + area) / METRES_PER_DEGREE,
+    chi2, count,
+    total: count ? chi2 / count : 0,
   };
+}
+
+/**
+ * The misfit with the units named across the faults added in, in the same
+ * currency. This is what the slip search minimises and what decides whether a
+ * slip is determined at all.
+ */
+function scoreAll(events, obs, fitted, extent) {
+  const m = misfit(events, obs);
+  const j = juxtaposition(events, obs, fitted, extent);
+  const chi2 = m.chi2 + j.chi2;
+  const count = m.count + j.count;
+  return { chi2, count, total: count ? chi2 / count : 0 };
 }
 
 /**
@@ -205,8 +334,8 @@ function unitBounds(h, obs, events) {
   for (const g of contactGroups(obs)) {
     if (!g.named) continue;
     const d = evidencePts(g, events)
-      .filter((p) => Number.isFinite(p[2]))
-      .map((p) => stratDepth(h, p))
+      .filter(({ p }) => Number.isFinite(p[2]))
+      .map(({ p }) => stratDepth(h, p))
       .filter(Number.isFinite);
     if (!d.length) continue;
     at.push({ depth: d.reduce((a, b) => a + b, 0) / d.length, upper: g.upper, lower: g.lower });
@@ -274,7 +403,7 @@ export function contactsOf(obs) {
  * of the throw and the whole reason the contact term can score a fault at all.
  */
 function evidencePts(g, events) {
-  let pts = g.pts;
+  let pts = g.evidence;
   for (const ev of events || []) {
     if (ev.type !== 'fault' || ev.enabled === false) continue;
     if (!Number.isFinite(ev.strike) || !Number.isFinite(ev.dip)) continue;
@@ -282,7 +411,7 @@ function evidencePts(g, events) {
     const c = [ev.centerX, ev.centerY, ev.centerZ];
     const pos = [];
     const neg = [];
-    for (const p of pts) (dot(sub(p, c), normal) > 0 ? pos : neg).push(p);
+    for (const e of pts) (dot(sub(e.p, c), normal) > 0 ? pos : neg).push(e);
     if (!pos.length || !neg.length) continue;
     const lesser = Math.min(pos.length, neg.length);
     // The same test that decides whether this fault's slip is measurable at
@@ -307,12 +436,18 @@ export function contactGroups(obs) {
     if (!groups.has(key)) {
       groups.set(key, {
         key, named: !!(upper && lower), upper, lower,
-        lines: [], pts: [], name: ln.name || (upper && lower ? `${upper} / ${lower}` : 'Contact'),
+        lines: [], pts: [], evidence: [],
+        name: ln.name || (upper && lower ? `${upper} / ${lower}` : 'Contact'),
       });
     }
     const g = groups.get(key);
     g.lines.push(ln);
     g.pts.push(...ln.pts);
+    // Each point remembers how well its line was located, because a walked
+    // piece and a concealed piece of one contact are not equally good evidence.
+    const sigma = positionSigma(ln);
+    const share = lineShare(ln.pts);
+    for (const p of ln.pts) g.evidence.push({ p, sigma, share });
   }
   return [...groups.values()];
 }
@@ -774,7 +909,7 @@ function juxtaposition(events, obs, faults, extent) {
   // hanging wall.
   const wanted = faults.filter((f) => f.line && f.plane.dip < 89
     && String(f.line.unitUpper || '').trim() && String(f.line.unitLower || '').trim());
-  if (!wanted.length) return 0;
+  if (!wanted.length) return { chi2: 0, count: 0 };
 
   const h = compileHistory(docFor(events));
   const bounds = unitBounds(h, obs, events);
@@ -801,13 +936,13 @@ function juxtaposition(events, obs, faults, extent) {
           const q = add(p, scale(az, side * off * k));
           const d = stratDepth(h, q);
           if (!Number.isFinite(d)) continue;
-          cost += Math.max(0, b.top - d, d - b.base);
+          cost += (Math.max(0, b.top - d, d - b.base) / SIGMA.juxtaposition) ** 2;
           counted++;
         }
       }
     }
   }
-  return counted ? cost / counted : 0;
+  return { chi2: cost, count: counted };
 }
 
 // ---------------------------------------------------------------------------
@@ -922,12 +1057,12 @@ export function inferHistory(obs, { extent = 4000, localFolds = false } = {}) {
   // just fitted against a fold that was fitted assuming no offset. One pass
   // back and forth lets each answer for the other.
   if (built.polish && contactsOf(obs).length) {
-    built.polish(events, obs);
+    built.polish(events, obs, !fitted.length);
     if (fitted.length) {
       // Quiet: this pass exists to move the numbers, and reportSlip below is
       // what describes wherever they came to rest.
       fitSlip(fitted, events, obs, extent, [], []);
-      built.polish(events, obs);
+      built.polish(events, obs, true);
     }
   }
   if (fitted.length) reportSlip(fitted, events, obs, extent, notes, warnings);
@@ -1147,7 +1282,89 @@ function fitStructure(verdict, obs, extent, notes, warnings, { localFolds = fals
   // buys noise.
   const seed = scan(bounds, [16, 14, 18, 1, 1], score, [null, null, null, trend, plunge]);
   const { x } = refine(seed, bounds, score);
-  const ev = make(x);
+  let ev = make(x);
+
+  // --- the same fold with a free profile, by linear least squares ---------
+  // Only the hinge is searched; for each hinge the shape is solved outright.
+  // Held against the cosine on the whole of the evidence, and only kept if it
+  // beats it by more than its extra freedom is worth: a chi-squared better by
+  // a few is what one more meaningful harmonic buys, and a profile that does
+  // no better than a cosine is a cosine with more numbers in it.
+  //
+  // With faults on the map this waits for the polish, when the faults are in
+  // place. Tried before that, a free shape would happily explain a displaced
+  // contact as a kink in the fold, and the slip would then have nothing left
+  // to measure.
+  const hingeBounds = [[trend - 20, trend + 20], [Math.max(0, plunge - 15), Math.min(80, plunge + 15)]];
+  const profiled = (tr, pl, events, all) => {
+    const pe = makeEvent('fold', {
+      wavelength: 2 * extent, amplitude: 0, phase: 0, trend: tr, plunge: pl,
+      centerX: 0, centerY: 0, profile: [], name: 'Fold',
+    });
+    return fitProfileAt(pe, events ? withFirst(events, pe) : [pe], all, extent);
+  };
+  const profileScore = (v, events, all) => {
+    const pe = profiled(v[0], v[1], events, all);
+    return pe ? misfit(events ? withFirst(events, pe) : [pe], all).chi2 : Infinity;
+  };
+  const tryProfile = (events, all) => {
+    const hinge = refine([trend, plunge], hingeBounds, (v) => profileScore(v, events, all), { rounds: 30 });
+    const pe = profiled(hinge.x[0], hinge.x[1], events, all);
+    const chi = pe ? misfit(events ? withFirst(events, pe) : [pe], all).chi2 : Infinity;
+    return { pe, chi };
+  };
+  let adopted = false;
+  let toldNo = false;
+  const adopt = (target, pe, cosChi, profChi, when) => {
+    Object.assign(target, {
+      wavelength: pe.wavelength, amplitude: pe.amplitude, phase: 0, centerX: 0, centerY: 0,
+      trend: pe.trend, plunge: pe.plunge, profile: pe.profile, reachAlong: 0, reachAcross: 0,
+    });
+    adopted = true;
+    const d = describeProfile(target, extent);
+    notes.push(`Fold profile solved from the mapping rather than assumed${when}: ${d.hinges} hinge${d.hinges === 1 ? '' : 's'} across the block${d.wavelength ? `, about ${Math.round(d.wavelength)} m crest to crest` : ''}, amplitude ${Math.round(target.amplitude)} m, limbs steepest at ${d.dipMax.toFixed(0)}°. A plain cosine fitted the same evidence ${(cosChi / Math.max(1e-9, profChi)).toFixed(1)}× worse.`);
+  };
+  // Both an absolute and a relative margin. The absolute one is what one
+  // meaningful harmonic is worth when the errors are as stated; the relative
+  // one is for when they are not — a history thirty degrees from its readings
+  // has a chi-squared in the thousands, and a tenth of that is not a better
+  // shape, it is a wigglier one.
+  const earns = (cosChi, profChi) => Number.isFinite(profChi)
+    && cosChi - profChi > 6 && profChi < 0.8 * cosChi;
+  const deferred = faultLinesOf(obs).length > 0;
+  // Readings that are not one structure are not given a free shape to fit
+  // them with. A profile can always bend closer to a contradiction; the
+  // honest answer to one is the warning above, not a wigglier fold.
+  if (verdict.kind === 'scattered') {
+    notes.push('The fold keeps a plain cosine: a free profile is not fitted to readings the stereonet says are not one structure, because it would only be fitting the contradiction.');
+  }
+  const allowProfile = verdict.kind !== 'scattered';
+
+  if (!deferred && allowProfile) {
+    // The cosine gets the same chance to answer for the contacts before the
+    // two are compared, so the comparison is between shapes and not between
+    // what each was allowed to see.
+    const cosPolish = refine([Math.log(ev.wavelength), ev.amplitude, ev.phase, ev.trend, ev.plunge],
+      bounds, (v) => misfit([make(v)], obs).total);
+    const cosEv = make(cosPolish.x);
+    const cosChi = misfit([cosEv], obs).chi2;
+    const { pe, chi } = tryProfile(null, obs);
+    if (pe && pe.amplitude > 0 && earns(cosChi, chi)) {
+      ev = pe;
+      adopt(ev, pe, cosChi, chi, '');
+      return {
+        events: [ev],
+        polish: (events, all) => {
+          const { pe: fresh } = tryProfile(events, all);
+          if (fresh) Object.assign(ev, { trend: fresh.trend, plunge: fresh.plunge, amplitude: fresh.amplitude, profile: fresh.profile });
+        },
+        reachSeed: null,
+      };
+    }
+    if (Number.isFinite(chi)) {
+      notes.push('A free fold profile was tried as well and did no better than a plain cosine, so the cosine is kept.');
+    }
+  }
 
   // --- how far it reaches, when that was asked for -------------------------
   // Seeded rather than searched from nothing. A free reach has a degenerate
@@ -1181,7 +1398,13 @@ function fitStructure(verdict, obs, extent, notes, warnings, { localFolds = fals
 
   return {
     events: [ev],
-    polish: (events, all) => {
+    polish: (events, all, final = true) => {
+      if (adopted) {
+        // Already a profile: re-solve it with the faults where they are now.
+        const { pe: fresh } = tryProfile(events, all);
+        if (fresh) Object.assign(ev, { trend: fresh.trend, plunge: fresh.plunge, amplitude: fresh.amplitude, profile: fresh.profile });
+        return;
+      }
       const start = [Math.log(ev.wavelength), ev.amplitude, ev.phase, ev.trend, ev.plunge];
       if (reach) start.push(ev.reachAlong || reach.seed);
       const { x: y } = refine(start, shaped,
@@ -1189,6 +1412,18 @@ function fitStructure(verdict, obs, extent, notes, warnings, { localFolds = fals
       Object.assign(ev, {
         wavelength: Math.exp(y[0]), amplitude: y[1], phase: y[2], trend: y[3], plunge: y[4],
       });
+      if (deferred && final && allowProfile) {
+        const cosChi = misfit(events, all).chi2;
+        const { pe, chi } = tryProfile(events, all);
+        if (pe && pe.amplitude > 0 && earns(cosChi, chi)) {
+          adopt(ev, pe, cosChi, chi, ', once the faults were in place');
+          return;
+        }
+        if (Number.isFinite(chi) && !toldNo) {
+          toldNo = true;
+          notes.push('A free fold profile was tried as well, with the faults in place, and did no better than a plain cosine, so the cosine is kept.');
+        }
+      }
       if (reach) {
         // A reach that ends up wider than the block is not a limit, it is a
         // fold that happens to fill the map. Recorded as no limit at all, so
@@ -1201,6 +1436,282 @@ function fitStructure(verdict, obs, extent, notes, warnings, { localFolds = fals
     // only runs when there are contacts and the reach is applied either way.
     reachSeed: reach ? reach.seed : null,
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// The fold profile, by linear least squares
+// ---------------------------------------------------------------------------
+//
+// Once the stereonet has fixed the hinge, the fold's shape across it is a
+// LINEAR problem, and it is worth seeing why. The fold displaces vertically by
+// A·F(across), and F can be any function of that one coordinate — the inverse
+// stays exact. Write F as a Fourier series and:
+//
+//   a station's dip is F'(across) there — linear in the coefficients
+//   a contact's points all sit at one depth, F(across) − z = c — linear, with
+//     one unknown level c per surface
+//   a shaded unit's points sit between two of those levels — linear
+//     inequalities, handled by adding a violated one back as a pull
+//
+// So there is no scan, no descent and no local minimum: one solve gives the
+// global best shape for that hinge, and the only search left is over the two
+// numbers the net already measured. The plain cosine is the special case with
+// one harmonic, and it is still fitted and still preferred unless the profile
+// earns its extra freedom (see fitStructure).
+//
+// Smoothness is a prior on curvature, in physical units: a fold a block wide
+// with a twentieth of the block's amplitude is about one sigma of it, so high
+// harmonics — which need far more curvature for the same amplitude — are only
+// kept when the mapping insists.
+
+/** Solve A x = b for a small dense system, Gaussian elimination with pivoting. */
+function solveDense(A, b) {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let piv = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+    if (Math.abs(M[piv][c]) < 1e-12) return null;
+    if (piv !== c) [M[c], M[piv]] = [M[piv], M[c]];
+    for (let r = c + 1; r < n; r++) {
+      const f = M[r][c] / M[c][c];
+      if (!f) continue;
+      for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) {
+    let acc = M[r][n];
+    for (let k = r + 1; k < n; k++) acc -= M[r][k] * x[k];
+    x[r] = acc / M[r][r];
+  }
+  return x;
+}
+
+/** Weighted least squares from rows of { a: coefficients, b: target, w: 1/sigma }. */
+function solveRows(rows, n) {
+  const A = Array.from({ length: n }, () => new Array(n).fill(0));
+  const b = new Array(n).fill(0);
+  for (const { a, b: t, w } of rows) {
+    const w2 = w * w;
+    for (let i = 0; i < n; i++) {
+      const ai = a[i];
+      if (!ai) continue;
+      b[i] += w2 * ai * t;
+      for (let j = 0; j < n; j++) if (a[j]) A[i][j] += w2 * ai * a[j];
+    }
+  }
+  // A whisper of ridge so a level nothing constrains does not blow the solve.
+  for (let i = 0; i < n; i++) A[i][i] += 1e-9;
+  return solveDense(A, b);
+}
+
+/**
+ * Fit the fold's profile for one hinge, and write it onto `ev`.
+ *
+ * `events` is the whole history with `ev` first in it, so the observations are
+ * read with everything younger than the fold already undone — which is what
+ * lets the same solve serve both the first fit and the polish once the faults
+ * are in place.
+ */
+function fitProfileAt(ev, events, obs, extent) {
+  const N = FOLD_HARMONICS;
+  const h = compileHistory(docFor(events));
+  const ce = h.events[0];
+  const { perp } = ce;
+  const plunge = ev.plunge || 0;
+  const k = (2 * Math.PI) / ev.wavelength;
+  const c0 = [ev.centerX || 0, ev.centerY || 0, 0];
+  // Gradient of the plunge-tilted height: the z row of the rotation.
+  const e = [0, 1, 2].map((i) => {
+    const unit = [0, 0, 0]; unit[i] = 1;
+    return rotateAbout(unit, perp, plunge)[2];
+  });
+
+  const where = (p) => {
+    const q = undoAfter(h, p, 0);
+    const v = sub(q, c0);
+    return { across: dot(v, perp), rz: rotateAbout(v, perp, plunge)[2] };
+  };
+  const basis = (across) => {
+    const a = new Array(2 * N);
+    for (let n = 1; n <= N; n++) {
+      a[2 * n - 2] = Math.cos(n * k * across);
+      a[2 * n - 1] = Math.sin(n * k * across);
+    }
+    return a;
+  };
+  const dbasis = (across) => {
+    const a = new Array(2 * N);
+    for (let n = 1; n <= N; n++) {
+      a[2 * n - 2] = -n * k * Math.sin(n * k * across);
+      a[2 * n - 1] = n * k * Math.cos(n * k * across);
+    }
+    return a;
+  };
+
+  // The unknowns: 2N coefficients, then one level per contact surface.
+  const groups = contactGroups(obs).map((g) => ({
+    g,
+    pts: evidencePts(g, events).filter(({ p }) => Number.isFinite(p[0]) && Number.isFinite(p[1]) && Number.isFinite(p[2])),
+  })).filter((x) => x.pts.length >= 2);
+  const nU = 2 * N + groups.length;
+  const row = (a, b, w) => {
+    const full = new Array(nU).fill(0);
+    for (let i = 0; i < a.length; i++) full[i] = a[i];
+    return { a: full, b, w };
+  };
+
+  // Stations: the slope the pole demands across the axis.
+  const stationRows = [];
+  for (const st of obs.stations || []) {
+    if (!Number.isFinite(st.strike) || !Number.isFinite(st.dip)) continue;
+    if (!Number.isFinite(st.x) || !Number.isFinite(st.y) || !Number.isFinite(st.z)) continue;
+    const { normal } = planeFrame(st.strike, st.dip);
+    const m = normal[2] < 0 ? scale(normal, -1) : normal;
+    // The bed's up-normal is e − s·perp, so m ∥ (e − s·perp): solve for s.
+    const A = cross(m, e);
+    const B = cross(m, perp);
+    const bb = dot(B, B);
+    if (bb < 1e-12) continue;
+    const sl = dot(A, B) / bb;
+    const { across } = where([st.x, st.y, st.z - 0.5]);
+    stationRows.push(row(dbasis(across), sl, 1 / ((1 + sl * sl) * SIGMA.attitude * DEG)));
+  }
+
+  // Contacts: every point of a surface at that surface's level. The weight
+  // needs the slope at the point, which needs the answer, so it is solved
+  // twice — first with the height error alone, then with the slope it found.
+  const contactPts = groups.map(({ pts }, gi) => pts.map(({ p, sigma, share }) => {
+    const { across, rz } = where(p);
+    const a = new Array(nU).fill(0);
+    const bs = basis(across);
+    for (let i = 0; i < bs.length; i++) a[i] = bs[i];
+    a[2 * N + gi] = -1;
+    return { a, b: rz, sigma, share: Math.sqrt(share), across };
+  }));
+
+  // Curvature prior.
+  const sigmaC = 4 / extent;
+  const priorRows = [];
+  for (let n = 1; n <= N; n++) {
+    for (const j of [2 * n - 2, 2 * n - 1]) {
+      const a = new Array(nU).fill(0);
+      a[j] = (n * k) * (n * k);
+      priorRows.push({ a, b: 0, w: 1 / sigmaC });
+    }
+  }
+
+  // Patches, resolved the same way: sampled points, their unit's two levels.
+  const norm = (v) => String(v || '').trim().toLowerCase();
+  const patchPts = [];
+  for (const p of obs.patches || []) {
+    const unit = norm(p.unit);
+    if (!unit || !p.pts) continue;
+    const share = Math.sqrt(patchShare(p.pts));
+    for (const q of p.pts) {
+      if (!Number.isFinite(q[2])) continue;
+      const { across, rz } = where(q);
+      patchPts.push({ unit, bs: basis(across), rz, across, share });
+    }
+  }
+
+  let x = null;
+  let slopeAt = () => 0;
+  let pulls = [];
+  for (let pass = 0; pass < 4; pass++) {
+    const rows = [...stationRows, ...priorRows, ...pulls];
+    for (const pts of contactPts) {
+      for (const c of pts) rows.push({ a: c.a, b: c.b, w: c.share / depthSigma(slopeAt(c.across), c.sigma) });
+    }
+    x = solveRows(rows, nU);
+    if (!x) return null;
+    const coef = x.slice(0, 2 * N);
+    slopeAt = (across) => Math.abs(dot3(dbasis(across), coef));
+    if (!patchPts.length) { if (pass >= 1) break; continue; }
+
+    // Which level bounds which unit, from the solved levels: the group whose
+    // level is the unit's top, and the one whose level is its base.
+    const top = new Map();
+    const base = new Map();
+    groups.forEach(({ g }, gi) => {
+      if (!g.named) return;
+      const lvl = x[2 * N + gi];
+      const lo = norm(g.lower);
+      const up = norm(g.upper);
+      if (!top.has(lo) || lvl > top.get(lo).lvl) top.set(lo, { lvl, gi });
+      if (!base.has(up) || lvl < base.get(up).lvl) base.set(up, { lvl, gi });
+    });
+    pulls = [];
+    for (const q of patchPts) {
+      const d = dot3(q.bs, coef) - q.rz;
+      const t = top.get(q.unit);
+      const b = base.get(q.unit);
+      const bound = t && d < t.lvl ? t : b && d > b.lvl ? b : null;
+      if (!bound) continue;
+      // Pull the point to the level it crossed. The level is an unknown, so
+      // the row ties the two together rather than to a fixed number.
+      const a = new Array(nU).fill(0);
+      for (let i = 0; i < q.bs.length; i++) a[i] = q.bs[i];
+      a[2 * N + bound.gi] = -1;
+      pulls.push({ a, b: q.rz, w: q.share / depthSigma(slopeAt(q.across), SIGMA.patch) });
+    }
+  }
+
+  const coef = x.slice(0, 2 * N);
+  // Normalise so `amplitude` stays the peak displacement in metres — over the
+  // block's own width, since the half of the period outside it is whatever
+  // the series does where nothing was mapped.
+  let peak = 0;
+  for (let i = 0; i <= 400; i++) {
+    const across = -extent / 2 + (extent * i) / 400;
+    peak = Math.max(peak, Math.abs(foldProfile(k * across, coef)));
+  }
+  if (peak < 1e-6) {
+    ev.amplitude = 0;
+    ev.profile = [];
+  } else {
+    ev.amplitude = peak;
+    ev.profile = coef.map((v) => v / peak);
+  }
+  return ev;
+}
+
+function dot3(a, b) {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+  return s;
+}
+
+/**
+ * What a fitted profile looks like in the words a cosine is described in:
+ * the spacing of its hinges across the block, and its steepest limb.
+ */
+export function describeProfile(ev, extent) {
+  const k = (2 * Math.PI) / ev.wavelength;
+  const hinges = [];
+  for (let m = -3; m <= 3; m++) {
+    for (const x of foldProfileExtrema(ev.profile, ev.vergence, ev.hinge)) {
+      const across = (x.t + 2 * Math.PI * m - (ev.phase || 0) * DEG) / k;
+      if (Math.abs(across) <= extent / 2) hinges.push(across);
+    }
+  }
+  hinges.sort((a, b) => a - b);
+  let wavelength = null;
+  if (hinges.length >= 2) {
+    let sum = 0;
+    for (let i = 1; i < hinges.length; i++) sum += hinges[i] - hinges[i - 1];
+    wavelength = 2 * sum / (hinges.length - 1);
+  }
+  let steep = 0;
+  for (let i = 0; i <= 400; i++) {
+    const across = -extent / 2 + (extent * i) / 400;
+    const eps = extent / 4000;
+    const f = (a) => foldProfile(k * a + (ev.phase || 0) * DEG, ev.profile);
+    steep = Math.max(steep, Math.abs(ev.amplitude * (f(across + eps) - f(across - eps)) / (2 * eps)));
+  }
+  return { hinges: hinges.length, wavelength, dipMax: Math.atan(steep) * RAD };
 }
 
 /** The same event list with its first (structural) event swapped out. */
@@ -1229,8 +1740,7 @@ function fitSlip(fitted, events, obs, extent, notes, warnings) {
   // weigh against the contacts and the readings in the same currency. The
   // juxtaposition term is metres, like the contact spread, and is converted
   // the same way.
-  const total = () => misfit(events, obs).total
-    + juxtaposition(events, obs, fitted, extent) / METRES_PER_DEGREE;
+  const total = () => scoreAll(events, obs, fitted, extent).total;
 
   const put = (f, rake, slip) => {
     const { kind, obliquity } = faultKindFromRake(wrap360(rake));
@@ -1347,8 +1857,7 @@ function fitSlip(fitted, events, obs, extent, notes, warnings) {
  */
 function reportSlip(fitted, events, obs, extent, notes, warnings) {
   const maxSlip = extent * 0.45;
-  const total = () => misfit(events, obs).total
-    + juxtaposition(events, obs, fitted, extent) / METRES_PER_DEGREE;
+  const total = () => scoreAll(events, obs, fitted, extent).chi2;
   const put = (f, rake, slip) => {
     const { kind, obliquity } = faultKindFromRake(wrap360(rake));
     f.ev.kind = kind;
@@ -1380,8 +1889,11 @@ function reportSlip(fitted, events, obs, extent, notes, warnings) {
       worst = Math.max(worst, total());
     }
     put(f, rake, keep);
-    if (worst - at < 0.5) {
-      warnings.push(`Nothing in your mapping really decides how far ${f.ev.name} moved: across its whole range of possible offsets the fit changes by less than half a degree, so ${Math.round(f.ev.slip)} m is where the search stopped rather than what the evidence says. Treat it as undetermined and set it yourself on the History tab.`);
+    // A chi-squared that moves by less than about one across the whole range
+    // is the one-sigma test: no offset in that range is worse than the
+    // errors on the observations themselves.
+    if (worst - at < 1) {
+      warnings.push(`Nothing in your mapping really decides how far ${f.ev.name} moved: across its whole range of possible offsets the fit changes by less than the errors on your own observations, so ${Math.round(f.ev.slip)} m is where the search stopped rather than what the evidence says. Treat it as undetermined and set it yourself on the History tab.`);
     }
   }
 }
@@ -1436,7 +1948,7 @@ export function columnFrom(events, obs) {
     // Same trimming as the misfit: a couple of points that strayed over a
     // fault would otherwise be averaged into this surface's depth and shift
     // the thickness of every unit below it.
-    const d = evidencePts(g, events).map((p) => stratDepth(h, p));
+    const d = evidencePts(g, events).map(({ p }) => stratDepth(h, p));
     const mean = d.reduce((a, b) => a + b, 0) / d.length;
     let v = 0;
     for (const x of d) v += (x - mean) * (x - mean);

@@ -5,7 +5,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { OrbitControls } from './controls.js';
 import { BlockMaterial } from './material.js';
 import { buildBlockGeometry, buildEdgeLines, footprint } from './block.js';
-import { planeFrame, axisFrame, rotateAbout, foldWarpInverse, foldEnvelope, DEG } from '../geo/math.js';
+import { planeFrame, axisFrame, rotateAbout, foldProfileExtrema, foldEnvelope, DEG } from '../geo/math.js';
 import { surfaceHeight, surfaceRange, isDemSurface } from '../geo/surfaces.js';
 import { unconformityDatums } from '../geo/model.js';
 import { buildContourLabels, buildLabelMeshes, MAX_LABELS } from './contours.js';
@@ -313,15 +313,21 @@ export class BlockScene {
         const phase = (event.phase || 0) * DEG;
         const cx = event.centerX || 0;
         const cy = event.centerY || 0;
-        for (let k = -3; k <= 3; k++) {
-          // cos(psi) is extreme where psi = k*pi, and psi is the warped phase.
-          const t = foldWarpInverse(k * Math.PI, event.vergence, event.hinge);
+        // Where the profile crests and troughs, in unwarped phase over one
+        // period. A cosine has one of each; a fitted profile can have more,
+        // and unevenly spaced, which is why they are found rather than assumed.
+        const extrema = foldProfileExtrema(event.profile, event.vergence, event.hinge);
+        const hinges = [];
+        for (let m = -3; m <= 3; m++) {
+          for (const x of extrema) hinges.push({ t: x.t + 2 * Math.PI * m, value: x.value });
+        }
+        for (const { t, value } of hinges) {
           const u = (t - phase) * lam / (2 * Math.PI);
           // A hinge outside the fold's reach is not a hinge. Taken at the
           // centre of the axis, which is where the drawn line is anchored.
           const fade = foldEnvelope(0, u, event.reachAlong, event.reachAcross);
           if (fade <= 0) continue;
-          const crest = event.amplitude * fade * Math.cos(k * Math.PI);
+          const crest = event.amplitude * fade * value;
           const tilted = rotateAbout(
             [perp[0] * u, perp[1] * u, crest], perp, -(event.plunge || 0),
           );

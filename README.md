@@ -629,6 +629,29 @@ wavelength, and mean nothing.
 not yet in place. A fault translates a block without rotating it, so the beds
 it carries keep their attitude.
 
+For a fold this happens twice, in two different ways. First as the plain
+cosine every fold in the app has always been, by a coarse scan and a descent.
+Then with the **shape of the fold set free**: once the net has fixed the
+hinge, the cross-section is a *linear* problem. A station's dip is the slope
+of the profile at that point; a contact's points all sit at one level of it;
+a shaded unit's points sit between two levels. Written as a series of eight
+harmonics, all of that is one solve with no scan, no descent and no local
+minimum — the best shape for that hinge, outright — and the only search left
+is over the two numbers the net already measured. A prior on curvature keeps
+the high harmonics quiet unless the mapping insists on them.
+
+The free shape then has to **earn its place**. It is held against the cosine
+on the whole of the evidence, and kept only if it fits better by more than
+its extra freedom is worth, in both absolute and relative terms. A fold that
+really is a cosine comes back as one, with a note saying the profile was
+tried. A verging or box fold comes back as a profile, with the cosine's
+misfit quoted beside it. Readings the net calls *not one structure* are never
+given a free shape at all, because a profile can always bend closer to a
+contradiction, and the honest answer to one is the warning, not a wigglier
+fold. With faults on the map the comparison waits until the faults are in
+place (step 5), or a free shape would explain a displaced contact as a kink
+and leave the slip nothing to measure.
+
 **3. Each fault plane is established** from a plane read at an exposure first,
 then from whatever you set on the line, and only failing both from its drawn
 trace against the terrain, by geometry rather than by search. A fault trace is
@@ -662,6 +685,25 @@ spent adjusting a fold to fit readings from the other side of a thrust.
 A contact is a surface of constant stratigraphic depth. So the **spread of
 that depth along a line you walked is the error, in metres** — with no
 fitting, and with no assumption about which units it separates.
+
+**How hard each observation pulls is set by how well it is known**, and by
+nothing else. Every residual is divided by the uncertainty of what it
+measures and squared, so there is no exchange rate between degrees and
+metres: a reading two sigma off costs the same whichever unit the sigma was
+in. A bedding reading is taken as good to 4°, the ground to the DEM's 10 m,
+and a drawn line to a distance across the map that follows the confidence you
+gave it — 8 m for *certain*, 20 for *approximate*, 50 for *inferred*, 100 for
+*concealed*. What a position error is worth in stratigraphic depth depends on
+the dip, so it is carried through the local slope of the model: a hundred
+metres sideways on flat beds costs nothing, and on beds at sixty degrees it is
+most of a unit. A concealed contact therefore pulls less on where a surface
+sits than the stretch of it you walked, and on flat ground barely at all.
+
+A line digitised every ten metres is not fifty independent measurements of
+where the contact is, and letting every vertex vote would let one long contact
+outweigh every station on the map. Each point counts for its spacing over
+about fifty metres, so a line is worth roughly its length in fifties. Points
+sampled inside a shaded unit are treated the same way by area.
 
 Two things follow.
 
@@ -862,9 +904,10 @@ offset, and it must never come back reported as a normal fault.
 
 **A slip the data barely prefers** is reported as undetermined. After the
 search settles, the offset is walked across its whole range and the fit is
-asked how much it minds. When the answer is less than half a degree, the
-number is where the search stopped rather than what the evidence says, and it
-would print identically to a measured one unless somebody said so.
+asked how much it minds. When the answer is less than the errors on the
+observations themselves — a chi-squared that moves by less than about one —
+the number is where the search stopped rather than what the evidence says,
+and it would print identically to a measured one unless somebody said so.
 
 **Slickenlines that cannot belong to the fault they were taken on** — a rake
 that is not the sense you observed, however the rock moved along it — are
@@ -1117,7 +1160,7 @@ Every deformation is exactly invertible, which is what makes this work:
 | Event | Forward | Why the inverse is exact |
 |---|---|---|
 | **Tilt** | rigid rotation about the strike line | rotations invert |
-| **Fold** | an upright fold (vertical displacement, a warped and enveloped wave read across the horizontal `perp` axis), then a rigid tilt about `perp` by the plunge | neither step changes the horizontal coordinates the profile is read from, whatever shape that profile has |
+| **Fold** | an upright fold (vertical displacement, a warped and enveloped wave — or a fitted series of harmonics — read across the horizontal `perp` axis), then a rigid tilt about `perp` by the plunge | neither step changes the horizontal coordinates the profile is read from, whatever shape that profile has |
 | **Dome / basin** | vertical displacement depending only on map position | map position is unchanged by vertical motion |
 | **Fault** | rigid translation of the hanging wall, parallel to the fault plane | slip lies in the plane, so the hanging-wall test gives the same answer before and after |
 | **Unconformity** | splits the column: units above the erosion surface skip all older history | a branch, not a transform |
@@ -1159,7 +1202,15 @@ part of a limb is exposed.
 The search is a coarse scan to find the right basin, then coordinate descent
 with a shrinking step to walk to the bottom of it. Nothing cleverer, because
 the objective has long flat valleys and several local minima and this behaves
-predictably in both. A whole fit is tens of milliseconds.
+predictably in both. The one exception is the fold's profile, which for a
+fixed hinge is linear in its coefficients and is solved by weighted least
+squares rather than searched (see *How the fit runs*). A whole fit is a few
+hundred milliseconds on a real notebook.
+
+The misfit is a chi-squared: each residual over the sigma of its observation,
+squared and summed, with `total` that sum per independent observation. The
+sigmas live in `SIGMA` at the top of `geo/infer.js`, and they are the only
+place the relative weight of readings, contacts and shaded units is decided.
 
 **Real ground is a seventh kind of surface.** `demSurface()` in
 `geo/surfaces.js` wraps a sampled heightfield and `surfaceHeight()` answers
@@ -1495,6 +1546,14 @@ two, and check the scatter.
 history, plus a fault for each fault you drew. Two folds overprinting, or a
 fold refolded, comes out as a poor fit and says so rather than being
 decomposed.
+
+**A fitted fold profile is a Fourier series in the fold's phase**, eight
+harmonics of a fundamental twice the block wide, so it resolves nothing finer
+than a quarter of the block and repeats beyond the edge where nothing was
+mapped. The event keeps the ordinary controls: wavelength is the fundamental
+the series is built on, amplitude its peak inside the block, and vergence and
+hinge shape still warp it. The History tab names it *fitted profile* and
+offers to replace it with a plain cosine.
 
 **The predicted contacts are anchored to your own lines.** Each contact's
 depth is the mean along the trace you walked, so the prediction cannot drift

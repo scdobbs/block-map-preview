@@ -21,7 +21,7 @@
 
 import {
   planeFrame, axisFrame, azimuthVec, slipVec, rotateAbout, normalToStrikeDip,
-  foldWarp, foldEnvelope, dot, sub, DEG,
+  foldWarp, foldEnvelope, foldProfile, dot, sub, DEG,
 } from './math.js';
 import { surfaceHeight } from './surfaces.js';
 import {
@@ -124,8 +124,8 @@ function undoEvent(e, p) {
       const along = vx * e.az[0] + vy * e.az[1];
       const amp = e.amplitude
         * foldEnvelope(along, across, e.reachAlong, e.reachAcross);
-      const off = amp * Math.cos(
-        foldWarp(k * across + (e.phase || 0) * DEG, e.vergence, e.hinge),
+      const off = amp * foldProfile(
+        foldWarp(k * across + (e.phase || 0) * DEG, e.vergence, e.hinge), e.profile,
       );
       return [d[0] + cx, d[1] + cy, d[2] - off];
     }
@@ -151,6 +151,22 @@ function undoEvent(e, p) {
     default:
       return p;
   }
+}
+
+/**
+ * A point carried back through every event AFTER the one at `index`, and no
+ * further. This is where a fitted structure reads its evidence from: with the
+ * faults undone the observations sit where the fold left them, and the fold
+ * alone is left to explain them.
+ */
+export function undoAfter(h, p0, index) {
+  let p = [p0[0], p0[1], p0[2]];
+  for (let i = h.events.length - 1; i > index; i--) {
+    const e = h.events[i];
+    if (e.type === 'unconformity' || e.type === 'dike' || e.type === 'pluton') continue;
+    p = undoEvent(e, p);
+  }
+  return p;
 }
 
 /** Is this point inside an intrusive body, in that body's own time frame? */

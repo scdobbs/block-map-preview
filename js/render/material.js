@@ -138,6 +138,7 @@ function addEventUniforms(u, p, e) {
     case 'fold':
       u[`${p}_perp`] = V3(); u[`${p}_az`] = V3(); u[`${p}_wave`] = V3();
       u[`${p}_shape`] = V4(); u[`${p}_center`] = V3(); u[`${p}_plunge`] = F();
+      u[`${p}_prof0`] = V4(); u[`${p}_prof1`] = V4(); u[`${p}_prof2`] = V4(); u[`${p}_prof3`] = V4();
       break;
     case 'domebasin':
       u[`${p}_c`] = V4(); u[`${p}_r`] = V3();
@@ -183,6 +184,13 @@ function setEventUniforms(u, p, e, datums) {
       );
       u[`${p}_center`].value.set(e.centerX || 0, e.centerY || 0, 0);
       u[`${p}_plunge`].value = (e.plunge || 0) * DEG;
+      // The profile, four coefficients to a vec4. No profile is the cosine.
+      const prof = e.profile && e.profile.length ? e.profile : [1];
+      for (let q = 0; q < 4; q++) {
+        u[`${p}_prof${q}`].value.set(
+          prof[4 * q] || 0, prof[4 * q + 1] || 0, prof[4 * q + 2] || 0, prof[4 * q + 3] || 0,
+        );
+      }
       break;
     }
     case 'domebasin':

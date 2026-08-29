@@ -117,9 +117,11 @@ function emitTilt(p) {
 
 function emitFold(p) {
   return {
-    decl: `uniform vec3 ${p}_perp; uniform vec3 ${p}_az; uniform vec3 ${p}_wave; uniform vec4 ${p}_shape; uniform vec3 ${p}_center; uniform float ${p}_plunge;`,
+    decl: `uniform vec3 ${p}_perp; uniform vec3 ${p}_az; uniform vec3 ${p}_wave; uniform vec4 ${p}_shape; uniform vec3 ${p}_center; uniform float ${p}_plunge; uniform vec4 ${p}_prof0; uniform vec4 ${p}_prof1; uniform vec4 ${p}_prof2; uniform vec4 ${p}_prof3;`,
     // _wave  = (amplitude, angular wavenumber, phase in radians)
     // _shape = (vergence, hinge, reach along axis, reach across axis)
+    // _prof0..3 = the profile's Fourier coefficients, (a1, b1, a2, b2) and so
+    //          on for eight harmonics — a plain cosine is (1, 0, 0, 0) and zeros
     //
     // The warp and the envelope here are a line-for-line mirror of foldWarp
     // and foldEnvelope in geo/math.js, including the way the skew pair is
@@ -160,7 +162,18 @@ function emitFold(p) {
       amp *= u >= 1.0 ? 0.0 : 0.5 * (1.0 + cos(PI * u));
     }
 
-    d.z -= amp * cos(psi);
+    // The profile: a Fourier series in the warped phase, mirroring
+    // foldProfile in geo/math.js. Unrolled, because GLSL ES 1.00 cannot index
+    // a uniform array by a loop counter it might not unroll.
+    float f = ${p}_prof0.x * cos(psi) + ${p}_prof0.y * sin(psi)
+      + ${p}_prof0.z * cos(2.0 * psi) + ${p}_prof0.w * sin(2.0 * psi)
+      + ${p}_prof1.x * cos(3.0 * psi) + ${p}_prof1.y * sin(3.0 * psi)
+      + ${p}_prof1.z * cos(4.0 * psi) + ${p}_prof1.w * sin(4.0 * psi)
+      + ${p}_prof2.x * cos(5.0 * psi) + ${p}_prof2.y * sin(5.0 * psi)
+      + ${p}_prof2.z * cos(6.0 * psi) + ${p}_prof2.w * sin(6.0 * psi)
+      + ${p}_prof3.x * cos(7.0 * psi) + ${p}_prof3.y * sin(7.0 * psi)
+      + ${p}_prof3.z * cos(8.0 * psi) + ${p}_prof3.w * sin(8.0 * psi);
+    d.z -= amp * f;
     p = d + ${p}_center;
   }`,
   };
