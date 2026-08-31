@@ -45,6 +45,11 @@ export class MapSection {
     this.host = host;            // the App, for the shared sheet
     this.activeTab = 'measure';
     this.ready = false;
+    // Resolves when loadWorkspace has landed. The field-ready check runs from
+    // a Block tab that can be opened before the notes have finished loading,
+    // and a check that counted a default empty document would report "no
+    // offline map" to somebody who has one.
+    this.opened = new Promise((resolve) => { this._markOpened = resolve; });
     this.selectedStationId = null;
     this.selectedLineId = null;
     this.placeMode = false;
@@ -119,6 +124,7 @@ export class MapSection {
       this.store.projectId = id;
       this._adoptDocument(doc);
       this.ready = true;
+      this._markOpened();
       this.host.fieldOpened();
     });
 
@@ -1573,11 +1579,51 @@ export class MapSection {
     this.checkReadiness();
   }
 
+  /**
+   * Set the declination from NOAA, for the field area rather than for here.
+   *
+   * This is the one thing the readiness check can fix by itself, and it has to,
+   * because the control that would otherwise fix it lives on Map -> Setup —
+   * behind the first stage. Without this a student on day one is told to set a
+   * number they have no way to reach.
+   *
+   * The lookup uses the centre of the downloaded area, NOT the phone's own
+   * position. A student doing this at home on wifi is hundreds of miles from
+   * the field area, and the declination there is not the declination that will
+   * correct their readings. The area is where the readings will be taken, so
+   * the area is what gets asked about.
+   *
+   * A value the student typed themselves is never overwritten.
+   */
+  async _ensureDeclination() {
+    const doc = this.store.doc;
+    if (doc.settings.declinationSet) return false;
+    if (navigator.onLine === false) return false;
+    // The course pack's area first — on a course that is the field area, and
+    // any others are somebody's own box drawn around somewhere else.
+    const area = doc.areas.find((a) => a.packId) || doc.areas[0];
+    if (!area) return false;
+    const [lon, lat] = bboxCenter(area.bbox);
+    let r = null;
+    try { r = await lookupDeclination(lon, lat); } catch { return false; }
+    if (!r) return false;
+    this.store.edit((d) => {
+      d.settings.declination = Math.round(r.declination * 10) / 10;
+      d.settings.declinationSet = true;
+      d.settings.declinationSource = 'noaa';
+      d.settings.declinationInfo = { ...r, lon, lat, area: area.name || null };
+    }, { structural: true });
+    return true;
+  }
+
   async checkReadiness() {
     if (this._readyChecking) return;
     this._readyChecking = true;
     this.rebuild();
     try {
+      // Count the real notebook, not the empty one the section starts on.
+      await this.opened;
+      await this._ensureDeclination();
       this._ready = await fieldReady(this.store.doc);
     } catch (err) {
       console.warn('field-ready check failed', err);

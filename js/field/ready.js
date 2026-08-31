@@ -14,6 +14,7 @@
 // that. A count against real cache entries can.
 
 import { verifyAreasFast, storageReport } from './tiles.js';
+import { formatDeclination as formatDecl } from './declination.js';
 import { APP_VERSION } from '../version.js';
 
 /**
@@ -123,15 +124,32 @@ export async function fieldReady(doc) {
   });
 
   // --- declination ---------------------------------------------------------
-  // Looking it up needs NOAA, so it is a thing to have done before leaving,
-  // not a thing to discover is missing at the first outcrop.
-  const set = !!doc?.settings?.declinationSet;
+  // The one row the check can put right on its own, and it has to: the control
+  // that would otherwise set it is on Map -> Setup, which a student on day one
+  // cannot open. The check asks NOAA for the value at the field area's centre
+  // before reporting, so by the time this row is drawn it is usually already
+  // done. See _ensureDeclination in js/ui/map/section.js.
+  const s = doc?.settings || {};
+  const set = !!s.declinationSet;
+  const info = s.declinationInfo || null;
+  let declDetail;
+  if (set && s.declinationSource === 'noaa') {
+    declDetail = info?.area
+      ? `Looked up for ${info.area} and applied. Every compass reading is corrected by this — you do not need to set it yourself.`
+      : 'Looked up for your field area and applied. Every compass reading is corrected by this.';
+  } else if (set) {
+    declDetail = 'Every compass reading will be corrected by this.';
+  } else if (!areas.length) {
+    declDetail = 'Set automatically once a map area is installed. Install one above and check again.';
+  } else if (navigator.onLine === false) {
+    declDetail = 'Needs a connection once, to look up the value for your field area. Get back on wifi and check again.';
+  } else {
+    declDetail = 'Could not reach the lookup service. Check again on a better connection — until then readings would be recorded as magnetic.';
+  }
   checks.push({
     id: 'declination', label: 'Declination set', state: set ? 'good' : 'warn',
-    value: set ? `${(doc.settings.declination ?? 0).toFixed(1)}°` : 'not set',
-    detail: set
-      ? 'Every compass reading will be corrected by this.'
-      : 'Not set, so readings will be recorded as magnetic. Looking it up needs a connection — do it now, not at the first outcrop.',
+    value: set ? formatDecl(s.declination) : 'not set',
+    detail: declDetail,
   });
 
   const worst = checks.some((c) => c.state === 'bad') ? 'bad'

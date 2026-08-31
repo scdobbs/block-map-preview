@@ -565,6 +565,10 @@ export function defaultFieldDocument() {
       declination: 0,
       declinationSet: false,
       declinationSource: null,   // 'manual' | 'noaa' | 'ios'
+      // What NOAA said and where it was asked about, so the app can report
+      // that the number belongs to the field area and not to wherever the
+      // phone happened to be when it was looked up.
+      declinationInfo: null,
       // A station placed on a fix worse than this is placed on a guess.
       minAccuracy: 15,
       units: 'metric',

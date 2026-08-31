@@ -302,10 +302,14 @@ Otherwise, on **Map → Areas**, draw the box yourself:
    counted in the cache afterwards, not when the download returns. **Check**
    re-counts at any time and **Repair** fetches whatever is missing. An area
    short of tiles says so, in the list and on the map.
-4. **Set the declination** on Setup before taking a single reading.
-   Downloading an area also asks NOAA for the declination at its centre and
-   offers that as a starting point, but the number is yours. It is the same
-   one you would dial into a Brunton, east positive.
+4. **Declination sets itself.** The field-ready check asks NOAA for the value
+   at the centre of your downloaded area and applies it — at the area, not at
+   wherever the phone happens to be, which is the whole point: doing this at
+   home on wifi is hundreds of miles from the field, and the declination there
+   is not the one that corrects your readings. It needs a connection once. The
+   number is still yours to override on **Map → Setup**, the same one you
+   would dial into a Brunton, east positive; a value you type is never
+   replaced.
 
 ## On the outcrop
 
@@ -1311,6 +1315,13 @@ general audience deletes `js/unlock.js`, the `course` entry in the block's
 `TABS`, `coursePanel`, and the three call sites that read the gate — the mode
 switch in `js/ui/app.js`, the `tabs` getter in `js/ui/map/section.js`, and the
 panel itself. Nothing else knows about it.
+
+One thing the gate did force. Declination lives on Map → Setup, behind the
+first stage, so a student on day one would have been told to set a number they
+could not reach — a readiness check reporting a problem with no available
+remedy, which is worse than not reporting it. The check now fills it in itself
+from the field area's centre, so the card can reach fully green with both
+stages still locked. `_ensureDeclination` in `js/ui/map/section.js`.
 
 The gate is deliberately not wired into the record. Nothing a student collects
 is tagged with the stage that was open when they collected it, and none of the
