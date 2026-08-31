@@ -1621,3 +1621,5 @@ html, body {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   user-select: all;
 }
+/* A line that passed, but only because the check changed something. */
+.ready-detail.changed { color: var(--accent); }

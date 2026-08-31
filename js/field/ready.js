@@ -132,6 +132,12 @@ export async function fieldReady(doc) {
   const s = doc?.settings || {};
   const set = !!s.declinationSet;
   const info = s.declinationInfo || null;
+  // A number that was silently corrected is the one case a green line should
+  // still say something: the student had 12.7 for somewhere else, has 11.9
+  // now, and would otherwise never know it moved.
+  const declNote = info?.replaced != null
+    ? `Changed from ${formatDecl(info.replaced)}, which was not the value for ${info.area || 'this field area'}.`
+    : null;
   let declDetail;
   if (set && s.declinationSource === 'noaa') {
     declDetail = info?.area
@@ -150,6 +156,7 @@ export async function fieldReady(doc) {
     id: 'declination', label: 'Declination set', state: set ? 'good' : 'warn',
     value: set ? formatDecl(s.declination) : 'not set',
     detail: declDetail,
+    note: declNote,
   });
 
   const worst = checks.some((c) => c.state === 'bad') ? 'bad'

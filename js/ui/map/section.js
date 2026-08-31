@@ -1580,12 +1580,11 @@ export class MapSection {
   }
 
   /**
-   * Set the declination from NOAA, for the field area rather than for here.
+   * Bring the declination in line with the field area.
    *
-   * This is the one thing the readiness check can fix by itself, and it has to,
-   * because the control that would otherwise fix it lives on Map -> Setup —
-   * behind the first stage. Without this a student on day one is told to set a
-   * number they have no way to reach.
+   * The readiness check has to be able to do this itself, because the control
+   * that would otherwise do it lives on Map -> Setup, behind the first stage:
+   * without it a student on day one is told to fix a number they cannot reach.
    *
    * The lookup uses the centre of the downloaded area, NOT the phone's own
    * position. A student doing this at home on wifi is hundreds of miles from
@@ -1593,25 +1592,51 @@ export class MapSection {
    * correct their readings. The area is where the readings will be taken, so
    * the area is what gets asked about.
    *
-   * A value the student typed themselves is never overwritten.
+   * It replaces a value that is already set, which is the opposite of what a
+   * settings field normally does and is deliberate. A phone carrying 12.7° E
+   * from somewhere else is the dangerous case, not the empty one: the check
+   * would report a green line and the student would believe it, and every
+   * strike they took would be out by the difference without ever looking
+   * wrong. The correct number for where they are going beats a number they
+   * chose for somewhere else.
+   *
+   * What it will not do is ask NOAA again for an answer it already has. A
+   * value that came from this same area's centre is left alone, so the common
+   * case costs nothing and the service is not asked the same question every
+   * time the tab is opened.
    */
   async _ensureDeclination() {
     const doc = this.store.doc;
-    if (doc.settings.declinationSet) return false;
     if (navigator.onLine === false) return false;
     // The course pack's area first — on a course that is the field area, and
     // any others are somebody's own box drawn around somewhere else.
     const area = doc.areas.find((a) => a.packId) || doc.areas[0];
     if (!area) return false;
     const [lon, lat] = bboxCenter(area.bbox);
+
+    const s = doc.settings;
+    const info = s.declinationInfo;
+    const alreadyForThisArea = s.declinationSet
+      && s.declinationSource === 'noaa'
+      && info
+      && Math.abs((info.lon ?? 1e9) - lon) < 1e-6
+      && Math.abs((info.lat ?? 1e9) - lat) < 1e-6;
+    if (alreadyForThisArea) return false;
+
     let r = null;
     try { r = await lookupDeclination(lon, lat); } catch { return false; }
     if (!r) return false;
+    const next = Math.round(r.declination * 10) / 10;
+    const was = s.declinationSet ? s.declination : null;
     this.store.edit((d) => {
-      d.settings.declination = Math.round(r.declination * 10) / 10;
+      d.settings.declination = next;
       d.settings.declinationSet = true;
       d.settings.declinationSource = 'noaa';
-      d.settings.declinationInfo = { ...r, lon, lat, area: area.name || null };
+      d.settings.declinationInfo = {
+        ...r, lon, lat, area: area.name || null,
+        // Kept so the check can say a number was changed rather than set.
+        replaced: was != null && Math.abs(was - next) >= 0.05 ? was : null,
+      };
     }, { structural: true });
     return true;
   }

@@ -1047,9 +1047,13 @@ export function readyBlock(ctx) {
       ]),
     ]);
     // Only the failures explain themselves. A list where every line carries a
-    // paragraph is a list nobody reads the important line of.
+    // paragraph is a list nobody reads the important line of. A note is the
+    // exception: it is set when the check changed something, and a change the
+    // student did not make has to be visible even on a line that passed.
     if (c.state !== 'good') {
       row.appendChild(el('p', { class: 'ready-detail', text: c.detail }));
+    } else if (c.note) {
+      row.appendChild(el('p', { class: 'ready-detail changed', text: c.note }));
     }
     wrap.appendChild(row);
   }

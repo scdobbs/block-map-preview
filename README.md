@@ -306,10 +306,14 @@ Otherwise, on **Map → Areas**, draw the box yourself:
    at the centre of your downloaded area and applies it — at the area, not at
    wherever the phone happens to be, which is the whole point: doing this at
    home on wifi is hundreds of miles from the field, and the declination there
-   is not the one that corrects your readings. It needs a connection once. The
-   number is still yours to override on **Map → Setup**, the same one you
-   would dial into a Brunton, east positive; a value you type is never
-   replaced.
+   is not the one that corrects your readings. It needs a connection once.
+
+   It will **replace** a value that is already there, and say so on the line.
+   A phone carrying a declination from somewhere else is the case worth
+   catching: the check would otherwise show a green line the student believes,
+   and every strike would be out by the difference without ever looking wrong.
+   Once the number came from your own area's centre it is left alone, so this
+   costs one lookup and not one per visit.
 
 ## On the outcrop
 
@@ -1322,6 +1326,13 @@ could not reach — a readiness check reporting a problem with no available
 remedy, which is worse than not reporting it. The check now fills it in itself
 from the field area's centre, so the card can reach fully green with both
 stages still locked. `_ensureDeclination` in `js/ui/map/section.js`.
+
+It overwrites, which a settings field normally must not, and the reason is the
+same one: with the control locked away, a wrong number is not something the
+student can correct. A phone already carrying 12.7° E for somewhere else is
+worse than one carrying nothing, because the check passes it. So the value is
+brought in line with the area and the line says what changed — the one case
+where a passing row still explains itself.
 
 The gate is deliberately not wired into the record. Nothing a student collects
 is tagged with the stage that was open when they collected it, and none of the
