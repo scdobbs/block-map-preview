@@ -3,10 +3,10 @@
     {
       "id": "poleta",
       "name": "Poleta folds",
-      "detail": "The course mapping area. Contours, streams, roads and elevation.",
+      "detail": "The course mapping area. Contours, aerial photography and elevation.",
       "path": "./packs/poleta/",
-      "tiles": 472,
-      "bytes": 15526454,
+      "tiles": 828,
+      "bytes": 22779664,
       "absent": 0,
       "area": {
         "name": "Poleta folds",
@@ -18,12 +18,13 @@
         ],
         "sources": [
           "topo",
+          "aerial",
           "dem"
         ],
         "minZoom": 10,
         "maxZoom": 16
       },
-      "builtAt": "2026-08-31T21:06:19Z"
+      "builtAt": "2026-08-31T21:10:35Z"
     }
   ]
 }
