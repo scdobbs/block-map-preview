@@ -1668,6 +1668,13 @@ export class MapSection {
     try {
       // Count the real notebook, not the empty one the section starts on.
       await this.opened;
+      // Ask for persistent storage here as well as on activate(). The map is
+      // where that used to happen, and the map is behind the first stage — so
+      // a student on day one, who is the one being asked to get the phone
+      // ready, was the one who never got asked for it. This is the right
+      // moment anyway: they are deliberately on the readiness screen, not
+      // being interrupted on first launch.
+      await requestPersistence();
       const point = await this._declinationPoint();
       await this._ensureDeclination(point);
       this._ready = await fieldReady(this.store.doc, { declPoint: point });

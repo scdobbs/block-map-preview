@@ -1296,8 +1296,15 @@ Two things that are not in the app's hands. Safari clears script-created
 storage for a site with no interaction in seven days of browsing, but **a web
 app opened from the home screen keeps its own counter and is not swept that
 way**, which is why the install instructions above matter more for the map
-than for the block. The app also calls `navigator.storage.persist()` the first
-time the map is opened, and the Areas panel reports whether it was granted.
+than for the block. The app also calls `navigator.storage.persist()` — from the
+field-ready check as well as when the map is opened, because the map is behind
+the first course stage and a student on day one would otherwise never be asked.
+
+Both are reported as one line, and it takes either. Chrome grants persistence
+and says so; Safari does not report a grant, but an installed app is not swept
+for disuse whether or not the API will admit it. Reporting "not protected" to
+somebody who has already added the app to their home screen would be both wrong
+and discouraging, so the line reads from `persisted || isInstalled()`.
 
 ## The course gate
 

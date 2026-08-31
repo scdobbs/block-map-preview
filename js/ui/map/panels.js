@@ -18,7 +18,7 @@ import { contactPairs } from '../../strat/model.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
 import { SOURCES, BASE_SOURCES, estimateArea, storageReport } from '../../field/tiles.js';
-import { readySummary } from '../../field/ready.js';
+import { readySummary, isInstalled } from '../../field/ready.js';
 import { formatDistance, formatBytes, formatLonLat, formatDDM, distance,
   bboxSize } from '../../field/geo.js';
 import { APP_VERSION } from '../../version.js';
@@ -1361,15 +1361,21 @@ export function areasPanel(ctx) {
   };
 
   storageReport().then((r) => {
+    // Same rule as the field-ready check: an installed app is protected even
+    // where the browser will not report a grant, so do not tell somebody who
+    // has already installed it that nothing is protecting their map.
+    const safe = r.persisted || isInstalled();
     clear(storage);
     storage.append(
       statLine('Used', r.usage == null ? 'unknown' : formatBytes(r.usage)),
       statLine('Available', r.quota == null ? 'unknown' : formatBytes(r.quota)),
-      statLine('Protected', r.persisted ? 'yes' : 'no', r.persisted ? 'good' : 'warn'),
+      statLine('Protected', safe ? 'yes' : 'no', safe ? 'good' : 'warn'),
     );
     persistNote.textContent = r.persisted
       ? 'The browser has been asked not to clear this app’s data.'
-      : 'Add the app to your home screen and open it from there. A browser tab’s storage can be cleared after a week of not being used; a home-screen app’s is not.';
+      : safe
+        ? 'Protected by being installed to your home screen.'
+        : 'Add the app to your home screen and open it from there. A browser tab’s storage can be cleared after a week of not being used; a home-screen app’s is not.';
   });
 
   return node;

@@ -114,13 +114,26 @@ export async function fieldReady(doc, { declPoint = null } = {}) {
       : 'Running in a browser tab. A tab’s storage can be cleared after about a week of not being opened — long enough to lose the map between downloading it and needing it. Add to Home Screen and open it from there.',
   });
 
+  // Two different things can protect this data, and only one of them can be
+  // read back. Chrome grants persistent storage and says so. Safari does not
+  // report a grant, but a web app opened from the home screen is not swept for
+  // disuse the way a tab is — so an installed app is protected whether or not
+  // the API will admit it. Reporting "no" to somebody who has already done the
+  // one thing that helps would be both wrong and discouraging.
   const storage = await storageReport();
+  const protectedNow = storage.persisted || installed;
+  let storageDetail;
+  if (storage.persisted) {
+    storageDetail = 'The browser has been asked not to clear this app’s data, and agreed.';
+  } else if (installed) {
+    storageDetail = 'Protected by being installed to your home screen, which is what stops the storage being cleared for going unused. Not every browser reports a separate promise on top of that.';
+  } else {
+    storageDetail = 'Nothing is protecting this data yet. Add the app to your home screen and open it from there — that is what keeps the map from being cleared.';
+  }
   checks.push({
-    id: 'persisted', label: 'Storage protected', state: storage.persisted ? 'good' : 'warn',
-    value: storage.persisted ? 'yes' : 'no',
-    detail: storage.persisted
-      ? 'The browser has been asked not to clear this app’s data, and agreed.'
-      : 'The browser has not promised to keep this data under storage pressure. Installing to the home screen is the stronger protection; this is the belt to its braces.',
+    id: 'persisted', label: 'Storage protected', state: protectedNow ? 'good' : 'warn',
+    value: protectedNow ? 'yes' : 'no',
+    detail: storageDetail,
   });
 
   // --- declination ---------------------------------------------------------
