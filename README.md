@@ -33,7 +33,7 @@ All of it runs with no signal.
 
 # Open it
 
-## 🔗 [scdobbs.github.io/3D-block-diagrams](https://scdobbs.github.io/3D-block-diagrams/)
+## 🔗 [scdobbs.github.io/block-map-preview](https://scdobbs.github.io/block-map-preview/)
 
 ## On a computer
 
