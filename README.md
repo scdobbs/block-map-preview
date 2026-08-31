@@ -303,10 +303,15 @@ Otherwise, on **Map → Areas**, draw the box yourself:
    re-counts at any time and **Repair** fetches whatever is missing. An area
    short of tiles says so, in the list and on the map.
 4. **Declination sets itself.** The field-ready check asks NOAA for the value
-   at the centre of your downloaded area and applies it — at the area, not at
+   at the centre of your field area and applies it — at the area, not at
    wherever the phone happens to be, which is the whole point: doing this at
    home on wifi is hundreds of miles from the field, and the declination there
    is not the one that corrects your readings. It needs a connection once.
+
+   It does not wait for the download. A downloaded area is used when there is
+   one, but the shipped course pack already says where the field area is, so a
+   phone opened for the first time gets the right number before a single tile
+   has been fetched.
 
    It will **replace** a value that is already there, and say so on the line.
    A phone carrying a declination from somewhere else is the case worth
@@ -1326,6 +1331,13 @@ could not reach — a readiness check reporting a problem with no available
 remedy, which is worse than not reporting it. The check now fills it in itself
 from the field area's centre, so the card can reach fully green with both
 stages still locked. `_ensureDeclination` in `js/ui/map/section.js`.
+
+It does not wait for a downloaded area either. `_declinationPoint` takes one
+when the notebook has it and otherwise falls back to the shipped pack index,
+which is precached and carries every pack's bounds — so the very first thing a
+new phone does can be right. Requiring the 22 MB download first meant a student
+pressing **Check again** on a new phone and watching nothing happen, which is
+what this originally did.
 
 It overwrites, which a settings field normally must not, and the reason is the
 same one: with the control locked away, a wrong number is not something the

@@ -64,7 +64,7 @@ async function shellState() {
  * protected means it will probably be fine and might not — which is worth
  * saying and not worth stopping for.
  */
-export async function fieldReady(doc) {
+export async function fieldReady(doc, { declPoint = null } = {}) {
   const checks = [];
   const areas = doc?.areas || [];
 
@@ -145,12 +145,12 @@ export async function fieldReady(doc) {
       : 'Looked up for your field area and applied. Every compass reading is corrected by this.';
   } else if (set) {
     declDetail = 'Every compass reading will be corrected by this.';
-  } else if (!areas.length) {
-    declDetail = 'Set automatically once a map area is installed. Install one above and check again.';
+  } else if (!declPoint) {
+    declDetail = 'Set automatically from your field area. Install the map above, then check again.';
   } else if (navigator.onLine === false) {
     declDetail = 'Needs a connection once, to look up the value for your field area. Get back on wifi and check again.';
   } else {
-    declDetail = 'Could not reach the lookup service. Check again on a better connection — until then readings would be recorded as magnetic.';
+    declDetail = `Could not reach the lookup service for ${declPoint.name}. Check again on a better connection — until then readings would be recorded as magnetic.`;
   }
   checks.push({
     id: 'declination', label: 'Declination set', state: set ? 'good' : 'warn',

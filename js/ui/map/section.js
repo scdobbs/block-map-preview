@@ -1605,14 +1605,34 @@ export class MapSection {
    * case costs nothing and the service is not asked the same question every
    * time the tab is opened.
    */
-  async _ensureDeclination() {
+  /**
+   * Where to ask about, which is not the same as what has been downloaded.
+   *
+   * An installed area is the best answer, but on a phone opened for the first
+   * time there is not one yet — and that is exactly the phone that needs this
+   * most. The shipped pack index still says where the field area is, and it is
+   * precached with the app, so the declination can be right before a single
+   * tile has been fetched. Waiting for the download would have meant a student
+   * pressing Check again on a new phone and watching nothing happen.
+   */
+  async _declinationPoint() {
+    const doc = this.store.doc;
+    // A downloaded area first — and the course pack's before anybody's own
+    // box, which may be drawn around somewhere else entirely.
+    const area = doc.areas.find((a) => a.packId) || doc.areas[0];
+    if (area?.bbox) return { bbox: area.bbox, name: area.name || 'your field area' };
+    if (!this._packs) {
+      try { this._packs = await listPacks(); } catch { this._packs = []; }
+    }
+    const pack = (this._packs || []).find((p) => p.area?.bbox);
+    return pack ? { bbox: pack.area.bbox, name: pack.area.name || pack.name } : null;
+  }
+
+  async _ensureDeclination(point) {
     const doc = this.store.doc;
     if (navigator.onLine === false) return false;
-    // The course pack's area first — on a course that is the field area, and
-    // any others are somebody's own box drawn around somewhere else.
-    const area = doc.areas.find((a) => a.packId) || doc.areas[0];
-    if (!area) return false;
-    const [lon, lat] = bboxCenter(area.bbox);
+    if (!point) return false;
+    const [lon, lat] = bboxCenter(point.bbox);
 
     const s = doc.settings;
     const info = s.declinationInfo;
@@ -1633,7 +1653,7 @@ export class MapSection {
       d.settings.declinationSet = true;
       d.settings.declinationSource = 'noaa';
       d.settings.declinationInfo = {
-        ...r, lon, lat, area: area.name || null,
+        ...r, lon, lat, area: point.name || null,
         // Kept so the check can say a number was changed rather than set.
         replaced: was != null && Math.abs(was - next) >= 0.05 ? was : null,
       };
@@ -1648,8 +1668,9 @@ export class MapSection {
     try {
       // Count the real notebook, not the empty one the section starts on.
       await this.opened;
-      await this._ensureDeclination();
-      this._ready = await fieldReady(this.store.doc);
+      const point = await this._declinationPoint();
+      await this._ensureDeclination(point);
+      this._ready = await fieldReady(this.store.doc, { declPoint: point });
     } catch (err) {
       console.warn('field-ready check failed', err);
       this._ready = { checks: [], state: 'bad', ready: false, at: Date.now(),
