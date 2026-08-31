@@ -24,13 +24,33 @@ export function footprint(block) {
   return { x0: -W / 2, x1: W / 2 - cutE, y0: -D / 2, y1: D / 2 - cutN };
 }
 
-export function buildBlockGeometry(block, topo, res = 96) {
+/**
+ * The lid, with the horizontal slicer taken into account.
+ *
+ * Slicing does not cut the block open, it lowers its roof: the surface the
+ * model is capped by becomes min(terrain, cut). That keeps the solid closed —
+ * walls still run from the lid down to the base — so the newly exposed
+ * horizontal face is a real face of the mesh, gets coloured by the same
+ * shader walk as everything else, and can be tapped by the identify tool
+ * without a single line of special handling anywhere else.
+ *
+ * `cut` is null when the block is whole, and is never allowed below the base,
+ * where it would leave nothing to draw.
+ */
+function lidFn(topo, zBase, cut) {
+  if (cut == null) return (x, y) => surfaceHeight(topo, x, y);
+  const zc = Math.max(cut, zBase + 0.5);
+  return (x, y) => Math.min(surfaceHeight(topo, x, y), zc);
+}
+
+export function buildBlockGeometry(block, topo, res = 96, cut = null) {
   const { width: W, depth: D, height: H } = block;
   const { x0, x1, y0, y1 } = footprint(block);
   const { lo } = surfaceRange(topo, W, D);
   // The base sits a full block-height below the lowest point of the terrain,
   // so a deep valley never punches through the bottom of the model.
   const zBase = lo - H;
+  const lid = lidFn(topo, zBase, cut);
 
   const pos = [];
   const nrm = [];
@@ -47,11 +67,17 @@ export function buildBlockGeometry(block, topo, res = 96) {
   for (let j = 0; j <= res; j++) {
     for (let i = 0; i <= res; i++) {
       const x = xAt(i), y = yAt(j);
-      const z = surfaceHeight(topo, x, y);
-      const n = surfaceNormal(topo, x, y, Math.max(1, W / res));
+      const z = lid(x, y);
+      // On a sliced-off cell the lid is a level plane, so it takes the level
+      // plane's normal and stops claiming to be the land surface. Both matter:
+      // a terrain normal here would light a flat cut as though it were a
+      // hillside, and `top` is what gates topographic contours, which have
+      // nothing to say about a face that is at one elevation everywhere.
+      const flat = z < surfaceHeight(topo, x, y) - 1e-6;
+      const n = flat ? [0, 0, 1] : surfaceNormal(topo, x, y, Math.max(1, W / res));
       pos.push(x, y, z);
       nrm.push(n[0], n[1], n[2]);
-      top.push(1);
+      top.push(flat ? 0 : 1);
     }
   }
   const rowW = res + 1;
@@ -72,7 +98,7 @@ export function buildBlockGeometry(block, topo, res = 96) {
     const start = pos.length / 3;
     for (let i = 0; i <= res; i++) {
       const [x, y] = edgeFn(i);
-      const z = surfaceHeight(topo, x, y);
+      const z = lid(x, y);
       pos.push(x, y, z);
       nrm.push(normal[0], normal[1], normal[2]);
       top.push(0);
@@ -112,13 +138,14 @@ export function buildBlockGeometry(block, topo, res = 96) {
 }
 
 /** Wireframe outline of the block silhouette, drawn over the shaded solid. */
-export function buildEdgeLines(block, topo, res = 96) {
+export function buildEdgeLines(block, topo, res = 96, cut = null) {
   const { x0, x1, y0, y1 } = footprint(block);
   const zBase = buildBlockGeometryZBase(block, topo);
+  const lid = lidFn(topo, zBase, cut);
   const pts = [];
 
   const push = (a, b) => pts.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-  const top = (x, y) => [x, y, surfaceHeight(topo, x, y)];
+  const top = (x, y) => [x, y, lid(x, y)];
   const lerp = (a, b, t) => a + (b - a) * t;
 
   // Skyline: the four terrain-following top edges.

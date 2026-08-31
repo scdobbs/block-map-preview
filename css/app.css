@@ -1623,3 +1623,127 @@ html, body {
 }
 /* A line that passed, but only because the check changed something. */
 .ready-detail.changed { color: var(--accent); }
+
+/* --- the cross section beside the block ----------------------------------- */
+
+/* Another occupant of the stereonet's slot, so it inherits the split, the grip
+   and the stacked-vs-side-by-side rules rather than growing its own. */
+/* Everything below the head has to survive the pane being dragged down to a
+   third of a phone screen, so nothing in here has a height it will not give
+   up, and the pane clips rather than spilling its section over the sheet. */
+.xs-panel { overflow: hidden; }
+.xs-body {
+  flex: 1 1 auto; min-height: 0; min-width: 0; overflow: hidden;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px 0;
+}
+/* The locator is a control, not the picture — it gets a strip and the section
+   takes everything else, because the section is what is being read. It is the
+   first thing to give ground when there is not enough. */
+.xs-locator {
+  flex: 0 1 110px; min-height: 56px;
+  position: relative; touch-action: none; cursor: crosshair;
+}
+.xs-map { display: block; width: 100%; height: 100%; }
+/* The section outranks the locator for space. Giving the plot the larger
+   minimum is what expresses that: when the pane is dragged short, the strip
+   that only has to be aimed at gives way, and the picture being read does not. */
+.xs-plotwrap { flex: 1 1 auto; min-height: 130px; position: relative; }
+.xs-plot { display: block; width: 100%; height: 100%; }
+
+@media (min-aspect-ratio: 4/3) {
+  .xs-locator { flex: 0 1 190px; }
+}
+
+.xs-note {
+  flex: 0 0 auto;
+  padding: 3px 14px 0; font-size: 12.5px; color: var(--ink-dim);
+}
+.xs-note:empty { display: none; }
+.xs-note strong { color: var(--ink); font-weight: 650; }
+
+.xs-legend {
+  flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 3px 12px;
+  padding: 4px 14px 0; font-size: 11.5px; color: var(--ink-dim);
+}
+.xs-key { display: inline-flex; align-items: center; gap: 5px; }
+
+.xs-foot {
+  flex: 0 0 auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  padding: 8px 14px calc(10px + env(safe-area-inset-bottom));
+}
+
+/* Built as a pill so it sits in the same row as the buttons beside it rather
+   than dropping a system control into the middle of them. The select itself is
+   stripped bare and the pill draws the border and the caret. */
+.xs-ve-wrap {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 0 9px 0 11px; border-radius: 999px;
+  border: 1px solid var(--line); cursor: pointer;
+}
+.xs-ve-label { font-size: 11px; color: var(--ink-faint); letter-spacing: .3px; }
+.xs-ve {
+  appearance: none; -webkit-appearance: none;
+  background: none; border: 0; outline: 0; cursor: pointer;
+  font: inherit; font-size: 12px; line-height: 1; color: var(--ink);
+  padding: 6px 0; margin: 0;
+}
+.xs-ve-caret { font-size: 9px; color: var(--ink-faint); pointer-events: none; }
+
+/* --- the horizontal slicer ------------------------------------------------ */
+
+/* Pinned to the foot of the stage rather than put in the panel: what it moves
+   is on the block, and a control you cannot watch while you drag it is not a
+   control, it is a guess. */
+.slice-bar {
+  position: absolute; z-index: 6;
+  left: calc(10px + env(safe-area-inset-left));
+  right: calc(10px + env(safe-area-inset-right));
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  padding: 8px 12px 10px;
+  border-radius: var(--radius);
+  background: rgba(15, 20, 24, .88);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+.slice-bar.hidden { display: none; }
+/* The two things that also live down here move up out of its way. */
+.block-pane.has-slice .scale-chip { bottom: calc(98px + env(safe-area-inset-bottom)); }
+.block-pane.has-slice .readout { bottom: 102px; }
+
+.slice-top { display: flex; align-items: baseline; gap: 8px; }
+.slice-read { flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--ink-dim); }
+.slice-read strong {
+  color: var(--accent); font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.slice-close {
+  flex: 0 0 auto; width: 30px; height: 26px; margin: -4px -6px 0 0;
+  background: none; border: 0; color: var(--ink-dim);
+  font-size: 22px; line-height: 1; cursor: pointer;
+}
+
+.slice-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.slice-step {
+  flex: 0 0 auto; width: 32px; height: 30px;
+  border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg-2); color: var(--ink-dim);
+  font-size: 11px; line-height: 1; cursor: pointer;
+}
+.slice-step:active { background: var(--bg-3); color: var(--ink); }
+
+.slice-track { flex: 1 1 auto; min-width: 0; position: relative; padding-bottom: 7px; }
+/* The stops, as a ruler beneath the track rather than marks on it. On the
+   track they would be lost the moment the accent fill or the thumb passed over
+   them, which is exactly when a student is looking for the next one. Inset by
+   half a thumb at each end, the way the fill is, so a tick lines up with the
+   knob that lands on it. */
+.slice-ticks {
+  position: absolute; left: 11px; right: 11px; bottom: 0;
+  height: 7px; pointer-events: none;
+}
+.slice-tick {
+  position: absolute; top: 0; width: 2px; height: 7px; margin-left: -1px;
+  border-radius: 1px; background: var(--ink-faint);
+}
+.slice-tick.on { background: var(--accent); height: 7px; }
+.slice-range { width: 100%; }

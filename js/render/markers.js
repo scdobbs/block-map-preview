@@ -20,6 +20,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { surfaceHeight } from '../geo/surfaces.js';
 import { beddingAt } from '../geo/unmake.js';
 import { azimuthVec, planeFrame, normalize, FLAT_DIP, VERTICAL_DIP } from '../geo/math.js';
+import { sliceCut } from '../geo/model.js';
 
 // Below this the strike of a bed is not meaningfully defined, and above it the
 // two dip directions are indistinguishable — both get their own map symbol.
@@ -99,8 +100,13 @@ export function buildMarkers(doc, readings, selectedId) {
   const S = markerSize(doc);
   const ex = doc.settings.exaggeration || 1;
   const map = doc.settings.mapView === true;
+  // A station stands on the ground. Slice the ground away from under one and
+  // it must go too, rather than hovering over the cut face pointing at rock
+  // hundreds of metres below the outcrop it was read on.
+  const cut = sliceCut(doc);
 
   for (const r of readings) {
+    if (cut != null && r.z > cut) continue;
     const selected = r.id === selectedId;
     const basis = map ? flatBasis(r) : displayBasis(r, ex);
     const center = [r.x, r.y, liftedZ(doc, r, S, basis, ex)];

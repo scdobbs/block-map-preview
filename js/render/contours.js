@@ -95,12 +95,17 @@ function traceLevel(grid, box, level, res) {
  *   labels — { x, y, z, angle, text, level }
  *   spots  — packed (x, y, radius, 0) per label, for the shader's line gap
  */
-export function buildContourLabels(doc, interval, indexEvery, box) {
+export function buildContourLabels(doc, interval, indexEvery, box, cut = null) {
   const empty = { labels: [], spots: new Float32Array(MAX_LABELS * 4) };
   if (!(interval > 0)) return empty;
 
   const step = interval * indexEvery;
-  const { lo, hi } = surfaceRange(doc.topo, doc.block.width, doc.block.depth);
+  const range = surfaceRange(doc.topo, doc.block.width, doc.block.depth);
+  const lo = range.lo;
+  // Ground the slicer has taken away has no contours to name, so the roof of
+  // the search comes down with it. A label left behind up there would hang in
+  // mid-air over the cut face, naming an elevation nothing is drawn at.
+  const hi = cut == null ? range.hi : Math.min(range.hi, cut);
   if (!(hi - lo > 1)) return empty;
 
   // Labels have to name the elevation the shader actually drew, and on real
@@ -179,6 +184,16 @@ export function buildContourLabels(doc, interval, indexEvery, box) {
       }
     }
     L.z = top + Math.max(2, span * 0.004);
+  }
+
+  // A plate that would need ground the slice has removed goes with it. The
+  // level test above is not enough on its own: a label sits on the highest
+  // ground under its whole footprint, and part of that footprint can be gone
+  // even when the contour it names is still there.
+  if (cut != null) {
+    for (let i = labels.length - 1; i >= 0; i--) {
+      if (labels[i].z > cut) labels.splice(i, 1);
+    }
   }
 
   const spots = new Float32Array(MAX_LABELS * 4);

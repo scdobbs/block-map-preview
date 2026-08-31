@@ -264,6 +264,10 @@ export function defaultDocument() {
     // rather than invented. Null for an invented block, which is most of them.
     // { lon0, lat0, width, depth } — see field/ground.js.
     georef: null,
+    // The line a cross-section is cut along, in map metres: { ax, ay, bx, by }.
+    // Null until somebody draws one, at which point defaultSectionLine's
+    // west-to-east line through the middle is what they are dragging.
+    section: null,
     settings: {
       showContacts: true,
       showPatterns: true,
@@ -276,12 +280,61 @@ export function defaultDocument() {
       mapView: false,       // plan view: orthographic, north up, flat symbols
       showNet: false,               // stereonet pane beside the block
       showGroundMap: false,         // ground map pane, for a block cut from a field area
+      showSection: false,           // cross-section pane, cut along doc.section
+      sectionVE: 0,                 // 0 = fill the pane; otherwise a fixed exaggeration
+      sectionStations: true,        // project nearby readings on to the section
+      // The horizontal slicer: shave the block off at this elevation and read
+      // the fresh surface as a map at depth. Null means "the slider has not
+      // been touched", and it opens at the top of the terrain.
+      sliceOn: false,
+      sliceZ: null,
       netProjection: 'equalArea',   // 'equalArea' (Schmidt) | 'equalAngle' (Wulff)
       netPlanes: false,             // draw each bed's great circle, not just its pole
       contourInterval: 0,   // 0 = choose one from the terrain's relief
       exaggeration: 1,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// The horizontal slicer
+// ---------------------------------------------------------------------------
+
+/**
+ * The elevation the block is shaved off at, or null when it is whole.
+ *
+ * One function so that the mesh, the wireframe, the contour labels and the
+ * strike-and-dip symbols cannot end up cutting at four slightly different
+ * heights — everything that has to know reads it from here.
+ */
+export function sliceCut(doc) {
+  const s = doc.settings || {};
+  if (s.sliceOn !== true) return null;
+  return Number.isFinite(s.sliceZ) ? s.sliceZ : null;
+}
+
+/**
+ * The elevations the slider clicks on to: the top of the column and the base
+ * of every unit in it.
+ *
+ * These are where the contacts sit in the column as deposited, BEFORE the
+ * history bent them — a tilted contact is not at one elevation, so there is no
+ * single number that could be its own. That is not a defect of the stops, it
+ * is the thing worth seeing: slice at the base of a unit in flat-lying strata
+ * and the whole map goes one colour, and the more the same stop refuses to do
+ * that, the more the beds have been deformed. The UI says as much rather than
+ * letting the number pass for a depth it is not.
+ *
+ * Returns [{ z, label, index }] from the top down; `index` is the layer whose
+ * base the stop is, or -1 for the top of the column.
+ */
+export function sliceStops(doc) {
+  const cum = cumulativeDepths(doc.layers);
+  const out = [{ z: 0, label: `Top of ${doc.layers[0]?.name || 'the column'}`, index: -1 }];
+  for (let i = 0; i < doc.layers.length && i < MAX_LAYERS; i++) {
+    out.push({ z: -cum[i], label: `Base of ${doc.layers[i].name}`, index: i });
+  }
+  return out;
 }
 
 /** Cumulative depth (m below the top of the column) of the base of each layer. */

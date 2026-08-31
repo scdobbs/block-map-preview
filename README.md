@@ -7,7 +7,10 @@ An offline-first phone app for geology students, in three sections.
 **Block** builds 3D geologic block diagrams and lets you interrogate them.
 Rotate the block, stack a stratigraphic column, apply a history of tilts,
 folds, faults, intrusions and unconformities, drape a landscape over the top,
-and tap anywhere to identify the unit and read its strike and dip.
+and tap anywhere to identify the unit and read its strike and dip. Draw a line
+across the map and it cuts the cross-section along it; drag the slicer and it
+shaves the block down level by level, so each new flat top is the map you
+would get at that depth.
 
 **Map** is a field notebook for the outcrop you are standing on. Download US
 topographic and aerial maps before you leave, take your position from GPS,
@@ -43,6 +46,8 @@ to install.
 - **Left-drag** turns the block
 - **Scroll** zooms; **right-drag** or **shift-drag** pans
 - **Click the block** to identify the unit and read its strike and dip
+- **View → Cut a cross section** draws it along a line you drag across the map
+- **View → Slice down through it** lowers the top of the block one contact at a time
 
 Start on the **View** tab, load an example like *Anticline & syncline* or
 *Horst & graben*, then take it apart on the **History** tab.
@@ -236,6 +241,90 @@ Orthographic means every symbol is seen exactly as it is.
 One finger pans, pinch or scroll zooms, and tapping still identifies units and
 places readings. A **Map view** chip sits beside undo/redo to get back out,
 because the gesture that would normally do it — turning the block — is gone.
+
+## Cross section
+
+**View → Cut a cross section** opens a section pane beside the block, in the
+same slot the stereonet and the ground map use. Only one of the three is up at
+a time; a phone does not have room for three views of one block.
+
+The pane has a small map at the top with **A–A′** drawn on it. Drag either
+lettered knob to move an end, or press anywhere else on the map and drag to
+start a fresh line from that point. **W–E** and **S–N** put it back across the
+middle, and **Flip** swaps which end is A. The heading beside the title gives
+the bearing of the line and its length.
+
+Below it is the section itself. It is not a picture of the block's cut face —
+it is the block asked what rock sits at every point of the vertical plane
+through that line, so it is a genuine section along any bearing, not only along
+the four walls. On it:
+
+- **the ground profile**, in white, is the land surface along the line
+- **contacts** are inked wherever two different units meet, which includes the
+  ones a fault makes by putting one unit against another — that is what makes
+  an offset visible even where the same unit sits on both sides
+- **faults** are drawn in red and **dike walls** in blue, as the straight lines
+  a plane makes where it meets a vertical plane
+- **unconformities** are the dashed green line, with the older beds visibly
+  truncated against it
+- **stations** near the line are projected on to it and drawn at their
+  **apparent** dip, dimmed when they had to be carried far to get there
+
+**Tap the section** to name the unit under your finger and read how far along
+the line and at what elevation it is.
+
+**VE** sets the vertical exaggeration. **Fit** is the default and fills the
+pane, because a phone-sized pane at true scale is a hairline — but a fitted
+section redraws at a different vertical scale every time the pane is resized or
+the line is moved, and two drawings like that cannot be compared with each
+other. Pin it to ×0.5 through ×5 and the scale holds.
+
+A pinned section keeps the **whole of A–A′** on the page and gives up depth
+instead: it shows the ground down as far as that scale reaches, marks the
+bottom edge with a dashed rule rather than a solid one, and names the
+elevation it stopped at under the plot. Drag the pane taller and it reaches
+further down. The exaggeration is stated either way, so the drawing never
+quietly overstates a dip.
+
+**Stations** turns the projected readings off.
+
+### Apparent dip is the point
+
+A bed measured at 60° does not look like 60° in a section cut oblique to its
+strike, and drawing it that way is one of the commonest things to get wrong by
+hand. The section foreshortens each reading by how obliquely the line crosses
+strike — cut exactly along strike and the beds are drawn flat, however steep
+they are — so the tick you see is the one that belongs in this picture rather
+than the number in the notebook.
+
+## Slicing down through it
+
+**View → Slice down through it** puts a slider at the foot of the block. It
+lowers the top of the block, so the fresh flat face is the geologic map you
+would get at that depth: dragging it down is walking down through the
+structure one level at a time, watching the map pattern change.
+
+It does not cut the model open. The lid becomes `min(terrain, slice level)`,
+which keeps the solid closed, so the new face is a real face — it is coloured
+by the same walk through the history as everything else, and **tapping it
+identifies the rock at depth** with no special handling. Contours and stations
+above the cut go with the ground they were on.
+
+The slider clicks on to the base of each unit in the column, marked as ticks
+under the track, and **▲ ▼** step contact to contact. The readout names the
+one it has landed on.
+
+### What the stops actually are
+
+They are where the contacts sit in the column **as deposited**, before the
+history bent them. A tilted contact is not at one elevation, so there is no
+single number that could be its own — which is why the readout says *level
+with the base of the Limestone* rather than *at* it.
+
+That is not a defect of the stops, it is the thing worth watching. Slice
+flat-lying strata at the base of a unit and the whole map goes one colour. The
+more the same stop refuses to do that, the more the beds have been deformed,
+and the pattern left on the cut face is the map of that deformation.
 
 ## Identify
 
@@ -1417,6 +1506,7 @@ js/
     model.js          rock types, event definitions, defaults, presets
     surfaces.js       topography and erosion-surface generator
     unmake.js         the inverse history, on the CPU
+    section.js        vertical and horizontal slices through the block
     stereonet.js      lower-hemisphere projection and the girdle fit
     glsl.js           the inverse history, generated as GLSL
     marching.js       marching squares, on any grid of numbers
@@ -1447,6 +1537,7 @@ js/
     panels.js         layers / history / terrain / field / view / EPS 105 panels
     stereonet.js      the net, and the readout of what it found
     groundMap.js      the map beside the block: walked vs predicted
+    crossSection.js   the section beside the block: A–A′ and the plot
     widgets.js        controls, compass dial, protractor
     surfaceEditor.js  shared surface parameter editor
     swatch.js         canvas lithology swatches
@@ -1595,6 +1686,45 @@ document changes. A few dozen is nothing; a few thousand would not be.
   fit. It deliberately does not read the fold event's own trend and plunge:
   later tilts would make that answer wrong, and the point is to compare like
   with like — a dense set of readings against a sparse one.
+
+### The cross section and the slicer
+
+- **Neither one models anything.** Both walk the same `rockAt` the identify
+  tool walks — the section over a vertical grid, the slicer by lowering the
+  block's lid — so neither can drift out of agreement with the block it was
+  cut from. If the section and the block face ever disagreed, the bug would be
+  in the history, not in the drawing.
+- **Faults and dike walls are drawn exactly, not traced.** A plane meets a
+  vertical plane in a straight line, so substituting the section's
+  parametrisation into the plane equation leaves `a·s + b·z + d = 0`, which is
+  clipped to the frame. A vertical fault falls out as `b = 0` with no special
+  case, and the drawn line lands on the raster's own discontinuity to within a
+  metre.
+- **The section's roof comes from the ground along that line**, not from the
+  highest point in the block. A section down a valley should not spend half
+  its height on the sky over a summit two kilometres away.
+- **Dragging an endpoint redraws coarsely, then properly on release.** A
+  full-resolution walk of the history per pixel is not something to do sixty
+  times a second; the coarse pass is about a tenth of the work and the finger
+  never waits for the fine one.
+- **The exaggeration is stated, always.** Filling the pane is the default
+  because a phone-sized pane at true scale is a hairline, and a section that
+  fills its box without saying by how much is a section that overstates every
+  dip in it.
+- **A pinned exaggeration spends depth, not width.** The alternative — letting
+  the drawing shrink sideways until the full depth fits — turns ×5 into a
+  hundred-pixel sliver of a line the student drew across two kilometres of
+  map. Keeping the width and stopping the section where the scale runs out
+  leaves a drawing that is still worth reading, and the dashed bottom edge and
+  the elevation under it are what stop that from being a quiet omission.
+- **Slicing lowers the lid; it does not clip the render.** `min(terrain, cut)`
+  keeps the solid closed, which is why the new face lights correctly, gets
+  coloured by the ordinary shader walk, and can be tapped. A clipping plane
+  would have left the block hollow and the cut face would have had to be
+  faked.
+- **The slider's stops are pre-deformation datums**, and the readout says
+  *level with* rather than *at* for that reason. See "What the stops actually
+  are".
 
 ### Markers and contours
 

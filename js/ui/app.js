@@ -8,14 +8,16 @@ import { layersPanel, historyPanel, terrainPanel, viewPanel, fieldPanel,
 import { unlocked } from '../unlock.js';
 import { stereonet } from './stereonet.js';
 import { groundMapPane, GroundMap } from './groundMap.js';
+import { crossSectionPane } from './crossSection.js';
 import { MapSection } from './map/section.js';
 import { StratSection } from './strat/section.js';
 import { BlockScene } from '../render/scene.js';
 import { Store, loadSaved, exportJSON, importJSON } from '../store.js';
-import { defaultDocument, rock, makeMarker } from '../geo/model.js';
+import { defaultDocument, rock, makeMarker, sliceStops } from '../geo/model.js';
 import { compileHistory, describeAt, beddingAt, beddingGrid } from '../geo/unmake.js';
 import { readMarkers, formatReading, FLAT_DIP, VERTICAL_DIP } from '../render/markers.js';
 import { footprint } from '../render/block.js';
+import { surfaceRange } from '../geo/surfaces.js';
 import { fitBedding } from '../geo/stereonet.js';
 import { quadrantBearing } from '../geo/math.js';
 
@@ -63,6 +65,7 @@ export class App {
     this._mapView = null;   // null so the first sync always applies the setting
     this._showNet = null;
     this._showGround = null;
+    this._showSection = null;
 
     this._buildDOM();
     this.scene = new BlockScene(this.canvas);
@@ -100,6 +103,14 @@ export class App {
       setGroundMap: (on) => this.setGroundMap(on),
       groundOpen: () => this.store.doc.settings.showGroundMap === true,
       groundAvailable: () => GroundMap.available(this.store.doc),
+      setSection: (on) => this.setSection(on),
+      sectionOpen: () => this.store.doc.settings.showSection === true,
+      setSectionLine: (ln, dragging) => this.setSectionLine(ln, dragging),
+      setSectionVE: (v) => this.setSectionVE(v),
+      endSectionDrag: () => this.store.breakCoalesce(),
+      setSlice: (on) => this.setSlice(on),
+      sliceOpen: () => this.store.doc.settings.sliceOn === true,
+      history: () => this.history(),
       fit: () => this.fit(),
       mapFit: () => this.mapFit(),
       surveyFit: () => this.surveyFit(),
@@ -110,9 +121,12 @@ export class App {
     // sheet — on a wide screen the panel stays usable beside it.
     this.net = stereonet(this.ctx);
     this.ground = groundMapPane(this.ctx);
+    this.xsec = crossSectionPane(this.ctx);
     this.stage.appendChild(this.net);
     this.stage.appendChild(this.ground);
+    this.stage.appendChild(this.xsec);
     this._bindNetGrip();
+    this._bindSlice();
 
     this.panels = {};
     this._renderTabs();
@@ -175,6 +189,7 @@ export class App {
     // Blocks are dimensionless without a stated size, and students need one
     // to read thicknesses off the section.
     this.scaleChip = el('div', { class: 'scale-chip' });
+    this.sliceBar = this._buildSliceBar();
 
     this.tabBar = el('nav', { class: 'tabbar' });
     this.sheetBody = el('div', { class: 'sheet-body' });
@@ -192,6 +207,7 @@ export class App {
       this.markerChip,
       this.modeBanner,
       this.readout,
+      this.sliceBar,
     ]);
     this.modeSwitch = el('div', { class: 'mode-switch', role: 'tablist' });
     this.stage = el('div', { class: 'stage' }, [this.blockPane, this.modeSwitch]);
@@ -200,6 +216,49 @@ export class App {
 
     this._bindSheet();
     this._renderModeSwitch();
+  }
+
+  /**
+   * The slicer's own control, over the block rather than in the panel.
+   *
+   * It has to be here. The whole of what the slider does is on the block, and
+   * a slider in the bottom sheet on a phone is a slider you cannot watch while
+   * you drag it — you would be moving a number under a picture that is off
+   * screen. So it sits at the foot of the stage, with the elevation it is at
+   * and the contact it has landed on written beside it.
+   */
+  _buildSliceBar() {
+    // Borrows the panel slider's styling, `--p` fill and all, so the one
+    // control on the stage is not the one control that looks different.
+    this.sliceRange = el('input', {
+      class: 'range slice-range', type: 'range', min: 0, max: 1, step: 1,
+      'aria-label': 'Slice elevation',
+    });
+    this.sliceRead = el('div', { class: 'slice-read' });
+    this.sliceTicks = el('div', { class: 'slice-ticks' });
+    return el('div', { class: 'slice-bar hidden' }, [
+      el('div', { class: 'slice-top' }, [
+        this.sliceRead,
+        el('button', {
+          class: 'slice-close', type: 'button', text: '×',
+          'aria-label': 'Put the block back together',
+          onclick: () => this.setSlice(false),
+        }),
+      ]),
+      el('div', { class: 'slice-row' }, [
+        el('button', {
+          class: 'slice-step', type: 'button', text: '▼',
+          title: 'Down to the next contact', 'aria-label': 'Down to the next contact',
+          onclick: () => this.stepSlice(-1),
+        }),
+        el('div', { class: 'slice-track' }, [this.sliceRange, this.sliceTicks]),
+        el('button', {
+          class: 'slice-step', type: 'button', text: '▲',
+          title: 'Up to the next contact', 'aria-label': 'Up to the next contact',
+          onclick: () => this.stepSlice(1),
+        }),
+      ]),
+    ]);
   }
 
   _renderModeSwitch() {
@@ -272,7 +331,7 @@ export class App {
     if (this.store.doc.settings.showGroundMap === on) return;
     this.store.edit((d) => {
       d.settings.showGroundMap = on;
-      if (on) d.settings.showNet = false;
+      if (on) { d.settings.showNet = false; d.settings.showSection = false; }
     }, { structural: true });
     if (on) this._makeRoomForPane();
   }
@@ -513,6 +572,22 @@ export class App {
       });
     }
 
+    const xs = doc.settings.showSection === true;
+    if (xs !== this._showSection) {
+      this._showSection = xs;
+      this.xsec.setVisible(xs);
+      requestAnimationFrame(() => {
+        this.scene.resize();
+        this.scene.frame(this.store.doc);
+      });
+    } else if (xs) {
+      // A structural change is a new history and deserves the full raster; a
+      // slider being dragged is forty of them a second and gets the coarse one,
+      // which the pane upgrades once the dragging stops.
+      this.xsec.refresh(!info.structural);
+    }
+    this._syncSliceBar(doc);
+
     const map = doc.settings.mapView === true;
     if (map !== this._mapView) {
       this._mapView = map;
@@ -702,9 +777,162 @@ export class App {
     this.store.edit((d) => {
       d.settings.showNet = on;
       // One companion pane at a time — see setGroundMap.
-      if (on) d.settings.showGroundMap = false;
+      if (on) { d.settings.showGroundMap = false; d.settings.showSection = false; }
     }, { structural: true });
     if (on) this._makeRoomForPane();
+  }
+
+  /**
+   * Show or hide the cross-section pane. The third occupant of the one slot
+   * beside the block, on the same terms as the other two.
+   */
+  setSection(on) {
+    if (this.store.doc.settings.showSection === on) return;
+    this.store.edit((d) => {
+      d.settings.showSection = on;
+      if (on) { d.settings.showNet = false; d.settings.showGroundMap = false; }
+    }, { structural: true });
+    if (on) {
+      this._makeRoomForPane();
+      // A section needs a locator, a plot, a legend and a row of buttons, and
+      // the net's default share of a stacked phone screen does not hold them.
+      // Only a floor: a pane already pulled taller than this keeps its height.
+      if (this.stacked()) this._atLeastPaneSplit(70);
+    }
+  }
+
+  /** Give the companion pane at least this much of the stage, never less. */
+  _atLeastPaneSplit(pct) {
+    const now = (this.xsec.clientHeight / (this.stage.clientHeight || 1)) * 100;
+    if (now < pct) this.stage.style.setProperty('--net-split', `${pct}%`);
+  }
+
+  /**
+   * Move A–A′. Coalesced while a finger is on it, so dragging an endpoint
+   * across the map leaves one undo step rather than one per pointer event.
+   */
+  setSectionLine(line, dragging = false) {
+    this.store.edit((d) => {
+      d.section = { ax: line.ax, ay: line.ay, bx: line.bx, by: line.by };
+    }, { coalesce: dragging ? 'section:line' : null });
+    // Nothing to redraw from here: the edit is not structural, so the panel is
+    // not rebuilt under the finger, and the store's own change already brings
+    // the pane back coarsely.
+  }
+
+  /**
+   * Pin the section's vertical exaggeration, or 0 to let it fill the pane.
+   *
+   * Redrawn at full quality straight away rather than left to the pane's
+   * settle timer: this is one deliberate tap on a control, not a slider being
+   * dragged, and the coarse raster is not what it asked for.
+   */
+  setSectionVE(v) {
+    this.store.edit((d) => { d.settings.sectionVE = v; });
+    this.xsec.refresh(false);
+  }
+
+  // --- the horizontal slicer ------------------------------------------------
+
+  /** How far the slider can travel: the base of the block to the skyline. */
+  _sliceBounds(doc = this.store.doc) {
+    const { lo, hi } = surfaceRange(doc.topo, doc.block.width, doc.block.depth);
+    return { lo: lo - doc.block.height, hi };
+  }
+
+  setSlice(on) {
+    const doc = this.store.doc;
+    if (doc.settings.sliceOn === on) return;
+    const { hi } = this._sliceBounds(doc);
+    this.store.edit((d) => {
+      d.settings.sliceOn = on;
+      // Opens at the skyline: the block looks exactly as it did, and the very
+      // first thing the slider does is take rock away. Starting it part-way
+      // down would present an already-cut block as though that were the model.
+      if (on && !Number.isFinite(d.settings.sliceZ)) d.settings.sliceZ = hi;
+    }, { structural: true });
+  }
+
+  setSliceZ(z, dragging = false) {
+    const { lo, hi } = this._sliceBounds();
+    const v = Math.min(hi, Math.max(lo, z));
+    this.store.edit((d) => { d.settings.sliceZ = v; },
+      { coalesce: dragging ? 'slice:z' : null });
+  }
+
+  /** To the next contact up or down — the stops the slider clicks on to. */
+  stepSlice(dir) {
+    const doc = this.store.doc;
+    const { lo, hi } = this._sliceBounds(doc);
+    const here = Number.isFinite(doc.settings.sliceZ) ? doc.settings.sliceZ : hi;
+    const stops = sliceStops(doc)
+      .map((st) => st.z)
+      .concat([lo, hi])
+      .filter((z) => z >= lo - 1e-6 && z <= hi + 1e-6)
+      .sort((a, b) => a - b);
+    const next = dir > 0
+      ? stops.find((z) => z > here + 1e-3)
+      : [...stops].reverse().find((z) => z < here - 1e-3);
+    if (next == null) return;
+    this.store.breakCoalesce();
+    this.setSliceZ(next);
+  }
+
+  _bindSlice() {
+    // The slider works in whole metres over the block's own height, so the
+    // numbers it reports are the numbers on the elevation axis rather than a
+    // percentage of something.
+    this.sliceRange.addEventListener('input', () => {
+      this.setSliceZ(snapSlice(Number(this.sliceRange.value), this.store.doc,
+        this._sliceBounds()), true);
+    });
+    this.sliceRange.addEventListener('change', () => this.store.breakCoalesce());
+  }
+
+  /**
+   * Restate the bar for the document as it now is.
+   *
+   * The contact names come from the column as deposited, so the readout says
+   * "level with" rather than "at": in a tilted or folded block that contact is
+   * not at one elevation, and the slider stop is a datum, not a depth.
+   */
+  _syncSliceBar(doc) {
+    const on = doc.settings.sliceOn === true;
+    this.sliceBar.classList.toggle('hidden', !on);
+    this.blockPane.classList.toggle('has-slice', on);
+    if (!on) return;
+
+    const { lo, hi } = this._sliceBounds(doc);
+    const z = Number.isFinite(doc.settings.sliceZ) ? doc.settings.sliceZ : hi;
+    this.sliceRange.min = Math.floor(lo);
+    this.sliceRange.max = Math.ceil(hi);
+    this.sliceRange.value = z;
+    this.sliceRange.style.setProperty('--p', hi > lo ? (z - lo) / (hi - lo) : 0);
+
+    const datum = doc.topo.datum || 0;
+    const stops = sliceStops(doc).filter((st) => st.z >= lo && st.z <= hi);
+    const at = stops.find((st) => Math.abs(st.z - z) < 0.75);
+    clear(this.sliceRead);
+    this.sliceRead.append(
+      el('strong', { text: `${Math.round(z + datum)} m` }),
+      el('span', {
+        text: at
+          ? ` · level with the ${at.label[0].toLowerCase()}${at.label.slice(1)}`
+          : ` · ${Math.round(hi - z)} m below the skyline`,
+      }),
+    );
+
+    // Ticks where the contacts sit, so the stops are visible before you find
+    // them by dragging.
+    clear(this.sliceTicks);
+    const span = Math.max(1, hi - lo);
+    for (const st of stops) {
+      this.sliceTicks.appendChild(el('span', {
+        class: `slice-tick ${at === st ? 'on' : ''}`,
+        title: st.label,
+        style: { left: `${((st.z - lo) / span) * 100}%` },
+      }));
+    }
   }
 
   addMarkerAt(clientX, clientY) {
@@ -877,7 +1105,7 @@ export class App {
    * grow it. The two panes share a slot and a stylesheet; they now share this.
    */
   _bindNetGrip() {
-    for (const pane of [this.net, this.ground]) this._bindPaneGrip(pane);
+    for (const pane of [this.net, this.ground, this.xsec]) this._bindPaneGrip(pane);
   }
 
   _bindPaneGrip(pane) {
@@ -992,6 +1220,25 @@ function saveMode(mode) {
 
 /** `glyph` is either a character or a ready-made mark, so both kinds of button
     are built the same way and styled by the same rule. */
+/**
+ * Pull the slider on to a contact when it is close to one.
+ *
+ * Without this the stops are decorative: at a hundred metres a pixel, landing
+ * exactly on the base of a unit by dragging is luck. The window is a fraction
+ * of the whole travel rather than a fixed number of metres, so it feels the
+ * same on a two-kilometre block and a two-hundred-metre one.
+ */
+function snapSlice(z, doc, bounds) {
+  const window_ = (bounds.hi - bounds.lo) * 0.012;
+  let best = null;
+  for (const st of sliceStops(doc)) {
+    if (st.z < bounds.lo || st.z > bounds.hi) continue;
+    const d = Math.abs(st.z - z);
+    if (d <= window_ && (best == null || d < Math.abs(best - z))) best = st.z;
+  }
+  return best == null ? z : best;
+}
+
 function iconBtn(glyph, label, onClick) {
   return el('button', { class: 'icon-btn', type: 'button', title: label, 'aria-label': label, onclick: onClick }, [
     typeof glyph === 'string' ? el('span', { text: glyph }) : glyph,

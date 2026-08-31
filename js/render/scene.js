@@ -7,7 +7,7 @@ import { BlockMaterial } from './material.js';
 import { buildBlockGeometry, buildEdgeLines, footprint } from './block.js';
 import { planeFrame, axisFrame, rotateAbout, foldProfileExtrema, foldEnvelope, DEG } from '../geo/math.js';
 import { surfaceHeight, surfaceRange, isDemSurface } from '../geo/surfaces.js';
-import { unconformityDatums } from '../geo/model.js';
+import { unconformityDatums, sliceCut } from '../geo/model.js';
 import { buildContourLabels, buildLabelMeshes, MAX_LABELS } from './contours.js';
 import { buildMarkers } from './markers.js';
 
@@ -98,15 +98,19 @@ export class BlockScene {
   /** Rebuild block geometry only when its shape actually changed. */
   syncGeometry(doc, force = false) {
     const t = doc.topo;
-    const key = JSON.stringify([doc.block, surfaceKey(t)]);
+    // The slicer is part of the shape, not part of the paint — drag it and
+    // the lid is somewhere else — so it belongs in the key or the block would
+    // sit there at its old height while the slider moved.
+    const cut = sliceCut(doc);
+    const key = JSON.stringify([doc.block, surfaceKey(t), cut]);
     if (!force && key === this._geomKey) return;
     this._geomKey = key;
 
     const res = 96;
     this.mesh.geometry.dispose();
-    this.mesh.geometry = buildBlockGeometry(doc.block, t, res);
+    this.mesh.geometry = buildBlockGeometry(doc.block, t, res, cut);
     this.edges.geometry.dispose();
-    this.edges.geometry = buildEdgeLines(doc.block, t, res);
+    this.edges.geometry = buildEdgeLines(doc.block, t, res, cut);
     this._needsRender = true;
   }
 
@@ -138,7 +142,8 @@ export class BlockScene {
   syncLabels(doc) {
     const interval = this.blockMat.uniforms.uContourInterval.value;
     const every = this.blockMat.uniforms.uContourIndexEvery.value;
-    const key = JSON.stringify([surfaceKey(doc.topo), doc.block, interval, every]);
+    const cut = sliceCut(doc);
+    const key = JSON.stringify([surfaceKey(doc.topo), doc.block, interval, every, cut]);
     if (key === this._labelKey) return;
     this._labelKey = key;
 
@@ -158,7 +163,7 @@ export class BlockScene {
     const { lo, hi } = surfaceRange(doc.topo, doc.block.width, doc.block.depth);
     const fp = footprint(doc.block);
     const box = { ...fp, z0: lo - doc.block.height, z1: hi };
-    const { labels, spots, labelW } = buildContourLabels(doc, interval, every, box);
+    const { labels, spots, labelW } = buildContourLabels(doc, interval, every, box, cut);
 
     for (let i = 0; i < MAX_LABELS; i++) {
       u.uLabelSpots.value[i].set(spots[i * 4], spots[i * 4 + 1], spots[i * 4 + 2], 0);

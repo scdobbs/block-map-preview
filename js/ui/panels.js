@@ -1115,6 +1115,34 @@ export function terrainPanel(ctx) {
       }));
     }
 
+    // --- cutting it open ---------------------------------------------------
+    root.appendChild(el('div', { class: 'sub-head', text: 'Cut it open' }));
+
+    const onSection = ctx.sectionOpen();
+    root.appendChild(el('button', {
+      class: `btn wide ${onSection ? 'armed' : ''}`, type: 'button',
+      text: onSection ? 'Cross section — tap to close' : 'Cut a cross section',
+      onclick: () => ctx.setSection(!onSection),
+    }));
+    root.appendChild(el('div', {
+      class: 'ctl-hint',
+      text: 'Drag A–A′ across the little map and the block is drawn along that line, '
+        + 'with faults, unconformities and the ground profile on it. Tap the section '
+        + 'to name a unit.',
+    }));
+
+    const onSlice = ctx.sliceOpen();
+    root.appendChild(el('button', {
+      class: `btn wide ${onSlice ? 'armed' : ''}`, type: 'button',
+      text: onSlice ? 'Slicer — tap to put the block back' : 'Slice down through it',
+      onclick: () => ctx.setSlice(!onSlice),
+    }));
+    root.appendChild(el('div', {
+      class: 'ctl-hint',
+      text: 'Lowers the top of the block, so the fresh flat face is the map you would '
+        + 'get at that depth. The slider clicks on to the base of each unit in the column.',
+    }));
+
     root.appendChild(el('div', { class: 'sub-head', text: 'Display' }));
     root.appendChild(numberRow({
       label: 'Vertical exaggeration', value: doc.settings.exaggeration, min: 0.5, max: 4, step: 0.1,
