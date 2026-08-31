@@ -23,6 +23,7 @@ import { downloadArea, verifyArea, deleteArea, requestPersistence,
   SOURCES, BASE_SOURCES } from '../../field/tiles.js';
 import { fieldReady } from '../../field/ready.js';
 import { listPacks, packState, installPack } from '../../field/packs.js';
+import { unlocked } from '../../unlock.js';
 import { elevationAt } from '../../field/dem.js';
 import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
 import { cutBlock, surveyExtent } from '../../field/cutblock.js';
@@ -42,7 +43,6 @@ const TABS = [
 export class MapSection {
   constructor(host) {
     this.host = host;            // the App, for the shared sheet
-    this.tabs = TABS;
     this.activeTab = 'measure';
     this.ready = false;
     this.selectedStationId = null;
@@ -123,6 +123,19 @@ export class MapSection {
     });
 
     this.store.subscribe((doc, info) => this._onChange(doc, info));
+  }
+
+  /**
+   * Which tabs exist right now.
+   *
+   * A getter rather than a field because the course gate can open mid-session:
+   * a student types the second password and the Block tab has to appear
+   * without the section — and the notes and sensors it is holding — being
+   * rebuilt around it. buildPanel already falls back to the first tab when the
+   * one it is asked for is absent, so a locked Block tab needs no other guard.
+   */
+  get tabs() {
+    return unlocked('model') ? TABS : TABS.filter((t) => t.id !== 'block');
   }
 
   // -------------------------------------------------------------------------
@@ -463,7 +476,7 @@ export class MapSection {
   }
 
   /** Rebuild the open panel — for changes that alter what controls exist. */
-  rebuild() { this.host.renderSectionPanel(); }
+  rebuild() { this.host.rebuildPanel(); }
 
   touchDraft() { this._refreshPanel(); }
 
@@ -1639,7 +1652,9 @@ export class MapSection {
         onProgress: (p) => {
           if (!this._packInstall) return;
           this._packInstall.progress = p;
-          if (this.activeTab === 'areas') this._refreshPanel();
+          // Whichever panel is showing — the pack card lives on the block's
+          // course tab now, and the map section may not even be on screen.
+          this.host.touchPanel();
         },
       });
     } catch (err) {

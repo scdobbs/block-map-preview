@@ -20,6 +20,8 @@ import { formatLine, formatPlane } from '../geo/stereonet.js';
 import { surfaceRange, niceContourInterval, isDemSurface } from '../geo/surfaces.js';
 import { misfit as fitMisfit, unitCheck } from '../geo/infer.js';
 import { formatLonLat } from '../field/geo.js';
+import { readyBlock, packsBlock } from './map/panels.js';
+import { STAGES, unlocked, tryUnlock, passwordFor } from '../unlock.js';
 
 // ---------------------------------------------------------------------------
 // Stratigraphy
@@ -1490,4 +1492,120 @@ function sectionHead(title, sub) {
     el('h2', { text: title }),
     sub ? el('p', { text: sub }) : null,
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// EPS 105 — the course tab
+// ---------------------------------------------------------------------------
+// Everything a student has to do that is not geology. Two jobs live here, and
+// they are here rather than in the Map section for the same reason: both have
+// to be reachable on day one, when the Map section is still locked.
+//
+//   Getting the phone ready. The field-ready check and the course pack were
+//   built for the Areas tab and are rendered from it — a student who cannot
+//   open Areas yet is exactly the student who most needs to install the map
+//   and put the app on their home screen.
+//
+//   The stage passwords. See js/unlock.js for what this is and is not.
+//
+// This whole tab is course furniture. When the app stops being a class it goes
+// out with js/unlock.js, and nothing else has to change.
+
+/**
+ * One stage: a password to type, or the password you already typed.
+ *
+ * The password is shown back after it has been entered, which is not an
+ * oversight. It was read aloud to a group standing outdoors; somebody's phone
+ * was in a pocket, somebody arrived late, and the alternative to showing it is
+ * a student walking back across a hillside to ask. There is nothing protected
+ * here that hiding it would protect — see the note in js/unlock.js.
+ */
+function stageCard(stage, onChange) {
+  const open = unlocked(stage.id);
+  const card = el('div', { class: `card stage-card ${open ? 'open' : ''}` });
+
+  card.appendChild(el('div', { class: 'card-main static' }, [
+    el('span', { class: 'card-text' }, [
+      el('span', { class: 'card-title', text: stage.label }),
+      el('span', { class: 'card-sub', text: stage.blurb }),
+    ]),
+    el('span', { class: `pill ${open ? 'good' : 'dim'}`, text: open ? 'unlocked' : 'locked' }),
+  ]));
+
+  if (open) {
+    card.appendChild(el('div', { class: 'stage-pass' }, [
+      el('span', { class: 'stage-pass-label', text: 'Password' }),
+      el('code', { class: 'stage-pass-value', text: passwordFor(stage.id) }),
+    ]));
+    card.appendChild(el('div', { class: 'ctl-hint card-note',
+      text: 'Kept here so you can pass it on to someone who missed it.' }));
+    return card;
+  }
+
+  const error = el('p', { class: 'stage-error', hidden: true });
+  const input = el('input', {
+    class: 'stage-input', type: 'text', placeholder: 'Password',
+    // A phone keyboard that capitalises and autocorrects is the most likely
+    // reason a correct password gets refused. Turn all of it off.
+    autocapitalize: 'none', autocorrect: 'off', autocomplete: 'off',
+    spellcheck: 'false', enterkeyhint: 'go',
+  });
+
+  const submit = () => {
+    if (tryUnlock(stage.id, input.value)) { onChange(); return; }
+    error.textContent = input.value.trim()
+      ? 'That is not it. Check with your instructor.'
+      : 'Type the password your instructor gave you.';
+    error.hidden = false;
+    input.select?.();
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submit(); }
+  });
+  input.addEventListener('input', () => { error.hidden = true; });
+
+  card.appendChild(el('div', { class: 'stage-entry' }, [
+    input,
+    el('button', { class: 'btn primary', type: 'button', text: 'Unlock', onclick: submit }),
+  ]));
+  card.appendChild(error);
+  return card;
+}
+
+export function coursePanel(ctx) {
+  const app = ctx._app;
+  const node = el('div', { class: 'panel' });
+
+  node.appendChild(sectionHead('EPS 105',
+    'Get the phone ready before you leave, and unlock each stage as your instructor releases it.'));
+
+  // Building the field section is what gives the check something to count and
+  // the pack somewhere to land. It is constructed, not activated: no GPS, no
+  // compass, no battery — those start only when the map is actually opened.
+  const section = app.fieldSection();
+  const fctx = section.panelContext();
+
+  node.appendChild(readyBlock(fctx));
+  const packs = packsBlock(fctx);
+  if (packs) node.appendChild(packs);
+
+  node.appendChild(el('div', { class: 'sub-head', text: 'Stages' }));
+
+  const rerender = () => {
+    // The mode switch and the map's own tab bar both read the gate, so the
+    // whole shell is redrawn rather than this panel alone.
+    app.courseUnlockChanged();
+  };
+  for (const stage of STAGES) node.appendChild(stageCard(stage, rerender));
+
+  node.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: 'Unlocking is remembered on this phone. You will not have to type it again.' }));
+
+  node.refreshReadings = () => {
+    const p = fctx.packProgress();
+    if (p) packs?.refreshBars?.(p);
+  };
+
+  return node;
 }

@@ -2,8 +2,10 @@
 
 import { el, svg, clear } from './widgets.js';
 import { swatchEl } from './swatch.js';
-import { tabIcon, expandIcon, collapseIcon } from './icons.js';
-import { layersPanel, historyPanel, terrainPanel, viewPanel, fieldPanel } from './panels.js';
+import { tabIcon, expandIcon, collapseIcon, lockMark } from './icons.js';
+import { layersPanel, historyPanel, terrainPanel, viewPanel, fieldPanel,
+  coursePanel } from './panels.js';
+import { unlocked } from '../unlock.js';
 import { stereonet } from './stereonet.js';
 import { groundMapPane, GroundMap } from './groundMap.js';
 import { MapSection } from './map/section.js';
@@ -23,6 +25,10 @@ const TABS = [
   { id: 'terrain', label: 'Terrain', build: terrainPanel },
   { id: 'field', label: 'Field', build: fieldPanel },
   { id: 'view', label: 'View', build: viewPanel },
+  // The course tab. Everything a student has to do before walking away from a
+  // connection lives here, and so do the stage passwords — see js/unlock.js,
+  // which is written to be deleted when this stops being a class.
+  { id: 'course', label: 'EPS 105', build: coursePanel },
 ];
 
 export class App {
@@ -132,6 +138,7 @@ export class App {
     this._loop();
 
     const last = loadMode();
+    // A stage can be taken back, and a saved mode outlives it.
     if (last !== 'block') this.setMode(last);
   }
 
@@ -198,12 +205,33 @@ export class App {
   _renderModeSwitch() {
     clear(this.modeSwitch);
     for (const [id, label] of [['block', 'Block'], ['map', 'Map'], ['strata', 'Strata']]) {
+      const locked = this._modeLocked(id);
+      // Shown locked rather than hidden. A missing Map button reads as an app
+      // that cannot do it; a locked one says there is more, and where the key
+      // is — which is the difference between a student waiting and a student
+      // asking whether the app is broken.
       this.modeSwitch.appendChild(el('button', {
-        class: `mode-btn ${this.mode === id ? 'on' : ''}`, type: 'button',
+        class: `mode-btn ${this.mode === id ? 'on' : ''} ${locked ? 'locked' : ''}`,
+        type: 'button',
         'aria-selected': this.mode === id ? 'true' : 'false',
-        onclick: () => this.setMode(id),
-      }, [el('span', { text: label })]));
+        title: locked ? 'Locked until your instructor gives you the password' : '',
+        onclick: () => (locked ? this._sendToCourseTab() : this.setMode(id)),
+      }, [el('span', { text: label }), locked ? lockMark() : null]));
     }
+  }
+
+  /** Map and Strata are one stage; the block is always open. */
+  _modeLocked(mode) {
+    return (mode === 'map' || mode === 'strata') && !unlocked('field');
+  }
+
+  /** Tapping a locked mode should land somewhere useful, not do nothing. */
+  _sendToCourseTab() {
+    if (this.mode !== 'block') this.setMode('block');
+    this.activeTab = 'course';
+    this._renderTabs();
+    this._renderPanel();
+    if (this.sheetState === 'peek') this._setSheet('half');
   }
 
   /**
@@ -290,6 +318,9 @@ export class App {
 
   setMode(mode) {
     if (this.mode === mode) return;
+    // Also the guard for a mode restored from last session: a phone that was
+    // left in Map and then relocked must not come back up in it.
+    if (this._modeLocked(mode)) return;
     this.mode = mode;
     saveMode(mode);
 
@@ -350,6 +381,37 @@ export class App {
   fieldOpened() {
     this.stratSection?.refresh();
     this.renderSectionPanel();
+  }
+
+  /**
+   * Restate the numbers in whatever panel is on screen.
+   *
+   * The map section used to be able to assume its own panel was the one
+   * showing. It cannot any more: a pack installs from the block's course tab,
+   * with the map section built but not visible.
+   */
+  touchPanel() {
+    if (this.section) this.sectionPanel?.refreshReadings?.();
+    else this.panels[this.activeTab]?.refreshReadings?.();
+  }
+
+  /**
+   * A stage has just been unlocked.
+   *
+   * Three separate things read the gate — the mode switch, the map section's
+   * tab list, and this panel — so all of it is redrawn rather than trying to
+   * work out which of them the new stage touched.
+   */
+  courseUnlockChanged() {
+    this._renderModeSwitch();
+    this._renderTabs();
+    this._renderPanel();
+  }
+
+  /** Rebuild whatever panel is on screen, for changes that alter controls. */
+  rebuildPanel() {
+    if (this.section) this.renderSectionPanel();
+    else this._renderPanel();
   }
 
   _tabSet() { return this.section ? this.section.tabs : TABS; }

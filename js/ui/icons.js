@@ -212,12 +212,28 @@ export const TAB_ICONS = {
     svg('circle', { cx: 15, cy: 16, r: 2.4, class: 'tabicon-fill' }),
   ]),
 
+  // A padlock, shackle open. The course tab is where the stages are unlocked,
+  // and an open shackle says "this is the key" rather than "you are shut out".
+  course: tab(() => [
+    svg('rect', { x: 5, y: 11, width: 14, height: 9.5, rx: 2, class: 'tabicon-line' }),
+    svg('path', { d: 'M8.5 11 V8 A 3.5 3.5 0 0 1 15.5 8', class: 'tabicon-line' }),
+    svg('circle', { cx: 12, cy: 15.5, r: 1.5, class: 'tabicon-fill' }),
+  ]),
+
   // An eye. Distinct from the dome/basin mark, which has no lid.
   view: tab(() => [
     svg('path', { d: 'M2.5 12 Q 12 4 21.5 12 Q 12 20 2.5 12 Z', class: 'tabicon-line' }),
     svg('circle', { cx: 12, cy: 12, r: 3, class: 'tabicon-fill' }),
   ]),
 };
+
+/** A small closed padlock, for a control that is not available yet. */
+export function lockMark() {
+  return svg('svg', { viewBox: '0 0 24 24', class: 'lockmark', 'aria-hidden': 'true' }, [
+    svg('rect', { x: 5, y: 11, width: 14, height: 9.5, rx: 2, class: 'tabicon-fill' }),
+    svg('path', { d: 'M8.5 11 V8 A 3.5 3.5 0 0 1 15.5 8 V11', class: 'tabicon-line' }),
+  ]);
+}
 
 export function tabIcon(id) {
   const make = TAB_ICONS[id];

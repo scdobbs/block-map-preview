@@ -991,6 +991,12 @@ export function linesPanel(ctx) {
 // Areas
 // ---------------------------------------------------------------------------
 
+// readyBlock and packsBlock are built here, beside the tile code they report
+// on, but they are rendered by the course tab in the block's own panel set.
+// They ask nothing of the Areas panel and are exported rather than moved: the
+// map section's panelContext is exactly the set of accessors they need, and
+// copying them somewhere else would mean maintaining that contract twice.
+
 /**
  * The question that only gets asked in a parking lot.
  *
@@ -1004,7 +1010,7 @@ export function linesPanel(ctx) {
  * holding a pack, with somebody waiting — a paragraph is not going to be read,
  * and a green tick that means "probably" is worse than no tick at all.
  */
-function readyBlock(ctx) {
+export function readyBlock(ctx) {
   ctx.ensureReadiness();
   const report = ctx.readiness();
   const busy = ctx.readyChecking();
@@ -1067,7 +1073,7 @@ function readyBlock(ctx) {
  * knowing which zoom levels matter. Drawing your own box is the fallback, not
  * the default, and the order of the panel should say so.
  */
-function packsBlock(ctx) {
+export function packsBlock(ctx) {
   ctx.ensurePacks();
   const packs = ctx.packs();
   if (!packs || !packs.length) return null;
@@ -1177,8 +1183,6 @@ export function areasPanel(ctx) {
   node.appendChild(head('Offline areas',
     'Download a map before you leave. This is the only part that needs a connection.'));
 
-  node.appendChild(readyBlock(ctx));
-
   const online = navigator.onLine !== false;
   let sizeStat = null, tilesStat = null, bytesStat = null;
   let newProgress = null;
@@ -1190,8 +1194,6 @@ export function areasPanel(ctx) {
     ]));
   }
 
-  const packs = packsBlock(ctx);
-  if (packs) node.appendChild(packs);
 
   // --- new download --------------------------------------------------------
   const sel = ctx.selection();
@@ -1336,8 +1338,6 @@ export function areasPanel(ctx) {
   // restates itself rather than the panel being rebuilt under the finger —
   // which would take the half-typed area name with it.
   node.refreshReadings = () => {
-    const pk = ctx.packProgress();
-    if (pk) packs?.refreshBars?.(pk);
     const p = ctx.downloadProgress();
     if (p) {
       if (newProgress && p.areaId === ctx.draftArea()?.id) newProgress.set(p);

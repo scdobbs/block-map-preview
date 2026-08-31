@@ -274,12 +274,15 @@ rather than stranded.
 
 ## Before you leave, while you still have signal
 
-**Areas → Field ready** answers the only question anybody actually asks in a
-parking lot: can this phone be walked away from a connection right now. It
-counts what is in the cache rather than trusting a flag set when a download
-returned, so an area the browser has quietly evicted since shows up here
-rather than on a ridge. Red means turn around. Amber is worth fixing and will
-not stop you.
+Everything in this section lives on the **EPS 105** tab, in the block's own tab
+bar. It is there rather than in the Map section because it all has to be
+reachable on day one, when the Map section may still be locked.
+
+**Field ready** answers the only question anybody actually asks in a parking
+lot: can this phone be walked away from a connection right now. It counts what
+is in the cache rather than trusting a flag set when a download returned, so an
+area the browser has quietly evicted since shows up here rather than on a
+ridge. Red means turn around. Amber is worth fixing and will not stop you.
 
 If the build ships a **course pack** covering your area, install that and you
 are done. One button, a few large downloads instead of a couple of thousand
@@ -287,7 +290,7 @@ small ones, and byte-for-byte the same map everybody else on the course has.
 It does not have to be done anywhere near the field area — a dorm or an
 airport is fine, and a week early is better than the morning of.
 
-Otherwise draw the box yourself:
+Otherwise, on **Map → Areas**, draw the box yourself:
 
 1. **Areas → Choose an area to download.** The box starts on whatever is on
    screen and its corners drag. The panel counts the tiles and the megabytes
@@ -1283,6 +1286,37 @@ way**, which is why the install instructions above matter more for the map
 than for the block. The app also calls `navigator.storage.persist()` the first
 time the map is opened, and the Areas panel reports whether it was granted.
 
+## The course gate
+
+`js/unlock.js` releases the app in stages for a field course: the block alone
+to start with, so a hypothesis has to be argued from the rock rather than
+looked up; then the map and the column; then the block cut from the mapped
+area. A password from the instructor opens each one, entered on the **EPS 105**
+tab and remembered on that phone.
+
+Two things about it are worth saying plainly.
+
+**It is a latch, not a lock.** The app is a static page served from a public
+repository. The passwords are in `js/unlock.js`, that file is readable by
+anyone, and a student who wants past a stage can get there. That is the right
+target: the gate exists so nobody wanders into stage three by tapping around on
+day one, not to defeat somebody who has decided to cheat — who could equally
+use any other app on the phone. Nothing here is worth defending harder than
+that, which is also why an unlocked stage shows its own password back: it was
+read aloud to a group standing outdoors, and the alternative to showing it is a
+student walking back across a hillside to ask.
+
+**It is temporary.** The stages belong to one course. A later build for a
+general audience deletes `js/unlock.js`, the `course` entry in the block's
+`TABS`, `coursePanel`, and the three call sites that read the gate — the mode
+switch in `js/ui/app.js`, the `tabs` getter in `js/ui/map/section.js`, and the
+panel itself. Nothing else knows about it.
+
+The gate is deliberately not wired into the record. Nothing a student collects
+is tagged with the stage that was open when they collected it, and none of the
+geology behaves differently. Locking is a matter of which controls are on
+screen, and that is all it is.
+
 ## Course packs
 
 A pack is a field area the build ships with: the same tiles, fetched once by
@@ -1336,6 +1370,7 @@ vendor/three.module.js
 js/
   main.js             bootstrap, service worker, update prompt
   store.js            document state, undo/redo, autosave, import/export
+  unlock.js           the course gate — temporary, see "The course gate"
   geo/
     math.js           strike/dip/rake vectors and frames
     model.js          rock types, event definitions, defaults, presets
@@ -1368,7 +1403,7 @@ js/
     model.js          rank, grain-size scales, layout, thicknesses and their argument
   ui/
     app.js            shell, section switch, tabs, identify tool, files
-    panels.js         layers / history / terrain / field / view panels
+    panels.js         layers / history / terrain / field / view / EPS 105 panels
     stereonet.js      the net, and the readout of what it found
     groundMap.js      the map beside the block: walked vs predicted
     widgets.js        controls, compass dial, protractor

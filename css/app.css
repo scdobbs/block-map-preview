@@ -1588,3 +1588,36 @@ html, body {
 .ready-detail {
   margin: 5px 0 2px; font-size: 11.5px; line-height: 1.5; color: var(--ink-faint);
 }
+
+/* The course gate. Temporary, and goes out with js/unlock.js. */
+.mode-btn.locked { opacity: .5; }
+.mode-btn.locked .lockmark { width: 11px; height: 11px; margin-left: 4px; vertical-align: -1px; }
+.lockmark .tabicon-fill { fill: currentColor; }
+.lockmark .tabicon-line { fill: none; stroke: currentColor; stroke-width: 2; }
+
+.stage-card { padding-bottom: 10px; }
+/* A stage says what it opens, and that does not fit on one ellipsised line —
+   which is the shared card style, right for a list of areas and wrong here. */
+.stage-card .card-main { align-items: flex-start; }
+.stage-card .card-sub { white-space: normal; overflow: visible; line-height: 1.45; }
+.stage-card.open { border-color: rgba(127, 211, 155, .3); }
+.stage-entry { display: flex; gap: 8px; padding: 0 12px; margin-top: 2px; }
+.stage-input {
+  flex: 1 1 auto; min-width: 0; min-height: 40px;
+  padding: 8px 11px; font-size: 15px;
+  color: var(--ink); background: #0a0e12;
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.stage-input:focus { outline: none; border-color: var(--accent); }
+.stage-entry .btn { flex: 0 0 auto; }
+.stage-error { margin: 8px 12px 0; font-size: 12px; color: var(--danger); }
+.stage-pass {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 0 12px; margin-top: 2px;
+}
+.stage-pass-label { font-size: 12px; color: var(--ink-faint); }
+.stage-pass-value {
+  font-size: 14px; font-weight: 650; color: #7fd39b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: all;
+}
