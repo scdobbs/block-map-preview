@@ -8,7 +8,10 @@ writes. Students then install the area with one button and no USGS round trips.
         --center 37.36,-118.06 --size 8 --sources topo,aerial,dem
 
     tools/build-pack.py --id poleta --name "Poleta folds" \
-        --bbox -118.10,37.32,-118.02,37.40
+        --bbox=-118.10,37.32,-118.02,37.40
+
+Note the equals sign on --bbox: a western longitude starts with a minus, and
+argparse reads a bare one as a flag rather than a value.
 
 It writes packs/<id>/pack.json and packs/<id>/tiles-NNN.bin, and adds the pack
 to packs/index.json.
@@ -111,7 +114,7 @@ def main():
     ap.add_argument("--id", required=True, help="short slug, e.g. poleta")
     ap.add_argument("--name", required=True, help='shown in the app, e.g. "Poleta folds"')
     ap.add_argument("--detail", default="", help="one line of description")
-    ap.add_argument("--bbox", help="W,S,E,N in degrees")
+    ap.add_argument("--bbox", help="W,S,E,N in degrees; pass it as --bbox=... , the value starts with a minus")
     ap.add_argument("--center", help="LAT,LON — use with --size")
     ap.add_argument("--size", type=float, help="box width in km, with --center")
     ap.add_argument("--sources", default="topo,aerial,dem")

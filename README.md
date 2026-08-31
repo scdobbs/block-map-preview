@@ -1745,7 +1745,9 @@ tools/build-pack.py --id poleta --name "Poleta folds" \
     --sources topo,aerial,dem --min-zoom 10
 ```
 
-`--bbox W,S,E,N` takes explicit bounds instead of `--center`/`--size`.
+`--bbox=W,S,E,N` takes explicit bounds instead of `--center`/`--size` — write
+it with the equals sign, because a western longitude starts with a minus and
+argparse reads a bare one as a flag.
 `--chunk-mb` tunes the resume granularity; smaller chunks recover better on a
 bad connection and cost more requests.
 
