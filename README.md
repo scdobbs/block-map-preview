@@ -274,6 +274,21 @@ rather than stranded.
 
 ## Before you leave, while you still have signal
 
+**Areas → Field ready** answers the only question anybody actually asks in a
+parking lot: can this phone be walked away from a connection right now. It
+counts what is in the cache rather than trusting a flag set when a download
+returned, so an area the browser has quietly evicted since shows up here
+rather than on a ridge. Red means turn around. Amber is worth fixing and will
+not stop you.
+
+If the build ships a **course pack** covering your area, install that and you
+are done. One button, a few large downloads instead of a couple of thousand
+small ones, and byte-for-byte the same map everybody else on the course has.
+It does not have to be done anywhere near the field area — a dorm or an
+airport is fine, and a week early is better than the morning of.
+
+Otherwise draw the box yourself:
+
 1. **Areas → Choose an area to download.** The box starts on whatever is on
    screen and its corners drag. The panel counts the tiles and the megabytes
    as you size it.
@@ -1268,6 +1283,45 @@ way**, which is why the install instructions above matter more for the map
 than for the block. The app also calls `navigator.storage.persist()` the first
 time the map is opened, and the Areas panel reports whether it was granted.
 
+## Course packs
+
+A pack is a field area the build ships with: the same tiles, fetched once by
+whoever set up the course, stored in this repository and served from the app's
+own origin.
+
+The problem it solves is logistics rather than code. Downloading an area the
+ordinary way is a couple of thousand requests to a USGS server, from a phone,
+on whatever connection is available — and the connection near a good field
+area is usually none. The alternative is driving everyone somewhere with
+service and having twenty students download at once, which is slow when it
+works and a lost morning when it does not.
+
+Two decisions in `js/field/packs.js` are worth knowing about:
+
+**Packed tiles land under the canonical source URLs.** Once installed, nothing
+downstream can tell a packed tile from a hand-downloaded one — the same
+`verifyArea` counts it, the same **Repair** fixes it, the same reader draws
+it. A second lookup path for packed tiles would have meant a second set of
+bugs in the one part of the app that has to work on a ridge.
+
+**Tiles are concatenated into a few large chunks, not left as files.** Two
+thousand small requests is slow even on good wifi and hostile to a bad one.
+The chunk is also the resume unit: an install that was interrupted, or an area
+half-lost to eviction, re-fetches only the chunks that are actually short. An
+area missing three quarters of its tiles costs three quarters of a download,
+not a whole one.
+
+An installed pack becomes an ordinary entry in `doc.areas`, tagged with
+`packId` so re-installing repairs the area that is there instead of stacking
+up a second one.
+
+The pack payloads are the one same-origin thing `sw.js` deliberately does
+**not** cache. They are tens of megabytes and are being fetched precisely in
+order to be unpacked into the tile cache; storing them again under the shell
+would double the cost and then throw the copy away on the next version bump.
+`packs/index.json` is small, changes only when a pack is added, and has to be
+readable with no signal — so that one stays precached.
+
 ## Layout
 
 ```
@@ -1275,6 +1329,8 @@ index.html            shell
 app.webmanifest       install metadata
 sw.js                 offline cache  (bump CACHE when you change files)
 dev-server.py         no-cache static server for development
+packs/                course packs — index.json, plus one directory per pack
+tools/build-pack.py   builds a course pack from the live tile sources
 css/app.css
 vendor/three.module.js
 js/
@@ -1301,6 +1357,8 @@ js/
     model.js          stations, map units, cached areas, GeoJSON and CSV
     store.js          field notes in IndexedDB, with undo
     tiles.js          tile sources, the offline cache, download and verify
+    packs.js          course packs: a shipped field area, unpacked into the cache
+    ready.js          the field-ready check — can this phone leave signal now
     dem.js            elevation decode, hillshade, contour tracing
     sensors.js        GPS watch and the compass clinometer
     declination.js    magnetic to true north
@@ -1675,6 +1733,41 @@ Keep `field-tiles` unless you want to download your test area again. It is the
 one cache that is expensive to rebuild, and it is deliberately not versioned.
 The worker re-registers on the next load, so this is a per-session ritual, not
 a one-off.
+
+## Building a course pack
+
+Run once, from anywhere with a decent connection, and commit what it writes:
+
+```sh
+tools/build-pack.py --id poleta --name "Poleta folds" \
+    --detail "The mapping area for the whole course." \
+    --center 37.36,-118.06 --size 8 \
+    --sources topo,aerial,dem --min-zoom 10
+```
+
+`--bbox W,S,E,N` takes explicit bounds instead of `--center`/`--size`.
+`--chunk-mb` tunes the resume granularity; smaller chunks recover better on a
+bad connection and cost more requests.
+
+It writes `packs/<id>/pack.json` and `packs/<id>/tiles-NNN.bin`, and adds the
+pack to `packs/index.json`. Re-running the same `--id` replaces that entry.
+Tiles the source does not publish are recorded as holes rather than retried
+forever, exactly as a live download records them.
+
+The source table in the builder **must** agree with `SOURCES` in
+`js/field/tiles.js` — the app rebuilds those URLs itself when it verifies an
+installed area, so a mismatch shows up as a pack that installs and then
+reports every tile missing. Note that the USGS services are addressed `z/y/x`
+and the terrain tiles `z/x/y`.
+
+A realistic area is smaller than it sounds. At Poleta's latitude, with topo,
+aerial and elevation from zoom 10:
+
+| Area | Tiles | Size |
+|---|---|---|
+| 6 × 6 km | 894 | 32 MB |
+| 10 × 10 km | 2,118 | 75 MB |
+| 15 × 15 km | 4,544 | 159 MB |
 
 ## Testing without a browser
 

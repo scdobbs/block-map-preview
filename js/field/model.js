@@ -515,6 +515,9 @@ export function makeArea(over = {}) {
     bytes: 0,
     declination: null,      // fetched for this area's center while online
     declinationInfo: null,
+    // Set when the area came from a course pack rather than a hand-drawn box.
+    // Re-installing the pack repairs this area instead of adding a second one.
+    packId: null,
     ...over,
   };
 }

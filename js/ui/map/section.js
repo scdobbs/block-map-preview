@@ -21,6 +21,8 @@ import { Clinometer, GeoWatch, fixAge } from '../../field/sensors.js';
 import { fetchDeclination as lookupDeclination } from '../../field/declination.js';
 import { downloadArea, verifyArea, deleteArea, requestPersistence,
   SOURCES, BASE_SOURCES } from '../../field/tiles.js';
+import { fieldReady } from '../../field/ready.js';
+import { listPacks, packState, installPack } from '../../field/packs.js';
 import { elevationAt } from '../../field/dem.js';
 import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
 import { cutBlock, surveyExtent } from '../../field/cutblock.js';
@@ -72,6 +74,17 @@ export class MapSection {
     this._verifying = null;
     this._download = null;
     this._draftArea = null;
+    // The field-ready check and the course packs. Both answer questions asked
+    // at camp rather than in the field, and both are held here rather than
+    // recomputed per panel build: counting a thousand tiles against the cache
+    // is cheap once and silly on every keystroke.
+    this._ready = null;
+    this._readyChecking = false;
+    this._readyTried = false;
+    this._packs = null;
+    this._packsLoading = false;
+    this._packStates = new Map();
+    this._packInstall = null;
     this._elev = null;
     this._elevAt = null;
     this._started = false;
@@ -1439,6 +1452,8 @@ export class MapSection {
       }
     }, { structural: true });
 
+    this._invalidateReadiness();
+
     if (quotaHit) {
       alert('The browser ran out of storage part-way through.\n\nDelete an area you have finished with, then use Repair on this one.');
     }
@@ -1461,6 +1476,7 @@ export class MapSection {
       const a = doc.areas.find((x) => x.id === id);
       if (a) a.check = check;
     }, { structural: true });
+    this._invalidateReadiness();
   }
 
   async repair(id) {
@@ -1490,11 +1506,177 @@ export class MapSection {
     await deleteArea(area, doc.areas);
     this.store.edit((d) => { d.areas = d.areas.filter((a) => a.id !== id); }, { structural: true });
     this.map.purge();
+    this._invalidateReadiness();
+    // Deleting the area took the pack's tiles with it, so the pack's card has
+    // to stop saying "installed". Recounted rather than cleared: a cleared
+    // entry reads as "checking…" and never resolves, because the packs are
+    // only enumerated once per open.
+    if (area.packId) {
+      const pack = (this._packs || []).find((p) => p.id === area.packId);
+      if (pack) {
+        const st = await packState(pack).catch(() => null);
+        if (st) this._packStates.set(pack.id, st);
+        this.rebuild();
+      }
+    }
   }
 
   goToArea(id) {
     const area = this.store.doc.areas.find((a) => a.id === id);
     if (area) this.map.fitBounds(area.bbox);
+  }
+
+  // -------------------------------------------------------------------------
+  // Field ready
+  // -------------------------------------------------------------------------
+
+  readiness() { return this._ready; }
+  readyChecking() { return this._readyChecking; }
+
+  /**
+   * Throw the report away because something it counted has changed.
+   *
+   * Cheaper than re-running here and more honest than leaving it: the panel
+   * re-checks the next time it is built, and until then there is no verdict on
+   * screen rather than last minute's verdict wearing this minute's colour.
+   */
+  _invalidateReadiness() {
+    this._ready = null;
+    this._readyTried = false;
+  }
+
+  /**
+   * Run the check once on its own, so opening the tab answers the question
+   * without anybody having to ask it.
+   *
+   * Once, not on every build: the panel rebuilds on every keystroke in the
+   * area-name field, and a check that re-counted the cache each time would
+   * make typing stutter. The button re-runs it on demand, which is the right
+   * moment — after a repair, or after deciding to trust it.
+   */
+  ensureReadiness() {
+    if (this._ready || this._readyChecking || this._readyTried) return;
+    this._readyTried = true;
+    this.checkReadiness();
+  }
+
+  async checkReadiness() {
+    if (this._readyChecking) return;
+    this._readyChecking = true;
+    this.rebuild();
+    try {
+      this._ready = await fieldReady(this.store.doc);
+    } catch (err) {
+      console.warn('field-ready check failed', err);
+      this._ready = { checks: [], state: 'bad', ready: false, at: Date.now(),
+        error: err?.message || 'the check itself failed' };
+    }
+    this._readyChecking = false;
+    this.rebuild();
+  }
+
+  // -------------------------------------------------------------------------
+  // Course packs
+  // -------------------------------------------------------------------------
+
+  packs() { return this._packs; }
+  packStateOf(id) { return this._packStates.get(id) || null; }
+
+  packProgress() {
+    if (!this._packInstall) return null;
+    return { ...this._packInstall.progress, packId: this._packInstall.id };
+  }
+
+  /** Read the shipped index, then count each pack against the cache. */
+  async ensurePacks() {
+    if (this._packs || this._packsLoading) return;
+    this._packsLoading = true;
+    let list = [];
+    try { list = await listPacks(); } catch { /* an empty list is the answer */ }
+    this._packs = list;
+    this._packsLoading = false;
+    if (!list.length) { this.rebuild(); return; }
+    this.rebuild();
+    // Counted in one pass afterwards rather than per pack, so the list appears
+    // immediately and fills in its states rather than waiting on all of them.
+    const states = await Promise.all(list.map((p) => packState(p).catch(() => null)));
+    list.forEach((p, i) => { if (states[i]) this._packStates.set(p.id, states[i]); });
+    this.rebuild();
+  }
+
+  cancelPackInstall() { this._packInstall?.ctrl.abort(); }
+
+  /** Show where a pack covers, before deciding whether it is the right one. */
+  goToPackArea(id) {
+    const pack = (this._packs || []).find((p) => p.id === id);
+    if (pack?.area?.bbox) this.map.fitBounds(pack.area.bbox);
+  }
+
+  /**
+   * Install a shipped area.
+   *
+   * Ends in the same place a hand-made download ends — an entry in doc.areas
+   * with a real verify behind it — because everything downstream is written
+   * against that and should not learn a second shape. The area is matched by
+   * packId rather than name so re-installing repairs the one that is there
+   * instead of stacking up duplicates.
+   */
+  async installPack(id) {
+    const pack = (this._packs || []).find((p) => p.id === id);
+    if (!pack) return;
+    const ctrl = new AbortController();
+    this._packInstall = {
+      id, ctrl,
+      progress: { done: 0, total: pack.tiles || 0, bytes: 0, totalBytes: pack.bytes || 0, failed: 0 },
+    };
+    this.rebuild();
+
+    let result = null;
+    let quotaHit = false;
+    try {
+      result = await installPack(pack, {
+        signal: ctrl.signal,
+        onProgress: (p) => {
+          if (!this._packInstall) return;
+          this._packInstall.progress = p;
+          if (this.activeTab === 'areas') this._refreshPanel();
+        },
+      });
+    } catch (err) {
+      quotaHit = err && err.name === 'QuotaExceededError';
+    }
+    this._packInstall = null;
+
+    if (result && !result.aborted) {
+      const existing = this.store.doc.areas.find((a) => a.packId === pack.id);
+      const area = existing
+        ? { ...existing }
+        : makeArea({ ...pack.area, packId: pack.id, name: pack.area?.name || pack.name });
+      const check = await verifyArea(area);
+      area.check = check;
+      area.savedAt = new Date().toISOString();
+      area.bytes = pack.bytes || result.bytes;
+      this.store.edit((doc) => {
+        const at = doc.areas.findIndex((a) => a.packId === pack.id);
+        if (at >= 0) doc.areas[at] = area;
+        else doc.areas.push(area);
+      }, { structural: true });
+      this.map.purge();
+    }
+
+    // Recount both, so the panel tells the truth about what just happened
+    // rather than about what was asked for. checkReadiness rather than
+    // ensureReadiness: ensure is the once-per-open guard and would see the
+    // stale report sitting there and decline to replace it, which is exactly
+    // the report that has just stopped being true.
+    const st = await packState(pack).catch(() => null);
+    if (st) this._packStates.set(pack.id, st);
+    this.rebuild();
+    await this.checkReadiness();
+
+    if (quotaHit) {
+      alert('The browser ran out of storage part-way through.\n\nDelete an area you have finished with, then install this pack again — it picks up where it stopped.');
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1684,6 +1866,19 @@ export class MapSection {
       repair: (id) => this.repair(id),
       deleteArea: (id) => this.deleteArea(id),
       goToArea: (id) => this.goToArea(id),
+
+      readiness: () => this.readiness(),
+      readyChecking: () => this.readyChecking(),
+      ensureReadiness: () => this.ensureReadiness(),
+      checkReadiness: () => this.checkReadiness(),
+
+      packs: () => this.packs(),
+      ensurePacks: () => this.ensurePacks(),
+      packStateOf: (id) => this.packStateOf(id),
+      packProgress: () => this.packProgress(),
+      installPack: (id) => this.installPack(id),
+      cancelPackInstall: () => this.cancelPackInstall(),
+      goToPackArea: (id) => this.goToPackArea(id),
 
       setSetting: (p) => this.setSetting(p),
       setDocName: (n) => this.setDocName(n),

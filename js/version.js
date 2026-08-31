@@ -11,4 +11,4 @@
 // Must match CACHE in sw.js. The two are separate because a classic service
 // worker cannot import a module, and they are checked against each other by
 // tools/check-version.sh rather than by hoping.
-export const APP_VERSION = 'v49';
+export const APP_VERSION = 'v50';

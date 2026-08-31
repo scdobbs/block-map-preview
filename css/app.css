@@ -1572,3 +1572,19 @@ html, body {
 
 /* Full screen: the same deal the block and the map have. */
 .strat-full .sheet { pointer-events: auto; }
+
+/* The field-ready check: the one question asked in a parking lot, not a lab. */
+.ready-card {
+  margin: 4px 0 16px; padding: 12px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: rgba(255, 255, 255, .02);
+}
+.ready-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ready-title { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.ready-summary { margin: 8px 0 2px; font-size: 12.5px; color: var(--ink-dim); line-height: 1.5; }
+.ready-row { padding: 8px 0 0; border-top: 1px solid var(--line); margin-top: 8px; }
+.ready-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ready-label { font-size: 12.5px; color: var(--ink-dim); }
+.ready-detail {
+  margin: 5px 0 2px; font-size: 11.5px; line-height: 1.5; color: var(--ink-faint);
+}

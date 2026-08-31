@@ -118,7 +118,7 @@ export function clampZoom(sourceId, z) {
 // tile over the hole, and Repair stops asking.
 const ABSENT = 'x-tile-absent';
 
-function absentTombstone() {
+export function absentTombstone() {
   return new Response(new Blob([]), {
     status: 200,
     headers: { [ABSENT]: '1', 'Content-Type': 'application/octet-stream' },
@@ -339,6 +339,53 @@ export async function verifyArea(area, { onProgress } = {}) {
     complete: missing.length === 0,
     at: Date.now(),
   };
+}
+
+/**
+ * Every tile URL the cache is holding, as a Set.
+ *
+ * verifyArea asks the cache about one tile at a time, which is right when the
+ * question is about one area and wrong when it is asked about all of them at
+ * launch: a thousand awaited round-trips take long enough that the answer
+ * arrives after the student has stopped looking. One pass over the keys
+ * answers the same question for every area at once.
+ *
+ * Presence is all this can report — a tombstone and a real tile are both keys.
+ * That is exactly the readiness question, though: an absent tile is accounted
+ * for, and what matters before walking away from signal is whether anything is
+ * still merely missing.
+ */
+export async function cachedTileUrls() {
+  const cache = await openCache();
+  const out = new Set();
+  for (const req of await cache.keys()) out.add(req.url);
+  return out;
+}
+
+/**
+ * Check many areas against one pass over the cache.
+ *
+ * Returns a Map of area id to the same shape verifyArea gives, minus the
+ * absent/present split it cannot see. Used by the field-ready check, where the
+ * question is "is anything missing" across everything downloaded.
+ */
+export async function verifyAreasFast(areas) {
+  const held = await cachedTileUrls();
+  const out = new Map();
+  for (const area of areas) {
+    const wanted = areaTiles(area);
+    let missing = 0;
+    for (const t of wanted) {
+      if (!held.has(urlFor(t.sourceId, t.z, t.x, t.y))) missing++;
+    }
+    out.set(area.id, {
+      total: wanted.length,
+      missing,
+      complete: missing === 0,
+      at: Date.now(),
+    });
+  }
+  return out;
 }
 
 /**
