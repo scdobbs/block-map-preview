@@ -868,7 +868,21 @@ you gave it, though: a line symbol's weight is a minimum and not a width, so
 where the sheet is wider on the ground than the symbol is on the screen the
 ground wins, and dragging the thickness slider widens the band on the map under
 your finger. Zoom out far enough and the symbol takes over again, which is what
-stops a four-metre dike disappearing from a map of a whole valley. So the trace gives the
+stops a four-metre dike disappearing from a map of a whole valley.
+
+Once it is wide enough to have an inside it stops being drawn as a boundary and
+is drawn as a body: **a translucent wash, cased in white, walled in its own
+colour, with chevrons marching along it** — the same mark the block draws on
+volcanic rock, so a basalt dike carries the same ornament in plan that it does
+on the face of the block it builds. Translucent because a solid bar over aerial
+photography hides the ground the dike was mapped from, which is the one thing
+you are holding the map up to compare it against.
+
+The chevrons follow the trace rather than tiling the screen. A screen-space
+pattern knows nothing about the band it is filling: in something twenty pixels
+across it lands a grid of fragments that reads as a mesh, and turning the tile
+up large enough to read simply clips it away. Walking the centreline puts one
+chevron across the sheet however wide it is, pointing the way the dike runs. So the trace gives the
 strike always and the dip wherever the ground has the relief to say — the same
 `faultFromTrace` a fault uses, because it is the same question — and the line
 card gives the two things no trace can: how wide the sheet is, and what it is

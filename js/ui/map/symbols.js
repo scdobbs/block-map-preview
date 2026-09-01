@@ -247,6 +247,170 @@ export function drawPosition(ctx, x, y, { accuracyPx = 0, heading = null, scale 
  * dark line over a shadowed cliff would otherwise vanish exactly where the
  * geology is most interesting.
  */
+// ---------------------------------------------------------------------------
+// A dike, drawn as the sheet it is
+// ---------------------------------------------------------------------------
+// Wide enough to see through, so it is drawn the way a map prints a unit
+// rather than the way it prints a boundary: a translucent wash with the rock's
+// own ornament in it, cased in white and walled in its own colour. A solid bar
+// laid over aerial photography hides the ground the dike was mapped from,
+// which is the one thing a student is holding the map up to compare it with.
+
+/** A hex colour at a given alpha. */
+function withAlpha(hex, a) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+/**
+ * The two edges of a band of a given width about a polyline.
+ *
+ * Each vertex takes the average of its two segment normals, lengthened by the
+ * miter so the band keeps its width through a bend rather than pinching at
+ * every corner. The miter is capped, because a trace doubling back on itself
+ * would otherwise throw a spike halfway across the sheet.
+ */
+function bandEdges(pts, half) {
+  const seg = [];
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i].x - pts[i - 1].x;
+    const dy = pts[i].y - pts[i - 1].y;
+    const len = Math.hypot(dx, dy) || 1;
+    seg.push({ x: -dy / len, y: dx / len });
+  }
+  if (!seg.length) return null;
+
+  const left = [];
+  const right = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = seg[Math.max(0, i - 1)];
+    const b = seg[Math.min(seg.length - 1, i)];
+    let nx = a.x + b.x;
+    let ny = a.y + b.y;
+    const len = Math.hypot(nx, ny);
+    let mx;
+    let my;
+    if (len < 1e-6) { mx = a.x; my = a.y; } else {
+      nx /= len; ny /= len;
+      mx = nx * Math.min(1 / Math.max(nx * a.x + ny * a.y, 0.25), 4);
+      my = ny * Math.min(1 / Math.max(nx * a.x + ny * a.y, 0.25), 4);
+    }
+    left.push({ x: pts[i].x + mx * half, y: pts[i].y + my * half });
+    right.push({ x: pts[i].x - mx * half, y: pts[i].y - my * half });
+  }
+  return { left, right };
+}
+
+/** The band as one closed path: up one wall and back down the other. */
+function bandPath(ctx, edges) {
+  ctx.moveTo(edges.left[0].x, edges.left[0].y);
+  for (let i = 1; i < edges.left.length; i++) ctx.lineTo(edges.left[i].x, edges.left[i].y);
+  for (let i = edges.right.length - 1; i >= 0; i--) ctx.lineTo(edges.right[i].x, edges.right[i].y);
+  ctx.closePath();
+}
+
+/**
+ * Chevrons, marching along the sheet.
+ *
+ * The mark the block draws on volcanic rock (PATTERN 6 in geo/glsl.js), so a
+ * basalt dike carries the same ornament in plan as it does on the face of the
+ * block it builds.
+ *
+ * Placed along the trace rather than tiled across the screen, which was the
+ * first attempt and is wrong for a body this shape. A screen-space tile knows
+ * nothing about the band it is filling: in something twenty pixels across it
+ * lands a grid of fragments that reads as a mesh, and turning the tile up
+ * large enough to read simply clips it away. Walking the centreline instead
+ * puts one chevron across the sheet however wide it is, pointing the way the
+ * dike runs, and there are no seams to line up.
+ */
+function drawChevrons(ctx, pts, w, color, scale) {
+  const across = w * 0.30;              // half the span, square to the sheet
+  const along = w * 0.20;               // how far the apex leads the arms
+  const step = Math.max(9 * scale, w * 0.62);
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, Math.min(1.8, w * 0.075) * scale);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Distance carried between segments, so the spacing is even along the whole
+  // trace rather than restarting at every vertex.
+  let carry = step * 0.5;
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i].x - pts[i - 1].x;
+    const dy = pts[i].y - pts[i - 1].y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) continue;
+    const tx = dx / len;
+    const ty = dy / len;
+    for (let d = carry; d < len; d += step) {
+      const cx = pts[i - 1].x + tx * d;
+      const cy = pts[i - 1].y + ty * d;
+      ctx.beginPath();
+      ctx.moveTo(cx - ty * across - tx * along, cy + tx * across - ty * along);
+      ctx.lineTo(cx + tx * along, cy + ty * along);
+      ctx.lineTo(cx + ty * across - tx * along, cy - tx * across - ty * along);
+      ctx.stroke();
+    }
+    carry = Math.max(0, carry + step * Math.ceil((len - carry) / step) - len);
+  }
+}
+
+/**
+ * Draw a line as a band of its true width. Returns false if it is too narrow
+ * to be worth it, in which case the caller draws the ordinary line symbol.
+ */
+function drawBand(ctx, pts, line, kind, w, { selected, dash, scale }) {
+  const edges = bandEdges(pts, w / 2);
+  if (!edges) return false;
+  const outer = bandEdges(pts, w / 2 + Math.max(1.6, 2 * scale));
+
+  // The white casing, as a RING. Filling a wider band and laying a translucent
+  // one on top would put white behind the wash and bleach it; even-odd paints
+  // only the ground between the two outlines, so the casing stays outside.
+  if (outer) {
+    ctx.beginPath();
+    bandPath(ctx, outer);
+    bandPath(ctx, edges);
+    ctx.fillStyle = 'rgba(255, 255, 255, .8)';
+    ctx.fill('evenodd');
+  }
+
+  ctx.beginPath();
+  bandPath(ctx, edges);
+
+  ctx.fillStyle = withAlpha(kind.color, 0.32);
+  ctx.fill();
+
+  // Ornament only once there is room for it. Any narrower and a chevron is
+  // three pixels of nothing, and the wash alone says more.
+  if (w > 9 * scale) {
+    ctx.save();
+    ctx.clip();
+    drawChevrons(ctx, pts, w, withAlpha(kind.color, 0.9), scale);
+    ctx.restore();
+  }
+
+  // The walls. Dashed when the mapper said the contact is anything short of
+  // certain, exactly as a thin line of the same kind would be.
+  ctx.setLineDash(dash);
+  ctx.lineWidth = Math.max(1.1, 1.4 * scale);
+  ctx.strokeStyle = kind.color;
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (selected && outer) {
+    ctx.beginPath();
+    bandPath(ctx, outer);
+    ctx.lineWidth = Math.max(2.5, 3 * scale);
+    ctx.strokeStyle = 'rgba(255, 200, 87, .75)';
+    ctx.stroke();
+  }
+  return true;
+}
+
 export function drawLine(ctx, pts, line, {
   selected = false, scale = 1, drawing = false, active = -1, groundWidth = 0,
 } = {}) {
@@ -272,21 +436,29 @@ export function drawLine(ctx, pts, line, {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  ctx.setLineDash([]);
-  ctx.lineWidth = w + 3.5 * scale;
-  ctx.strokeStyle = 'rgba(255, 255, 255, .8)';
-  path(); ctx.stroke();
+  // Wide enough to have an inside? Then it is a body and not a boundary, and
+  // it is drawn as one. A couple of pixels of margin over the symbol's own
+  // weight, so a dike does not flicker between the two on a pinch-zoom.
+  const asBand = groundWidth > kind.weight * scale + 2 * scale
+    && drawBand(ctx, pts, line, kind, w, { selected, dash, scale });
 
-  ctx.setLineDash(dash);
-  ctx.lineWidth = w;
-  ctx.strokeStyle = kind.color;
-  path(); ctx.stroke();
-
-  if (selected) {
+  if (!asBand) {
     ctx.setLineDash([]);
-    ctx.lineWidth = w + 7 * scale;
-    ctx.strokeStyle = 'rgba(255, 200, 87, .45)';
+    ctx.lineWidth = w + 3.5 * scale;
+    ctx.strokeStyle = 'rgba(255, 255, 255, .8)';
     path(); ctx.stroke();
+
+    ctx.setLineDash(dash);
+    ctx.lineWidth = w;
+    ctx.strokeStyle = kind.color;
+    path(); ctx.stroke();
+
+    if (selected) {
+      ctx.setLineDash([]);
+      ctx.lineWidth = w + 7 * scale;
+      ctx.strokeStyle = 'rgba(255, 200, 87, .45)';
+      path(); ctx.stroke();
+    }
   }
   ctx.setLineDash([]);
 
