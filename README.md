@@ -307,7 +307,9 @@ the four walls. On it:
   ones a fault makes by putting one unit against another — that is what makes
   an offset visible even where the same unit sits on both sides
 - **faults** are drawn in red and **dike walls** in blue, folded and offset by
-  whatever happened to them after they formed
+  whatever happened to them after they formed — and stopping at whatever came
+  later still, so a fault buried under an unconformity ends at it rather than
+  running on through cover it never cut
 - **unconformities** are the dashed green line, with the older beds visibly
   truncated against it
 - **stations** near the line are projected on to it and drawn at their
@@ -1785,6 +1787,17 @@ document changes. A few dozen is nothing; a few thousand would not be.
   saying the fault is an unconformity. So a cell whose corners are not all in
   the same fault block is not contoured, and the trace comes out as the two
   pieces the fault actually left it in.
+- **A trace also has to stop at rock younger than itself.** `rockAt`'s walk
+  returns the moment it lands above a younger unconformity or inside a younger
+  intrusion, and never reaches the events below — rock deposited on an
+  unconformity postdates every fault beneath it, so no fault beneath it cuts
+  it. Contouring the field regardless drew the fault straight on up through
+  that cover, which says the fault is the younger of the two: the
+  cross-cutting relation answered backwards, by the one drawing a student
+  would read it off. `reachEvent` is the same walk, minus the layer lookup,
+  and it stops in the same places; cells it does not reach are not contoured.
+  Where a fault trace ends IS the relative age, so ending it in the right
+  place is the drawing's whole job.
 - **Traces stop at the land surface.** Nothing is a fault where there is no
   rock, so a trace is cut back at the skyline rather than carrying on into the
   air above it.

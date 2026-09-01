@@ -174,6 +174,45 @@ export function undoAfter(h, p0, index) {
   return p;
 }
 
+/**
+ * Carry a point back to just before event `index`, and say whether the walk
+ * gets there at all.
+ *
+ * `undoAfter` answers the first half of that. This adds the half that decides
+ * whether a structure is even PRESENT at a point, and it is the half a drawing
+ * needs. rockAt's walk returns the moment it lands above a younger
+ * unconformity or inside a younger intrusion, and never reaches the events
+ * below: rock deposited on an unconformity postdates every fault beneath it,
+ * so no fault beneath it cuts it. A fault trace drawn on through that cover
+ * says the fault is the younger of the two — which is the one thing the
+ * cross-cutting relation exists to settle, answered backwards.
+ *
+ * The loop is rockAt's, minus the layer lookup, and has to stay that way.
+ */
+export function reachEvent(h, p0, index) {
+  let p = [p0[0], p0[1], p0[2]];
+  let lo = 0;
+  for (let i = h.events.length - 1; i > index; i--) {
+    const e = h.events[i];
+
+    if (e.type === 'unconformity') {
+      const above = e.aboveCount;   // clamped at compile, as in rockAt
+      if (above <= lo) continue;    // nothing deposited on it — not yet a surface
+      if (p[2] > surfaceHeight(e.surface, p[0], p[1])) return { p, reached: false };
+      lo = above;
+      continue;
+    }
+
+    if (e.type === 'dike' || e.type === 'pluton') {
+      if (insideIntrusion(e, p)) return { p, reached: false };
+      continue;
+    }
+
+    p = undoEvent(e, p);
+  }
+  return { p, reached: true };
+}
+
 /** Is this point inside an intrusive body, in that body's own time frame? */
 function insideIntrusion(e, p) {
   if (e.type === 'dike') {

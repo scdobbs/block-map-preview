@@ -12,7 +12,7 @@
 // the drawing makes, not something baked in here, so a thickness measured off
 // this grid is a real thickness.
 
-import { rockAt, undoAfter } from './unmake.js';
+import { rockAt, reachEvent } from './unmake.js';
 import { traceContours, chainSegments } from './marching.js';
 import { surfaceHeight, surfaceRange } from './surfaces.js';
 import { rock, sliceCut } from './model.js';
@@ -177,10 +177,14 @@ export function sectionPalette(h, doc) {
  * the whole model is built out of inverses, so that each event only ever has
  * to be undone (see unmake.js). But an inverse is all this needs. A structure
  * is the set of points that land ON it once the younger events are undone, so
- * sampling `undoAfter` over the section and contouring the result at zero
+ * sampling `reachEvent` over the section and contouring the result at zero
  * gives the trace — and gives it in exactly the frame `rockAt` asked its own
  * question in, which is why the drawn line lands on the raster's own
  * discontinuity rather than near it.
+ *
+ * `reachEvent` also says where a structure is not, which is half the drawing:
+ * a trace has to STOP at rock younger than itself, or the picture claims the
+ * opposite cross-cutting relation to the one the block is showing.
  *
  * `cols` and `rows` are the tracing grid, not the section's raster: a fault
  * trace is a smooth curve and does not need a sample per pixel to look like
@@ -203,7 +207,11 @@ export function structureTraces(h, frame, cols = 190, rows = 140) {
     else lo = e.aboveCount;
   }
 
-  // Pass one: sample every structure's field over the section.
+  // Pass one: sample every structure's field over the section, and note where
+  // the walk reaches that structure at all. Rock laid down on a younger
+  // unconformity, or melted through by a younger intrusion, postdates this
+  // structure and is not cut by it — `reachEvent` is the same walk `rockAt`
+  // makes, and it stops in the same places.
   const fields = [];
   for (let k = 0; k < h.events.length; k++) {
     const e = h.events[k];
@@ -211,15 +219,18 @@ export function structureTraces(h, frame, cols = 190, rows = 140) {
     const field = structureField(e);
     if (!field) continue;
     const g = new Float32Array(cols * rows);
+    const seen = new Uint8Array(cols * rows);
     for (let j = 0; j < rows; j++) {
       const z = frame.z1 - (j + 0.5) * dz;
       for (let i = 0; i < cols; i++) {
         const s = ((i + 0.5) / cols) * frame.len;
         const [x, y] = frame.at(s);
-        g[j * cols + i] = field(undoAfter(h, [x, y, z], k));
+        const r = reachEvent(h, [x, y, z], k);
+        seen[j * cols + i] = r.reached ? 1 : 0;
+        g[j * cols + i] = field(r.p);
       }
     }
-    fields.push({ k, e, g });
+    fields.push({ k, e, g, seen });
   }
 
   // Pass two: contour each, minus the cells a younger fault has torn.
@@ -234,12 +245,12 @@ export function structureTraces(h, frame, cols = 190, rows = 140) {
   // in the same fault block is not contoured, and the trace comes out as the
   // two pieces the fault actually left.
   const faults = fields.filter((x) => x.e.type === 'fault');
-  for (const { k, e, g } of fields) {
+  for (const { k, e, g, seen } of fields) {
     const torn = faults.filter((x) => x.k > k).map((x) => x.g);
     const runs = [];
     for (const { seg } of traceContours(g, cols, rows, [0])) {
       for (const run of chainSegments(seg)) {
-        for (const piece of splitAtTears(run, torn, cols, rows)) {
+        for (const piece of splitAtGaps(run, seen, torn, cols, rows)) {
           runs.push(piece.map(([gx, gy]) => [
             ((gx + 0.5) / cols) * frame.len,
             frame.z1 - (gy + 0.5) * dz,
@@ -253,22 +264,32 @@ export function structureTraces(h, frame, cols = 190, rows = 140) {
 }
 
 /**
- * Break a traced run wherever it passes through a cell that straddles a
- * younger fault, and drop that point. `torn` holds those faults' own fields,
- * whose sign is which wall a sample sits on.
+ * Break a traced run at every cell where the field being contoured is not one
+ * continuous, meaningful thing across all four corners. Two ways it can fail,
+ * and a cell that fails either is not drawn:
+ *
+ *   - part of the cell is rock this structure never reached (`seen`), so the
+ *     contour there would be the trace of a structure that is not in that rock
+ *   - the cell straddles a younger fault (`torn`), which carried one wall of
+ *     this structure away from the other, leaving the field genuinely
+ *     discontinuous. Marching squares reads the jump as a sign change and
+ *     bridges it, drawing a line along the fault
+ *
+ * Both leave the trace in the pieces the history actually left it in, which is
+ * the point: where a fault trace stops IS the cross-cutting relation.
  */
-function splitAtTears(run, torn, cols, rows) {
+function splitAtGaps(run, seen, torn, cols, rows) {
   const keep = [];
-  if (!torn.length) return run.length > 1 ? [run] : [];
 
   const whole = (gx, gy) => {
     const i0 = Math.max(0, Math.min(cols - 2, Math.floor(gx)));
     const j0 = Math.max(0, Math.min(rows - 2, Math.floor(gy)));
+    const c = [j0 * cols + i0, j0 * cols + i0 + 1,
+      (j0 + 1) * cols + i0, (j0 + 1) * cols + i0 + 1];
+    for (const q of c) if (!seen[q]) return false;
     for (const t of torn) {
-      const a = t[j0 * cols + i0] > 0;
-      if ((t[j0 * cols + i0 + 1] > 0) !== a) return false;
-      if ((t[(j0 + 1) * cols + i0] > 0) !== a) return false;
-      if ((t[(j0 + 1) * cols + i0 + 1] > 0) !== a) return false;
+      const a = t[c[0]] > 0;
+      for (let m = 1; m < 4; m++) if ((t[c[m]] > 0) !== a) return false;
     }
     return true;
   };
