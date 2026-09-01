@@ -314,7 +314,12 @@ export function historyPanel(ctx) {
         disabled: doc.events.length >= MAX_EVENTS,
         onclick: () => {
           const ev = makeEvent(type);
-          ctx.store.edit((d) => { d.events.push(ev); }, { structural: true });
+          ctx.store.edit((d) => {
+            d.events.push(ev);
+            // A new event is the youngest, so a block wound back before it
+            // would answer "add a fault" by showing no fault at all.
+            d.settings.timeStep = null;
+          }, { structural: true });
           ctx.selectEvent(ev.id, 'history');
         },
       }, [
@@ -331,6 +336,8 @@ export function historyPanel(ctx) {
       ]));
       return;
     }
+
+    root.appendChild(timeMachine(ctx));
 
     const list = el('div', { class: 'event-list' });
     // Displayed youngest-first so the list reads like the block does.
@@ -361,16 +368,112 @@ export function historyPanel(ctx) {
    */
   root.refreshReadings = () => {
     const doc = ctx.store.doc;
+    const at = ctx.timeStep();
     for (const row of root.querySelectorAll('.event-row')) {
       const ev = doc.events.find((e) => e.id === row.dataset.evId);
       const sub = row.querySelector('.event-sub');
       if (ev && sub) sub.textContent = summarise(ev, doc);
+      // Events the slider has not reached yet are on the list but not in the
+      // block, and a row that looked the same either way would make the block
+      // look wrong rather than early.
+      const index = doc.events.findIndex((e) => e.id === row.dataset.evId);
+      row.classList.toggle('ahead', index >= at);
     }
+    root.querySelector('.time-machine')?.restate();
   };
 
   build();
   root.refresh = build;
   return root;
+}
+
+/**
+ * The time machine: run the history from flat-lying beds to the block on
+ * screen, a step at a time.
+ *
+ * A block diagram states a conclusion. The list of events beside it states the
+ * argument, but a student reading "tilt, unconformity, fault" still has to
+ * hold three deformations in their head at once and imagine the result. This
+ * shows them instead.
+ *
+ * The readout carries the part that is easy to get wrong. Winding back past an
+ * unconformity does not only remove the erosion — it removes the units that
+ * were deposited on it, because those units did not exist yet, and a student
+ * who sees them stay would learn the opposite of what an unconformity is. So
+ * the control names them: "not yet deposited: Sandstone, Shale".
+ */
+function timeMachine(ctx) {
+  const n = ctx.timeSpan();
+  const range = el('input', {
+    class: 'range time-range', type: 'range', min: 0, max: n, step: 1,
+    'aria-label': 'How much of the history has happened',
+  });
+  const readout = el('div', { class: 'time-read' });
+  const pending = el('div', { class: 'time-pending' });
+  const play = el('button', {
+    class: 'time-play', type: 'button', 'aria-label': 'Play the history through',
+  });
+
+  range.addEventListener('input', () => {
+    ctx.stopPlayIfRunning();
+    ctx.setTimeStep(Number(range.value), true);
+  });
+  play.addEventListener('click', () => ctx.togglePlay());
+
+  const restate = () => {
+    const doc = ctx.store.doc;
+    const at = ctx.timeStep();
+    const total = ctx.timeSpan();
+    range.max = total;
+    range.value = at;
+    range.style.setProperty('--p', total ? at / total : 1);
+
+    const on = doc.events.filter((e) => e.enabled !== false);
+    clear(readout);
+    readout.appendChild(el('strong', {
+      text: at >= total ? 'Present day'
+        : at === 0 ? 'Before any event'
+          : on[at - 1].name,
+    }));
+    readout.appendChild(el('span', {
+      text: at >= total ? ` · all ${total} ${total === 1 ? 'event' : 'events'}`
+        : at === 0 ? ' · flat-lying beds'
+          : ` · ${at} of ${total}`,
+    }));
+
+    // Which units the history has not laid down yet. Read off the view rather
+    // than worked out here, so the list can only ever say what the block is
+    // actually showing.
+    const missing = doc.layers.slice(0, doc.layers.length - ctx.doc().layers.length);
+    clear(pending);
+    if (missing.length) {
+      pending.appendChild(el('span', {
+        text: `Not yet deposited: ${missing.map((l) => l.name).join(', ')}`,
+      }));
+    }
+
+    play.classList.toggle('on', ctx.playing());
+    play.textContent = ctx.playing() ? '❚❚' : '▶';
+    play.title = ctx.playing() ? 'Stop' : 'Play the history through';
+  };
+
+  const box = el('div', { class: 'time-machine' }, [
+    el('div', { class: 'time-head' }, [
+      el('label', { class: 'ctl-label', text: 'Wind it back' }),
+      readout,
+    ]),
+    el('div', { class: 'time-row' }, [play, range]),
+    pending,
+    el('div', {
+      class: 'ctl-hint',
+      text: 'Drag to run the history forward from flat-lying beds. Everything '
+        + 'the block shows — the map face, a tap on it, the cross section — is '
+        + 'the block as it stood at that moment.',
+    }),
+  ]);
+  box.restate = restate;
+  restate();
+  return box;
 }
 
 function eventRow(ctx, ev, index) {
@@ -398,7 +501,7 @@ function eventRow(ctx, ev, index) {
     title: 'Drag to move this event in time',
   }, [el('span', { text: '⠿' })]);
 
-  const row = el('div', { class: 'event-row' }, [
+  const row = el('div', { class: `event-row ${index >= ctx.timeStep() ? 'ahead' : ''}` }, [
     el('div', { class: 'event-main' }, [grip, head]),
   ]);
   row.dataset.evId = ev.id;

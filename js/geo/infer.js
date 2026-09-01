@@ -159,7 +159,14 @@ const TRACE_SPREAD_MIN = 0.01;
 /** Which drawn lines are evidence about the stratigraphy, and which are faults. */
 const CONTACT_KINDS = new Set(['contact', 'unconformity']);
 
-/** A minimal document. compileHistory reads events and layers, never settings. */
+/**
+ * A minimal document: events and a column, and nothing else.
+ *
+ * compileHistory reads the time machine's setting on the way past (see
+ * atTime), which is why it has to tolerate a document with no `settings` at
+ * all. It does — no settings means the present, which is the only thing a
+ * fitted history could mean here anyway.
+ */
 function docFor(events) {
   return {
     events,

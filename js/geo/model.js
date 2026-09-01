@@ -288,12 +288,82 @@ export function defaultDocument() {
       // been touched", and it opens at the top of the terrain.
       sliceOn: false,
       sliceZ: null,
+      // How many of the events have happened yet — the time machine on the
+      // History tab. Null is the present, which is where a document always
+      // opens: see migrate().
+      timeStep: null,
       netProjection: 'equalArea',   // 'equalArea' (Schmidt) | 'equalAngle' (Wulff)
       netPlanes: false,             // draw each bed's great circle, not just its pole
       contourInterval: 0,   // 0 = choose one from the terrain's relief
       exaggeration: 1,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// The time machine
+// ---------------------------------------------------------------------------
+
+/**
+ * The document as it stood after the first `settings.timeStep` events.
+ *
+ * Everything that draws geology reads the document through this, so winding
+ * time back is not a mode anything has to know about: `compileHistory` and the
+ * shader are handed a smaller document and answer it exactly as they always
+ * did. At the present it returns the very object it was given, so the ordinary
+ * path costs one filter and changes nothing.
+ *
+ * Dropping the later EVENTS is the easy half. The half that matters is the
+ * column. An unconformity does not only erode — it says that the youngest
+ * `aboveCount` units were laid down on the surface it cut, so before it
+ * happened those units did not exist. Leave them in and rewinding past an
+ * angular unconformity shows the cover sitting conformably on beds it should
+ * postdate by an era, which is the single thing the exercise exists to teach.
+ * So every unconformity still in the future takes its own units out of the
+ * column with it, and the ones that have already happened have their unit
+ * count shifted to match the shorter column.
+ *
+ * What is left over the truncated stack is the topmost surviving unit,
+ * extended upward — which is `rockAt`'s ordinary rule for space above the
+ * column, and which happens to be exactly right here: that IS the rock the
+ * unconformity is about to erode away.
+ */
+export function atTime(doc) {
+  const on = doc.events.filter((e) => e.enabled !== false);
+  const t = doc.settings ? doc.settings.timeStep : null;
+  if (!Number.isInteger(t) || t < 0 || t >= on.length) return doc;
+
+  const datums = unconformityDatums(doc);
+  // Unconformities are clamped youngest-first, so `above` only grows with age
+  // and the oldest one still to come is the one that claims the most units.
+  let drop = 0;
+  for (let i = t; i < on.length; i++) {
+    const d = datums.get(on[i].id);
+    if (d) drop = Math.max(drop, d.above);
+  }
+
+  const events = on.slice(0, t).map((e) => {
+    if (e.type !== 'unconformity') return e;
+    const d = datums.get(e.id);
+    // Its own count came from the same clamped walk, and every unconformity
+    // still standing is older than the one that set `drop`, so this cannot go
+    // negative.
+    return { ...e, aboveCount: Math.max(0, (d ? d.above : e.aboveCount) - drop) };
+  });
+
+  return { ...doc, events, layers: doc.layers.slice(drop) };
+}
+
+/** How many events could have happened — the far end of the time slider. */
+export function timeSpan(doc) {
+  return doc.events.filter((e) => e.enabled !== false).length;
+}
+
+/** Which step the slider is parked at, with the present spelled as a number. */
+export function timeStep(doc) {
+  const n = timeSpan(doc);
+  const t = doc.settings ? doc.settings.timeStep : null;
+  return Number.isInteger(t) && t >= 0 && t < n ? t : n;
 }
 
 // ---------------------------------------------------------------------------

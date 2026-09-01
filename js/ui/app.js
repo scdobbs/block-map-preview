@@ -13,7 +13,8 @@ import { MapSection } from './map/section.js';
 import { StratSection } from './strat/section.js';
 import { BlockScene } from '../render/scene.js';
 import { Store, loadSaved, exportJSON, importJSON } from '../store.js';
-import { defaultDocument, rock, makeMarker, sliceStops } from '../geo/model.js';
+import { defaultDocument, rock, makeMarker, sliceStops, atTime, timeSpan,
+  timeStep } from '../geo/model.js';
 import { compileHistory, describeAt, beddingAt, beddingGrid } from '../geo/unmake.js';
 import { readMarkers, formatReading, FLAT_DIP, VERTICAL_DIP } from '../render/markers.js';
 import { footprint } from '../render/block.js';
@@ -66,6 +67,8 @@ export class App {
     this._showNet = null;
     this._showGround = null;
     this._showSection = null;
+    this._viewDoc = null;
+    this._playing = null;       // the time machine's timer, when it is running
 
     this._buildDOM();
     this.scene = new BlockScene(this.canvas);
@@ -111,6 +114,16 @@ export class App {
       setSlice: (on) => this.setSlice(on),
       sliceOpen: () => this.store.doc.settings.sliceOn === true,
       history: () => this.history(),
+      // The document as the time slider has it. Anything that DRAWS geology
+      // asks for this; anything that EDITS the block goes on using store.doc,
+      // which is the one that actually exists.
+      doc: () => this.viewDoc(),
+      timeStep: () => timeStep(this.store.doc),
+      timeSpan: () => timeSpan(this.store.doc),
+      setTimeStep: (t, dragging) => this.setTimeStep(t, dragging),
+      playing: () => this._playing != null,
+      togglePlay: () => this.togglePlay(),
+      stopPlayIfRunning: () => this.stopPlay(),
       fit: () => this.fit(),
       mapFit: () => this.mapFit(),
       surveyFit: () => this.surveyFit(),
@@ -186,6 +199,13 @@ export class App {
       title: 'Leave map view', 'aria-label': 'Leave map view',
       onclick: () => this.setMapView(false),
     }, [el('span', { text: 'Map view' }), el('span', { class: 'chip-x', text: '×' })]);
+    // Same idea as the map chip, for the same reason: a block wound back to
+    // before its own faults looks like a block somebody has broken, and the
+    // gesture that would undo it is not one anybody would guess.
+    this.timeChip = el('button', {
+      class: 'time-chip hidden', type: 'button', 'aria-label': 'Return to the present',
+      onclick: () => this.setTimeStep(null),
+    });
     // Blocks are dimensionless without a stated size, and students need one
     // to read thicknesses off the section.
     this.scaleChip = el('div', { class: 'scale-chip' });
@@ -201,7 +221,7 @@ export class App {
     // drifting off to hover over the net instead.
     this.blockPane = el('div', { class: 'block-pane' }, [
       this.canvas,
-      el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn, this.mapChip]),
+      el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn, this.mapChip, this.timeChip]),
       el('div', { class: 'hud hud-right' }, [this.fullBtn, this.compass.node]),
       this.scaleChip,
       this.markerChip,
@@ -377,6 +397,8 @@ export class App {
 
   setMode(mode) {
     if (this.mode === mode) return;
+    // Nothing left running behind a screen nobody is looking at.
+    this.stopPlay();
     // Also the guard for a mode restored from last session: a phone that was
     // left in Map and then relocked must not come back up in it.
     if (this._modeLocked(mode)) return;
@@ -538,6 +560,7 @@ export class App {
   // -------------------------------------------------------------------------
 
   _onChange(doc, info) {
+    this._viewDoc = null;
     this._history = null;
     this._readings = null;
     this._fit = null;
@@ -587,6 +610,7 @@ export class App {
       this.xsec.refresh(!info.structural);
     }
     this._syncSliceBar(doc);
+    this._syncTimeChip(doc);
 
     const map = doc.settings.mapView === true;
     if (map !== this._mapView) {
@@ -621,8 +645,12 @@ export class App {
   _syncAll(info) { this._onChange(this.store.doc, info); }
 
   _syncHelper() {
-    const ev = this.store.doc.events.find((e) => e.id === this.selectedEventId);
-    this.scene.showHelper(this.store.doc, ev || null);
+    // Drawn from the view rather than the document, and only for an event that
+    // has happened yet. A fault plane hanging in a block whose fault has been
+    // wound out of existence is a guide to nothing.
+    const view = this.viewDoc();
+    const ev = view.events.find((e) => e.id === this.selectedEventId);
+    this.scene.showHelper(view, ev || null);
   }
 
   applyPreset(preset) {
@@ -638,6 +666,17 @@ export class App {
   // -------------------------------------------------------------------------
   // Strike and dip markers
   // -------------------------------------------------------------------------
+
+  /**
+   * The document as the time slider has it, rebuilt at most once per change.
+   *
+   * At the present this IS store.doc — atTime hands back the object it was
+   * given — so nothing pays for the time machine while nobody is using it.
+   */
+  viewDoc() {
+    if (!this._viewDoc) this._viewDoc = atTime(this.store.doc);
+    return this._viewDoc;
+  }
 
   /** The compiled history, rebuilt at most once per document change. */
   history() {
@@ -832,6 +871,66 @@ export class App {
     this.xsec.refresh(false);
   }
 
+  // --- the time machine -----------------------------------------------------
+
+  /**
+   * Wind the block to the state it was in after `t` events. Null is the
+   * present, and so is any number at or past the end of the history.
+   */
+  setTimeStep(t, dragging = false) {
+    const n = timeSpan(this.store.doc);
+    const v = t == null || t >= n ? null : Math.max(0, Math.min(n, Math.round(t)));
+    if (this.store.doc.settings.timeStep === v) return;
+    if (!dragging && this._playing && v == null) this.stopPlay();
+    this.store.view((d) => { d.settings.timeStep = v; });
+  }
+
+  /**
+   * Run the history forward, a step a beat, and stop at the present.
+   *
+   * The point of the slider is the sequence, and a student dragging it is
+   * doing two things at once: working the control and watching the block.
+   * Playing lets them only watch.
+   */
+  togglePlay() {
+    if (this._playing) { this.stopPlay(); return; }
+    const n = timeSpan(this.store.doc);
+    if (!n) return;
+    // Pressing play at the end means "show me that again" — nobody asks to
+    // watch a film from its last frame.
+    if (timeStep(this.store.doc) >= n) this.setTimeStep(0);
+    this._playing = setInterval(() => {
+      const at = timeStep(this.store.doc);
+      if (at >= timeSpan(this.store.doc)) { this.stopPlay(); return; }
+      this.setTimeStep(at + 1, true);
+    }, 950);
+    this.touchPanel();
+  }
+
+  stopPlay() {
+    if (!this._playing) return;
+    clearInterval(this._playing);
+    this._playing = null;
+    this.touchPanel();
+  }
+
+  /** The chip over the block, which is the only sign a rewound block gives. */
+  _syncTimeChip(doc) {
+    const n = timeSpan(doc);
+    const at = timeStep(doc);
+    const past = at < n;
+    this.timeChip.classList.toggle('hidden', !past);
+    if (!past) return;
+    const on = doc.events.filter((e) => e.enabled !== false);
+    const name = at === 0 ? 'before the first event' : `after ${on[at - 1].name}`;
+    clear(this.timeChip);
+    this.timeChip.append(
+      el('span', { text: at === 0 ? 'Before any event' : `${at} of ${n} events` }),
+      el('span', { class: 'chip-x', text: '×' }),
+    );
+    this.timeChip.title = `The block ${name}. Tap to return to the present.`;
+  }
+
   // --- the horizontal slicer ------------------------------------------------
 
   /** How far the slider can travel: the base of the block to the skyline. */
@@ -865,7 +964,7 @@ export class App {
     const doc = this.store.doc;
     const { lo, hi } = this._sliceBounds(doc);
     const here = Number.isFinite(doc.settings.sliceZ) ? doc.settings.sliceZ : hi;
-    const stops = sliceStops(doc)
+    const stops = sliceStops(this.viewDoc())
       .map((st) => st.z)
       .concat([lo, hi])
       .filter((z) => z >= lo - 1e-6 && z <= hi + 1e-6)
@@ -883,7 +982,7 @@ export class App {
     // numbers it reports are the numbers on the elevation axis rather than a
     // percentage of something.
     this.sliceRange.addEventListener('input', () => {
-      this.setSliceZ(snapSlice(Number(this.sliceRange.value), this.store.doc,
+      this.setSliceZ(snapSlice(Number(this.sliceRange.value), this.viewDoc(),
         this._sliceBounds()), true);
     });
     this.sliceRange.addEventListener('change', () => this.store.breakCoalesce());
@@ -910,7 +1009,9 @@ export class App {
     this.sliceRange.style.setProperty('--p', hi > lo ? (z - lo) / (hi - lo) : 0);
 
     const datum = doc.topo.datum || 0;
-    const stops = sliceStops(doc).filter((st) => st.z >= lo && st.z <= hi);
+    // From the view: wind time back past an unconformity and the units above
+    // it have not been deposited, so they have no contact to stop at either.
+    const stops = sliceStops(this.viewDoc()).filter((st) => st.z >= lo && st.z <= hi);
     const at = stops.find((st) => Math.abs(st.z - z) < 0.75);
     clear(this.sliceRead);
     this.sliceRead.append(

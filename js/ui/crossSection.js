@@ -75,7 +75,9 @@ export class CrossSection {
   /** Draw both canvases. `quick` trades resolution for a redraw under a finger. */
   draw(quick = false) {
     this._quick = quick;
-    const doc = this.ctx.store.doc;
+    // The document as the time slider has it, so a rewound block and its
+    // section are the same block.
+    const doc = this.ctx.doc();
     const h = this.ctx.history();
     const box = footprint(doc.block);
     const line = sectionLine(doc, box);
@@ -547,14 +549,15 @@ export class CrossSection {
     const s = (x - p.ox) / p.sx;
     const z = p.frame.z1 - (y - p.oy) / p.sz;
     const [wx, wy] = p.frame.at(s);
-    const doc = this.ctx.store.doc;
+    const doc = this.ctx.doc();
     if (z > lidAt(doc, wx, wy)) return null;
-    const r = rockAt(this.ctx.history(), [wx, wy, z]);
+    const h = this.ctx.history();
+    const r = rockAt(h, [wx, wy, z]);
     const datum = doc.topo.datum || 0;
     const where = `${Math.round(s)} m along · ${Math.round(z + datum)} m`;
     if (r.kind === 'basement') return { label: 'Basement', detail: where };
     if (r.kind === 'intrusion') return { label: r.event.name, detail: where };
-    return { label: doc.layers[r.index]?.name || 'Unit', detail: where };
+    return { label: h.layers[r.index]?.name || 'Unit', detail: where };
   }
 }
 
@@ -730,7 +733,7 @@ export function crossSectionPane(ctx) {
   });
 
   const paintLegend = () => {
-    const doc = ctx.store.doc;
+    const doc = ctx.doc();
     const h = ctx.history();
     clear(legend);
     for (const e of view.legend(doc, h)) {

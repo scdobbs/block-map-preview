@@ -341,7 +341,9 @@ export function groundMapPane(ctx) {
     root.classList.toggle('hidden', !on);
     if (on) requestAnimationFrame(() => map.draw());
   };
-  root.refresh = () => map.update(ctx.store.doc);
+  // The view rather than the document: what this pane draws is what the block
+  // predicts, and a block wound back in time predicts something else.
+  root.refresh = () => map.update(ctx.doc());
   root.map = map;
   root.grip = root.querySelector('.stereo-grip');
   return root;

@@ -25,14 +25,19 @@ import {
 } from './math.js';
 import { surfaceHeight } from './surfaces.js';
 import {
-  cumulativeDepths, totalThickness, faultRake, unconformityDatums,
+  cumulativeDepths, totalThickness, faultRake, unconformityDatums, atTime,
 } from './model.js';
 
 /**
  * Precompute the per-event vectors so a point query is just arithmetic.
  * Call once per document change, then reuse for many points.
  */
-export function compileHistory(doc) {
+export function compileHistory(doc0) {
+  // The one place the CPU side reads the history, so the one place the time
+  // machine has to be applied. Everything downstream — identify, the readings,
+  // the stereonet, the cross-section raster — asks its questions of `h` and is
+  // wound back with it, without knowing that it was.
+  const doc = atTime(doc0);
   const events = doc.events.filter((e) => e.enabled !== false);
   const datums = unconformityDatums(doc);
   const compiled = events.map((e) => {

@@ -83,7 +83,20 @@ html, body {
    cluster is the block's 108px, which collide below 434. */
 @media (max-width: 460px) {
   .hud { top: calc(62px + env(safe-area-inset-top)); }
+  /* Down here the switch already has the first row to itself, so the left
+     cluster has the whole width and the cap below is not needed. */
+  .hud-left { max-width: none; }
 }
+
+/* A chip beside undo and redo makes the left cluster two or three times its
+   usual width, which is enough to reach a centred switch on a window that is
+   nowhere near narrow enough to trip the rule above — and two chips at once is
+   possible, since a block can be in map view AND wound back in time. So the
+   cluster is capped at the room it actually has and a chip that will not fit
+   drops to a second line rather than sliding under "Block". The number is the
+   switch's half-width (99), plus this cluster's own inset from the edge (10),
+   plus a gap the width of the one between the buttons (8). */
+.hud-left { flex-wrap: wrap; max-width: calc(50% - 117px); }
 
 .icon-btn {
   width: var(--tap); height: var(--tap);
@@ -1747,3 +1760,55 @@ html, body {
 }
 .slice-tick.on { background: var(--accent); height: 7px; }
 .slice-range { width: 100%; }
+
+
+/* --- the time machine ----------------------------------------------------- */
+
+.time-machine {
+  margin: 4px 0 14px; padding: 11px 12px 9px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--bg-2);
+}
+.time-head { display: flex; align-items: baseline; gap: 9px; }
+.time-head .ctl-label { flex: 0 0 auto; }
+.time-read {
+  flex: 1 1 auto; min-width: 0; text-align: right;
+  font-size: 12.5px; color: var(--ink-dim);
+}
+.time-read strong { color: var(--accent); font-weight: 650; }
+
+.time-row { display: flex; align-items: center; gap: 9px; margin-top: 2px; }
+.time-play {
+  flex: 0 0 auto; width: 34px; height: 30px;
+  border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg-3); color: var(--ink-dim);
+  font-size: 11px; line-height: 1; cursor: pointer;
+}
+.time-play.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.time-range { flex: 1 1 auto; min-width: 0; }
+
+/* The units an unconformity has not laid down yet. Only present while the
+   slider is behind one, which is when it is the whole point. */
+.time-pending {
+  margin-top: 5px; font-size: 12px; color: var(--measured);
+}
+.time-pending:empty { display: none; }
+
+/* An event on the list but not yet in the block. Struck through would say
+   "disabled", which is a different thing and already spoken for. */
+.event-row.ahead .event-head { opacity: .38; }
+.event-row.ahead .event-icon { filter: grayscale(1); }
+
+/* The one sign a rewound block gives on the block itself. Same shape as the
+   map chip because it does the same job: naming a state you can enter without
+   noticing, and offering the way out. */
+.time-chip {
+  display: flex; align-items: center; gap: 6px;
+  height: var(--tap); padding: 0 12px;
+  border-radius: 999px; border: 1px solid var(--accent);
+  background: rgba(255, 200, 87, .14); color: var(--accent);
+  font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
+  white-space: nowrap;
+}
+.time-chip.hidden { display: none; }
+.time-chip .chip-x { font-size: 17px; line-height: 1; opacity: .8; }

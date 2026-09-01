@@ -143,7 +143,11 @@ function codeAt(h, evIndex, x, y, z) {
  */
 export function sectionPalette(h, doc) {
   const byCode = new Map();
-  doc.layers.forEach((l, i) => byCode.set(i, {
+  // From the compiled history's own layer list, not the document's. The two
+  // differ whenever the time slider has wound back past an unconformity, and
+  // `rockAt` returns indices into this one — reading the document's would
+  // colour every unit as the one above it.
+  h.layers.forEach((l, i) => byCode.set(i, {
     color: l.color || rock(l.rockId).color,
     label: l.name || rock(l.rockId).label,
   }));

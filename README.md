@@ -7,10 +7,11 @@ An offline-first phone app for geology students, in three sections.
 **Block** builds 3D geologic block diagrams and lets you interrogate them.
 Rotate the block, stack a stratigraphic column, apply a history of tilts,
 folds, faults, intrusions and unconformities, drape a landscape over the top,
-and tap anywhere to identify the unit and read its strike and dip. Draw a line
-across the map and it cuts the cross-section along it; drag the slicer and it
-shaves the block down level by level, so each new flat top is the map you
-would get at that depth.
+and tap anywhere to identify the unit and read its strike and dip. Wind the
+history back and watch it built from flat-lying beds one event at a time. Draw
+a line across the map and it cuts the cross-section along it; drag the slicer
+and it shaves the block down level by level, so each new flat top is the map
+you would get at that depth.
 
 **Map** is a field notebook for the outcrop you are standing on. Download US
 topographic and aerial maps before you leave, take your position from GPS,
@@ -46,6 +47,7 @@ to install.
 - **Left-drag** turns the block
 - **Scroll** zooms; **right-drag** or **shift-drag** pans
 - **Click the block** to identify the unit and read its strike and dip
+- **History → Wind it back** runs the block from flat beds to what it is now
 - **View → Cut a cross section** draws it along a line you drag across the map
 - **View → Slice down through it** lowers the top of the block one contact at a time
 
@@ -122,6 +124,47 @@ and both accept typed numbers.
 **Drag an event by its grip to move it through time** (the arrow buttons in
 the editor do the same). You can also disable an event without deleting it,
 which is the quickest way to see what it was doing.
+
+### Wind it back
+
+A slider above the timeline runs the history: at the far left the block is the
+flat-lying beds it started as, and every step to the right is one more event
+happening. **▶** plays it through and stops at the present.
+
+Everything the block shows is wound back with it. The map face, a tap on it,
+the stereonet, the cross section, the ground map and the contacts the slicer
+clicks on to are all the block *as it stood at that moment* — because they all
+read the history through one function rather than each keeping their own idea
+of it. Events the slider has not reached yet are greyed on the list, and a
+chip over the block says how far back you are and takes you home.
+
+Winding time is not an edit. It does not go on the undo stack — playing a
+history through would otherwise bury the last real change under a dozen
+viewpoints — and a saved file always reopens in the present.
+
+### What an unconformity does to the slider
+
+This is the case worth understanding, and the reason the slider is not simply
+"apply the first N events".
+
+An unconformity does two things: it erodes down to a surface, and it says that
+the youngest *n* units of the column were deposited **on** that surface. So
+before it happened, those units did not exist. Wind back past one and they
+have to go — leave them in and you would be looking at cover sitting
+conformably on beds it postdates by an era, which is the exact opposite of
+what an unconformity is.
+
+So every unconformity still in the future takes its own units out of the
+column with it, and the control names them underneath: *not yet deposited:
+Sandstone, Shale*. The units already gone from the column also drop out of the
+cross-section legend and off the slicer's list of contacts, because there is
+no contact there yet.
+
+What fills the space where the cover will be is the topmost surviving unit,
+carried on upward. That is the block's ordinary rule for ground above the
+column, and here it happens to be exactly right: that is the rock the
+unconformity is about to erode away. Step forward one and you watch it be
+removed and the cover arrive in the same beat.
 
 ## Terrain
 
@@ -1533,7 +1576,7 @@ js/
   strat/              the stratigraphic column's model — no DOM
     model.js          rank, grain-size scales, layout, thicknesses and their argument
   ui/
-    app.js            shell, section switch, tabs, identify tool, files
+    app.js            shell, section switch, tabs, identify tool, time machine, files
     panels.js         layers / history / terrain / field / view / EPS 105 panels
     stereonet.js      the net, and the readout of what it found
     groundMap.js      the map beside the block: walked vs predicted
@@ -1686,6 +1729,30 @@ document changes. A few dozen is nothing; a few thousand would not be.
   fit. It deliberately does not read the fold event's own trend and plunge:
   later tilts would make that answer wrong, and the point is to compare like
   with like — a dense set of readings against a sparse one.
+
+### The time machine
+
+- **One function, `atTime`, and everything else is unchanged.** It hands back
+  a smaller document — fewer events, a shorter column — and `compileHistory`
+  and the shader answer it exactly as they always did. Winding time back is
+  therefore not a mode anything has to know about, and nothing can be left out
+  of it by forgetting to check a flag.
+- **At the present it returns the object it was given**, so the ordinary path
+  costs one filter and changes nothing.
+- **Truncating the layer array is the same thing as starting the walk lower in
+  the column.** `layerAt` measures depth from the top of the sub-column it is
+  given, so `layers.slice(n)` reproduces exactly the geometry `lo = n` would
+  have. That is what lets the whole of it be a document transformation rather
+  than a new parameter threaded through the CPU walk and the generated GLSL
+  twin separately.
+- **The unit counts on the surviving unconformities are shifted with the
+  column.** They come from `unconformityDatums`' clamped walk, which only ever
+  grows with age, so an unconformity that has already happened always claims at
+  least as many units as the oldest one still to come — the shift cannot go
+  negative.
+- **It is not undoable.** See `Store.view`. The test is not "is it in
+  settings", it is whether taking the change back is something a student could
+  want.
 
 ### The cross section and the slicer
 

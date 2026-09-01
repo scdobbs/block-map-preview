@@ -52,6 +52,25 @@ export class Store {
     this._scheduleSave();
   }
 
+  /**
+   * Change how the document is being LOOKED at, rather than what it is.
+   *
+   * The time machine moves nothing in the block; it moves where the student is
+   * standing to see it. And it moves a lot — playing a history through runs an
+   * event a second — so putting it on the undo stack would bury the last real
+   * edit under a dozen viewpoints and leave Ctrl-Z meaning something other
+   * than "take back what I just did". So it redraws and autosaves like any
+   * other change, and undo steps straight over it.
+   *
+   * The test for using this rather than `edit` is not "is it in settings" — it
+   * is whether taking the change back is something a student could want.
+   */
+  view(mutator) {
+    mutator(this.doc);
+    this._emit({ structural: false });
+    this._scheduleSave();
+  }
+
   /** Replace the whole document (load, preset, reset). Always undoable. */
   replace(doc, structural = true) {
     this.undoStack.push(snapshot(this.doc));
@@ -161,6 +180,10 @@ export function loadSaved() {
 function migrate(doc) {
   const base = defaultDocument();
   doc.settings = { ...base.settings, ...(doc.settings || {}) };
+  // A document always opens in the present. The time machine is a way of
+  // looking at a block, not a property of it, and a file that reopened halfway
+  // through its own history would look like a file that had lost its history.
+  doc.settings.timeStep = null;
   doc.block = { ...base.block, ...(doc.block || {}) };
   // Measured ground is taken whole. Spreading a default landform's parameters
   // over it would leave a surface that is both a heightfield and a set of hill

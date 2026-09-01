@@ -3,7 +3,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { buildFragmentShader, VERTEX, uniformPrefix } from '../geo/glsl.js';
-import { MAX_LAYERS, rock, faultRake, unconformityDatums } from '../geo/model.js';
+import { MAX_LAYERS, rock, faultRake, unconformityDatums, atTime } from '../geo/model.js';
 import { planeFrame, axisFrame, azimuthVec, slipVec, DEG } from '../geo/math.js';
 import { KIND_CODE, surfaceUniform, surfaceRange, niceContourInterval } from '../geo/surfaces.js';
 
@@ -55,7 +55,11 @@ export class BlockMaterial {
   }
 
   /** Rebuild the shader if the shape of the history changed. Returns true if so. */
-  syncStructure(doc) {
+  syncStructure(doc0) {
+    // Winding time back shortens the history, which is a different shader —
+    // see atTime. Taking the view here means the key, the uniform set and the
+    // generated code are all built from the same list.
+    const doc = atTime(doc0);
     const key = structureKey(doc);
     if (key === this.structure) return false;
     this.structure = key;
@@ -75,7 +79,8 @@ export class BlockMaterial {
   }
 
   /** Push current parameter values. Cheap; safe to call every frame. */
-  syncUniforms(doc) {
+  syncUniforms(doc0) {
+    const doc = atTime(doc0);
     const u = this.uniforms;
 
     let acc = 0;
