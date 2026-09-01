@@ -855,6 +855,25 @@ mess and each half of it is clean, that is not noise in the data — it is the
 fault on the map, no offset will fix it, and being told so beats an afternoon
 spent adjusting a fold to fit readings from the other side of a thrust.
 
+**7. The dikes go on last**, and last means youngest, so a dike cuts
+everything under it. Nothing on the map is read to decide that — the
+cross-cutting relations that would settle it are not inferred — so the report
+says it in words and the block's History tab is where it gets moved. Drag a
+dike below the fold and it is folded with the beds, which after *A folded
+dike* above is a change you can see rather than one you take on trust.
+
+A dike is drawn as **one line**, a centreline, because at any scale where a map
+is readable a sheet a few metres across *is* a line. So the trace gives the
+strike always and the dip wherever the ground has the relief to say — the same
+`faultFromTrace` a fault uses, because it is the same question — and the line
+card gives the two things no trace can: how wide the sheet is, and what it is
+made of. Neither is guessed silently; the report says twenty metres of basalt
+was assumed, and where.
+
+A dike is placed and not fitted. It is a body you drew, carried across, and it
+must not move while the structure is still settling — so it is added after the
+fold and the slip have finished arguing, and nothing scores it.
+
 ## Why contacts do so much of the work
 
 A contact is a surface of constant stratigraphic depth. So the **spread of

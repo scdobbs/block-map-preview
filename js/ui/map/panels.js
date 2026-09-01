@@ -717,16 +717,22 @@ function areaText(cells, cellWorld, lat) {
  * from half a mile away and never find the plane. Both are worth recording,
  * and neither implies the other.
  */
-function faultRows(ctx, line, known) {
+/**
+ * Which way a drawn plane leans, and by how much.
+ *
+ * A fault and a dike ask this identically, and for the same reason: the trace
+ * fixes the strike, so the only thing left is which of the two sides the plane
+ * leans to and how far. Shared rather than written twice, because the two must
+ * stay the same question — `faultFromTrace` reads them off the same fields and
+ * cannot tell which kind of line it was handed.
+ */
+function planeDipRows(ctx, line, noun) {
   const rows = [];
   const set = (fn, coalesce) => ctx.editLine(line.id, fn, coalesce);
   const choices = dipChoices(line);
 
-  rows.push(el('div', { class: 'sub-head', text: 'The fault plane' }));
-
-  // Which way it leans. The trace fixes the strike, so the only question is
-  // which of the two sides — offered as the two sides rather than as a free
-  // bearing, because any other answer would contradict the line drawn.
+  // Offered as the two sides rather than as a free bearing, because any other
+  // answer would contradict the line drawn.
   // How far apart two azimuths are, 0-180, so "which of the two sides" is
   // decided by the nearer one rather than by an exact match: the trace's own
   // trend shifts a degree or two whenever a point is dragged.
@@ -761,14 +767,80 @@ function faultRows(ctx, line, known) {
   if (dipState === 'a' || dipState === 'b') {
     rows.push(protractor({
       value: line.dip == null ? 45 : line.dip, label: 'Dip angle', max: 89,
-      onChange: (v) => set((l) => { l.dip = v; }, `fault-dip:${line.id}`),
+      onChange: (v) => set((l) => { l.dip = v; }, `plane-dip:${line.id}`),
     }));
     rows.push(el('div', { class: 'ctl-hint standalone', text:
-      `Two different numbers, and they are easy to run together: ${azimuth(choices[dipState === 'a' ? 0 : 1])} is the compass direction the plane leans toward, measured on the map; the dip angle is how far it leans below horizontal, measured in the vertical plane. Written out, this fault is ${azimuth(choices[dipState === 'a' ? 0 : 1])}/${Math.round(line.dip == null ? 45 : line.dip)}° — dip direction first, then dip angle.` }));
+      `Two different numbers, and they are easy to run together: ${azimuth(choices[dipState === 'a' ? 0 : 1])} is the compass direction the plane leans toward, measured on the map; the dip angle is how far it leans below horizontal, measured in the vertical plane. Written out, this ${noun} is ${azimuth(choices[dipState === 'a' ? 0 : 1])}/${Math.round(line.dip == null ? 45 : line.dip)}° — dip direction first, then dip angle.` }));
   }
 
   rows.push(el('div', { class: 'ctl-hint standalone', text:
-    'A fault trace is the fault plane cut by the ground, so where there is relief the trace gives the dip on its own — the fit reads it off the topography. Across flat ground it cannot: every plane through that line fits the trace equally well. This is where you say what you saw at the outcrop, or what the trace crossing the contours told you.' }));
+    `A ${noun} trace is the plane cut by the ground, so where there is relief the trace gives the dip on its own — the fit reads it off the topography. Across flat ground it cannot: every plane through that line fits the trace equally well. This is where you say what you saw at the outcrop, or what the trace crossing the contours told you.` }));
+
+  return rows;
+}
+
+/**
+ * The two things about a dike that a trace cannot tell you.
+ *
+ * A dike is drawn as ONE line, a centreline, because at any scale where a map
+ * is readable a sheet a few metres across IS a line. That is the whole reason
+ * these two exist: the line is the dike, so the width of the line says nothing
+ * about the width of the sheet, and nothing about a shape has ever implied
+ * what it is made of. Without them the block gets a twenty-metre basalt dike
+ * and a note saying that is what it assumed.
+ */
+function dikeRows(ctx, line) {
+  const rows = [];
+  const set = (fn, coalesce) => ctx.editLine(line.id, fn, coalesce);
+
+  rows.push(el('div', { class: 'sub-head', text: 'The sheet' }));
+
+  // No "not measured" state, unlike the dip. A dip can be left unsaid because
+  // the trace may still answer it; a thickness cannot, so the block will use a
+  // number either way and the only honest thing is to show which one.
+  rows.push(numberRow({
+    label: 'Thickness', value: line.thickness == null ? DEFAULT_THICKNESS : line.thickness,
+    min: 1, max: 500, step: 1, unit: 'm',
+    onChange: (v) => set((l) => { l.thickness = v; }, `dike-thickness:${line.id}`),
+  }));
+  rows.push(el('div', { class: 'ctl-hint standalone', text:
+    `How wide the sheet is across, measured square to its walls. The line you drew is its middle, not its edges, so this is the one number about a dike the map cannot hold — until you set it the block uses ${DEFAULT_THICKNESS} m.` }));
+
+  rows.push(selectRow({
+    label: 'Rock', value: line.rockId || '',
+    options: [{ value: '', label: 'Not said — taken as basalt' }]
+      .concat(DIKE_ROCKS.map((id) => ({ value: id, label: rockOf(id).label }))),
+    onChange: (v) => set((l) => { l.rockId = v; }),
+  }));
+
+  rows.push(el('div', { class: 'sub-head', text: 'The dike plane' }));
+  for (const r of planeDipRows(ctx, line, 'dike')) rows.push(r);
+
+  rows.push(el('div', { class: 'ctl-hint standalone', text:
+    'A dike built into a block is placed last in the history, so it cuts everything else. That is a default and not something read off your map: if it is older than the folding, drag it earlier on the block\'s History tab and it will be folded with the beds.' }));
+
+  return rows;
+}
+
+/** What a dike is likely to be. The block's own igneous list, in order. */
+const DIKE_ROCKS = ['basalt', 'gabbro', 'diorite', 'granite', 'tuff'];
+
+/** Must match DEFAULT_DIKE_THICKNESS in geo/infer.js — the fit uses the same. */
+const DEFAULT_THICKNESS = 20;
+
+function faultRows(ctx, line, known) {
+  const rows = [];
+  const set = (fn, coalesce) => ctx.editLine(line.id, fn, coalesce);
+  const choices = dipChoices(line);
+
+  rows.push(el('div', { class: 'sub-head', text: 'The fault plane' }));
+
+  const apart = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+  const dipState = line.dip == null ? 'none'
+    : (line.dipDir == null || line.dip >= 89 ? 'vertical'
+      : (choices.length && apart(line.dipDir, choices[0]) < 90 ? 'a' : 'b'));
+
+  for (const r of planeDipRows(ctx, line, 'fault')) rows.push(r);
 
   // Which way it moved. The one fault parameter no geometry can supply.
   rows.push(chipsRow({
@@ -946,6 +1018,9 @@ export function linesPanel(ctx) {
 
       if (line.kind === 'fault') {
         for (const n of faultRows(ctx, line, known)) box.appendChild(n);
+      }
+      if (line.kind === 'dike') {
+        for (const n of dikeRows(ctx, line)) box.appendChild(n);
       }
 
       box.appendChild(noteRow({

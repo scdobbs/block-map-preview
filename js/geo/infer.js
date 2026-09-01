@@ -465,6 +465,18 @@ export function faultLinesOf(obs) {
   );
 }
 
+export function dikeLinesOf(obs) {
+  return (obs.lines || []).filter(
+    (l) => l.use !== false && l.kind === 'dike' && l.pts && l.pts.length >= 2,
+  );
+}
+
+/** What a dike is taken to be made of when the mapper did not say. */
+const DEFAULT_DIKE_ROCK = 'basalt';
+
+/** And how thick, in metres. Thin, because a dike drawn as one line is thin. */
+const DEFAULT_DIKE_THICKNESS = 20;
+
 // ---------------------------------------------------------------------------
 // Searching
 // ---------------------------------------------------------------------------
@@ -1087,6 +1099,19 @@ export function inferHistory(obs, { extent = 4000, localFolds = false } = {}) {
   // Do the two sides of a fault even describe the same structure?
   if (fitted.length) domainsAcross(fitted, stations, verdict, notes, warnings);
 
+  // --- 5. the dikes, last ------------------------------------------------
+  //
+  // Last, and so youngest, because a dike cuts what is already there and
+  // nothing here reads the map for a cross-cutting relation that would say
+  // otherwise. That is a default and not a finding, so it is said out loud —
+  // and the History tab is where it gets moved, which after the block turns an
+  // intrusion with the beds is a change you can see rather than take on trust.
+  //
+  // Placed after the polish deliberately. A dike is not fitted to anything: it
+  // is a body drawn on the map and carried across, so it must not be allowed
+  // to move while the structure is still settling.
+  events = events.concat(dikeEvents(obs, extent, notes, warnings));
+
   const m = misfit(events, obs);
 
   // The fit reports how well it did; it also has to say when that is badly.
@@ -1100,6 +1125,79 @@ export function inferHistory(obs, { extent = 4000, localFolds = false } = {}) {
   }
 
   return { verdict, events, misfit: m, notes, warnings };
+}
+
+/**
+ * The dikes, as events, from the lines drawn for them.
+ *
+ * A dike is drawn as ONE line — a centreline, the way a sheet a few metres
+ * across is drawn on any map at a scale where the map is readable. So the
+ * trace answers what a trace can answer and the line card answers the rest:
+ *
+ *   strike     from the trace, always
+ *   dip        from the way the trace wanders across the topography, if the
+ *              ground has the relief to say; otherwise from what the mapper
+ *              measured; otherwise vertical, and said
+ *   thickness  from the line card. Nothing on a map can give it — the line
+ *              IS the dike, drawn at whatever width the screen draws lines
+ *   rock       from the line card. No geometry has ever implied a lithology
+ *
+ * All of which is the fault path exactly, minus the parts of a fault that only
+ * a fault has, so `faultFromTrace` does the work for both.
+ *
+ * One wrinkle worth knowing. A dike event hangs its plane on (centreX, centreY)
+ * at z = 0, not on the trace's own centroid, so a dipping sheet anchored at the
+ * trace's mean height would come out displaced sideways by the height it was
+ * anchored at. The anchor is slid back along the plane's own normal to undo
+ * that, which is exact and costs one division — except as the dip goes flat,
+ * where the slide runs away because a horizontal sheet's position is a HEIGHT
+ * and the event has nowhere to put one. That is a limit of the event and not
+ * of the arithmetic, so it is clamped and said rather than quietly obeyed.
+ */
+function dikeEvents(obs, extent, notes, warnings) {
+  const out = [];
+  for (const ln of dikeLinesOf(obs)) {
+    const label = ln.name || 'Dike';
+    const given = Number.isFinite(ln.dip) ? { dip: ln.dip, dipDir: ln.dipDir } : null;
+    const plane = faultFromTrace(ln.pts, given);
+    const { normal } = planeFrame(plane.strike, plane.dip);
+
+    // Slide the anchor along the normal so the plane still passes through the
+    // trace. sin(dip) squared is the horizontal part of the normal, and it is
+    // what vanishes as the sheet lies down.
+    const flat = normal[0] * normal[0] + normal[1] * normal[1];
+    let shift = flat > 1e-6 ? (normal[2] * plane.centerZ) / flat : 0;
+    if (Math.abs(shift) > extent) {
+      shift = 0;
+      warnings.push(`${label} dips at only ${Math.round(plane.dip)}°, and a sheet that flat is placed by its height rather than by where its trace runs. The block puts it through the middle of the trace at the block's own datum, which is the best this kind of event can do — check where it sits in a section before reading anything off it.`);
+    }
+
+    const thickness = Number.isFinite(ln.thickness) && ln.thickness > 0
+      ? ln.thickness : DEFAULT_DIKE_THICKNESS;
+    const ev = makeEvent('dike', {
+      strike: plane.strike, dip: plane.dip,
+      centerX: plane.centerX + shift * normal[0],
+      centerY: plane.centerY + shift * normal[1],
+      thickness,
+      rockId: ln.rockId || DEFAULT_DIKE_ROCK,
+      name: label,
+    });
+    out.push(ev);
+
+    // Said in the terms it came from, the way a fault's plane is.
+    if (plane.source === 'measured') {
+      notes.push(`${label}: ${Math.round(plane.strike)}/${Math.round(plane.dip)}, as you measured it.`);
+    } else if (plane.determined) {
+      notes.push(`${label}: ${Math.round(plane.strike)}/${Math.round(plane.dip)}, from where its trace crosses the topography.`);
+    } else {
+      warnings.push(`${label} has no dip: its trace ${plane.reason === 'relief' ? 'crosses too little relief' : 'runs too straight'} to give one. It is taken as vertical, which is an assumption. Set its dip on the line itself and the fit will use that instead.`);
+    }
+    if (!Number.isFinite(ln.thickness) || ln.thickness <= 0) {
+      notes.push(`${label} is drawn ${DEFAULT_DIKE_THICKNESS} m wide, which is the default and not a measurement — a dike is one line on the map and a line cannot say how wide the sheet is. Set its thickness on the line card.`);
+    }
+    notes.push(`${label} is placed last in the history, so it cuts everything. Nothing on the map was read to decide that: if it is older than the fold or a fault, drag it earlier on the History tab and it will be folded and offset accordingly.`);
+  }
+  return out;
 }
 
 /**

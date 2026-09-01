@@ -98,6 +98,10 @@ export function projectNotes(doc, g, ground) {
       dip: Number.isFinite(ln.dip) ? ln.dip : null,
       dipDir: Number.isFinite(ln.dipDir) ? ln.dipDir : null,
       sense: ln.sense || '',
+      // A dike is drawn as a centreline, so these two are the whole of what
+      // the map cannot say about it: how wide the sheet is, and what it is.
+      thickness: Number.isFinite(ln.thickness) ? ln.thickness : null,
+      rockId: ln.rockId || '',
       // Neither a traverse nor a map boundary is evidence about the rock: one
       // is where somebody walked and the other is where they stopped looking.
       // The boundary still bounds the shading — that is read off `kind`, not
@@ -365,6 +369,22 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
     cutE: 0, cutN: 0,
   };
   doc.events = fit.events;
+
+  // A dike reaches through the whole block.
+  //
+  // The event carries its own top and bottom, and the fit cannot fill them in:
+  // it is handed the footprint and the mapping, and the block's depth is not
+  // decided until here — it depends on how deep the structure the fit just
+  // returned reaches. So the sheet is given the box it ended up in, with a
+  // margin at each end so it crops out cleanly rather than stopping just under
+  // the turf. Anyone wanting a blind intrusion lowers the top afterwards,
+  // which is what that control is for.
+  const margin = Math.max(50, doc.block.height * 0.1);
+  for (const ev of doc.events) {
+    if (ev.type !== 'dike') continue;
+    ev.topZ = Math.round(relief.hi + margin);
+    ev.bottomZ = Math.round(relief.lo - doc.block.height - margin);
+  }
   if (built.layers.length) doc.layers = built.layers;
 
   // The stations go on as the block's own markers, so the readings a student
@@ -464,6 +484,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
       faultObs: notes.faultObs.length,
       surfaces: contactGroups(notes).length,
       faults: notes.lines.filter((l) => l.kind === 'fault').length,
+      dikes: notes.lines.filter((l) => l.kind === 'dike').length,
     },
     ground: { missing: got.missing, tiles: got.tiles, zoom: got.zoom },
     // The misfit as built, to hold "now" against.
@@ -485,6 +506,7 @@ export async function cutBlock(fieldDoc, bbox, { allowNetwork = true, onProgress
         surfaces: contactGroups(notes).length,
         contactLines: notes.lines.filter((l) => l.kind === 'contact' || l.kind === 'unconformity').length,
         faults: notes.lines.filter((l) => l.kind === 'fault').length,
+        dikes: notes.lines.filter((l) => l.kind === 'dike').length,
       },
       georef: g,
       notesInBlock: notes,

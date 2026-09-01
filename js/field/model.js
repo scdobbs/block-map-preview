@@ -377,9 +377,9 @@ export function makeLine(over = {}) {
     // where the beds are the right way up.
     unitUpper: '',
     unitLower: '',
-    // Faults only, and null until somebody measures them.
+    // Faults and dikes, and null until somebody measures them.
     //
-    // A fault trace is the intersection of the fault plane with the ground, so
+    // A trace is the intersection of the plane with the ground, so
     // where the ground has relief the trace gives the dip for free. Where it
     // does not — a straight trace across a flat bench — every plane through
     // that line fits it equally well, and the fit is reduced to calling the
@@ -395,6 +395,13 @@ export function makeLine(over = {}) {
     dipDir: null,
     // One of FAULT_SENSES. '' is not sure, which is a real answer.
     sense: '',
+    // Dikes only. A dike is drawn as a centreline — one line, the way a thin
+    // sheet is drawn on any map at any useful scale — so its width is the one
+    // thing the trace cannot give, and what it is made of is the one thing no
+    // geometry can. Both null until asked for; the fit says what it assumed
+    // when they are.
+    thickness: null,
+    rockId: '',
     note: '',
     at: new Date().toISOString(),
     ...over,
