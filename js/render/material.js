@@ -39,6 +39,8 @@ export class BlockMaterial {
       uLightDir: { value: new THREE.Vector3(0.45, -0.62, 0.65).normalize() },
       uSamples: { value: 4 },
       uExag: { value: 1 },
+      uFaultInk: { value: 0 },
+      uFaultReach: { value: 0 },
       uContourInterval: { value: 0 },
       uContourDatum: { value: 0 },
       uContourIndexEvery: { value: 5 },
@@ -111,6 +113,14 @@ export class BlockMaterial {
     // Real ground carries its height above sea level; an invented landform is
     // its own datum and has none.
     u.uContourDatum.value = doc.topo.datum || 0;
+
+    // The fault trace. Its half-width is in pixels, so it holds its weight at
+    // any zoom; its reach is in metres and only has to be generous enough to
+    // clear the widest the line can get while still being far short of the
+    // block, which is what stops a younger fault's tear being inked as a
+    // structure of its own. See main() in geo/glsl.js.
+    u.uFaultInk.value = s.showFaults === false ? 0 : 1.6;
+    u.uFaultReach.value = Math.max(20, Math.max(doc.block.width, doc.block.depth) * 0.02);
 
     if (s.showContours === false) {
       u.uContourInterval.value = 0;

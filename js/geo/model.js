@@ -288,6 +288,11 @@ export function defaultDocument() {
       quality: 'auto',      // 'auto' | 'high' | 'low'
       showCompass: true,
       showEventGuides: true,
+      // A fault is a surface and not a unit, so nothing about the rock either
+      // side of it says where it runs. On by default because a block with an
+      // offset in it and no line to read the offset against is a puzzle with
+      // its own answer left out.
+      showFaults: true,
       showContours: true,
       showMarkers: true,
       markerSize: 1,

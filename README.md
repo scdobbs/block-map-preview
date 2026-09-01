@@ -1386,6 +1386,36 @@ Two consequences worth knowing:
 - **Order matters, exactly as it does in the field.** Move a fault later in
   the history and it starts cutting the fold instead of being folded by it.
 
+### The fault trace, in red
+
+A fault is a surface and not a unit, so nothing about the rock either side of
+it says where it runs — a block with an offset in it and no line to read the
+offset against is a puzzle with its own answer left out. So the walk remembers
+how close it passed to each fault plane it reached, and the trace is inked from
+that: red, on the cut faces and across the ground, at a constant weight in
+pixels however far the block is zoomed.
+
+Inked *over* the rock rather than replacing it, the same relation the contour
+lines already have to the ground they are drawn on. The block still says
+limestone under the line and the identify tool still answers limestone, which
+is right: the fault is a surface through the limestone, not a rock of its own.
+
+Taking the distance inside the walk is what makes the trace stop in the right
+places for nothing. `rockSample` has already returned if the point is inside a
+younger intrusion or above a younger unconformity, so a fault buried under
+cover it never cut is never reached and never inked — the rule `reachEvent`
+implements for the cross-section, arrived at here by not doing anything rather
+than by checking.
+
+Two guards, and both are load-bearing. A younger fault **tears** this field: it
+carried one wall of the older structure away from the other, so the distance
+genuinely jumps across it. The screen-space measure reads that jump as an
+enormous gradient and would happily ink a line lying along the younger fault,
+saying the two are the same surface — which is the marching-squares bridging
+problem from the cross-section wearing a different hat. A cap in metres kills
+it, because the far side of a tear is nowhere near the plane. The other guard
+is for a face seen edge-on, which has no gradient to divide by.
+
 ### A folded dike
 
 Vertical displacement is what keeps a fold and a dome exactly invertible, and

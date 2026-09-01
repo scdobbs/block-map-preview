@@ -197,8 +197,19 @@ function emitFault(p) {
   return {
     decl: `uniform vec3 ${p}_normal; uniform vec3 ${p}_center; uniform vec3 ${p}_slip;`,
     // Slip lies in the fault plane, so removing it cannot move a point across
-    // the plane — the hanging-wall test is the same before and after.
-    code: `  if (dot(p - ${p}_center, ${p}_normal) > 0.0) p -= ${p}_slip;`,
+    // the plane — the hanging-wall test is the same before and after, and so
+    // is the distance to it, which is why `faultD` can be read either side of
+    // the line below.
+    //
+    // That distance is the whole of what the red trace is drawn from. Taking
+    // it HERE, inside the walk, is what makes the trace stop in the right
+    // places for free: the walk has already returned if this point is inside a
+    // younger intrusion or above a younger unconformity, so a fault buried
+    // under cover it never cut is never reached and never inked. That is the
+    // same rule `reachEvent` implements for the cross-section, arrived at by
+    // not doing anything rather than by checking.
+    code: `  faultD = min(faultD, abs(dot(p - ${p}_center, ${p}_normal)));
+  if (dot(p - ${p}_center, ${p}_normal) > 0.0) p -= ${p}_slip;`,
   };
 }
 
@@ -430,6 +441,11 @@ uniform vec3  uLightDir;
 uniform float uSamples;
 uniform float uExag;
 
+// Half-width of a fault trace in PIXELS, or zero for not drawn, and the
+// distance in metres beyond which it is not a trace at all. See main().
+uniform float uFaultInk;
+uniform float uFaultReach;
+
 uniform float uContourInterval;
 uniform float uContourIndexEvery;
 // Height of the block's zero above sea level. Zero for an invented landform,
@@ -480,12 +496,21 @@ vec4 pickLayer(float depth, int lo, int hi, bool infill, out float uid) {
   return vec4(uBasementColor, uBasementPattern);
 }
 
-/** Run the history backwards and report the rock at P. */
-vec4 rockSample(vec3 P, out float uid) {
+/**
+ * Run the history backwards and report the rock at P.
+ *
+ * faultD comes back as how close the walk passed to the nearest fault plane it
+ * actually reached, in metres, or a very large number if it reached none. The
+ * trace is inked from it in main(); see the note in emitFault.
+ *
+ * (No backticks in here: this whole block sits inside a JS template literal.)
+ */
+vec4 rockSample(vec3 P, out float uid, out float faultD) {
   vec3 p = P;
   int lo = 0;
   int hi = uLayerCount;
   uid = 0.0;
+  faultD = 1.0e9;
 ${body.join('\n')}
   return pickLayer(-p.z, lo, hi, false, uid);
 }
@@ -500,7 +525,8 @@ void main() {
   vec3 ddy = dFdy(vWorld);
 
   float uid0;
-  vec4 c0 = rockSample(vWorld, uid0);
+  float faultD;
+  vec4 c0 = rockSample(vWorld, uid0, faultD);
   vec3 col = c0.rgb;
   float edge = 0.0;
 
@@ -509,7 +535,8 @@ void main() {
     for (int s = 0; s < 3; s++) {
       vec2 o = s == 0 ? vec2(0.32, 0.11) : (s == 1 ? vec2(-0.11, 0.32) : vec2(-0.29, -0.27));
       float uidS;
-      vec4 cs = rockSample(vWorld + ddx * o.x + ddy * o.y, uidS);
+      float fdS;
+      vec4 cs = rockSample(vWorld + ddx * o.x + ddy * o.y, uidS, fdS);
       acc += cs.rgb;
       edge += step(0.5, abs(uidS - uid0));
     }
@@ -539,12 +566,39 @@ void main() {
   // disagree, we are straddling a boundary.
   col = mix(col, col * 0.25, edge * uContactStrength);
 
+  // The fault trace, inked over the rock rather than replacing it. A fault is
+  // a surface and not a unit, so the block still says limestone under the
+  // line, and the identify tool still answers limestone — the same relation
+  // the contour lines already have to the ground they are drawn on.
+  //
+  // Measured in screen space, like those contours, so the trace keeps its
+  // weight whether the block fills the screen or sits in the corner of it.
+  // faultD grows by fwidth(faultD) per pixel, so their ratio is a distance in
+  // pixels and the line can be as many wide as it is asked for.
+  float faultInk = 0.0;
+  if (uFaultInk > 0.0) {
+    float fw = fwidth(faultD);
+    // Two guards, and both are needed. A younger fault TEARS this field: it
+    // carried one wall of the older structure away from the other, so faultD
+    // genuinely jumps across it, fwidth reads that jump as an enormous
+    // gradient, and the pixel-space test would happily ink a line lying along
+    // the younger fault — saying the two are the same surface. The metre-space
+    // reach kills that, because the far side of a tear is nowhere near the
+    // plane. And a face seen edge-on has no gradient at all, where the ratio
+    // would divide by nothing.
+    if (fw > 1e-6 && faultD < uFaultReach) {
+      faultInk = 1.0 - smoothstep(uFaultInk - 0.5, uFaultInk + 0.5, faultD / fw);
+    }
+  }
+
   // Lighting: a warm key, a cool sky fill, and a touch of ground bounce.
   vec3 L = normalize(uLightDir);
   float key = max(0.0, dot(n, L));
   float sky = 0.5 + 0.5 * n.z;
   vec3 lit = col * (0.34 + 0.62 * key) + col * sky * 0.22;
   lit += vec3(0.05, 0.045, 0.04) * pow(max(0.0, 1.0 - abs(dot(n, normalize(vec3(0.0, 0.0, 1.0))))), 3.0);
+
+  if (faultInk > 0.002) lit = mix(lit, vec3(1.0, 0.42, 0.42), faultInk);
 
   // Contours, on the land surface only. Spacing is measured in screen space
   // via fwidth, so the lines keep a constant on-screen weight at any zoom and

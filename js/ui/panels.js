@@ -1526,6 +1526,12 @@ export function viewPanel(ctx) {
       onChange: (v) => ctx.store.edit((d) => { d.settings.showContacts = v; }, { structural: false }),
     }));
     root.appendChild(toggleRow({
+      label: 'Fault traces', value: doc.settings.showFaults !== false,
+      hint: 'Red where a fault cuts the block, on the faces and across the ground.',
+      onChange: (v) => ctx.store.edit((d) => { d.settings.showFaults = v; },
+        { structural: false }),
+    }));
+    root.appendChild(toggleRow({
       label: 'Event guides', value: doc.settings.showEventGuides !== false,
       hint: 'The plane or axes of whichever event is open in History. Turn off for a clean map.',
       onChange: (v) => ctx.store.edit((d) => { d.settings.showEventGuides = v; },
