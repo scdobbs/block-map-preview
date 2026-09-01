@@ -12,7 +12,8 @@
 // the drawing makes, not something baked in here, so a thickness measured off
 // this grid is a real thickness.
 
-import { rockAt } from './unmake.js';
+import { rockAt, undoAfter } from './unmake.js';
+import { traceContours, chainSegments } from './marching.js';
 import { surfaceHeight, surfaceRange } from './surfaces.js';
 import { rock, sliceCut } from './model.js';
 import { wrap360, RAD, DEG } from './math.js';
@@ -161,41 +162,201 @@ export function sectionPalette(h, doc) {
 }
 
 /**
- * Where a plane cuts the section, as a segment in (distance, elevation).
+ * Where the faults, dike walls and erosion surfaces meet the section, as
+ * polylines in (distance, elevation).
  *
- * A plane meets a vertical plane in a straight line, so this is exact rather
- * than traced: substitute the section's parametrisation into the plane
- * equation and what is left is a·s + b·z + d = 0. A vertical fault gives
- * b = 0 and comes out as a vertical line, with no special case for it.
+ * The thing to get right here is that a structure is not where it was made.
+ * A fault plane is planar in the frame it cut, an erosion surface is a
+ * heightfield in the frame it eroded — and every event YOUNGER than either has
+ * moved it since. Fold a faulted block and the fault folds with it; intrude
+ * through an unconformity and the unconformity is cut. Drawing a fault as the
+ * plane it started as puts a straight red line through rock that is offset
+ * along a curve, and says the deformation stopped happening at the fault.
  *
- * Returns null when the plane misses the drawn frame.
+ * There is no forward map to draw them with, and there is not meant to be:
+ * the whole model is built out of inverses, so that each event only ever has
+ * to be undone (see unmake.js). But an inverse is all this needs. A structure
+ * is the set of points that land ON it once the younger events are undone, so
+ * sampling `undoAfter` over the section and contouring the result at zero
+ * gives the trace — and gives it in exactly the frame `rockAt` asked its own
+ * question in, which is why the drawn line lands on the raster's own
+ * discontinuity rather than near it.
+ *
+ * `cols` and `rows` are the tracing grid, not the section's raster: a fault
+ * trace is a smooth curve and does not need a sample per pixel to look like
+ * one.
  */
-export function planeTrace(frame, normal, center) {
-  const a = frame.ux * normal[0] + frame.uy * normal[1];
-  const b = normal[2];
-  const d = (frame.ax - center[0]) * normal[0]
-    + (frame.ay - center[1]) * normal[1]
-    - center[2] * normal[2];
-  return clipLineToRect(a, b, d, 0, frame.len, frame.z0, frame.z1);
+export function structureTraces(h, frame, cols = 190, rows = 140) {
+  const out = [];
+  const dz = (frame.z1 - frame.z0) / rows;
+  // Which unconformities are doing anything. One that claims no units the
+  // younger ones left it is not a surface in the block at all — `rockAt` walks
+  // straight past it — and a line drawn for it would mark a contact that is
+  // not there. The walk is youngest-first because that is the order the
+  // clamping happened in.
+  const inert = new Set();
+  let lo = 0;
+  for (let k = h.events.length - 1; k >= 0; k--) {
+    const e = h.events[k];
+    if (e.type !== 'unconformity') continue;
+    if (e.aboveCount <= lo) inert.add(e.id);
+    else lo = e.aboveCount;
+  }
+
+  // Pass one: sample every structure's field over the section.
+  const fields = [];
+  for (let k = 0; k < h.events.length; k++) {
+    const e = h.events[k];
+    if (inert.has(e.id)) continue;
+    const field = structureField(e);
+    if (!field) continue;
+    const g = new Float32Array(cols * rows);
+    for (let j = 0; j < rows; j++) {
+      const z = frame.z1 - (j + 0.5) * dz;
+      for (let i = 0; i < cols; i++) {
+        const s = ((i + 0.5) / cols) * frame.len;
+        const [x, y] = frame.at(s);
+        g[j * cols + i] = field(undoAfter(h, [x, y, z], k));
+      }
+    }
+    fields.push({ k, e, g });
+  }
+
+  // Pass two: contour each, minus the cells a younger fault has torn.
+  //
+  // A fault younger than a structure carries one wall of it away from the
+  // other, so the field is genuinely DISCONTINUOUS across that fault — which
+  // is correct, and is the whole content of "the fault cuts the unconformity".
+  // Marching squares cannot know that. It sees the two halves at very
+  // different values, finds a sign change between them, and draws a contour
+  // bridging the gap: a green dashed line lying exactly along the fault,
+  // saying the fault is an unconformity. So a cell whose corners are not all
+  // in the same fault block is not contoured, and the trace comes out as the
+  // two pieces the fault actually left.
+  const faults = fields.filter((x) => x.e.type === 'fault');
+  for (const { k, e, g } of fields) {
+    const torn = faults.filter((x) => x.k > k).map((x) => x.g);
+    const runs = [];
+    for (const { seg } of traceContours(g, cols, rows, [0])) {
+      for (const run of chainSegments(seg)) {
+        for (const piece of splitAtTears(run, torn, cols, rows)) {
+          runs.push(piece.map(([gx, gy]) => [
+            ((gx + 0.5) / cols) * frame.len,
+            frame.z1 - (gy + 0.5) * dz,
+          ]));
+        }
+      }
+    }
+    if (runs.length) out.push({ id: e.id, kind: e.type, name: e.name, runs });
+  }
+  return out;
 }
 
-/** The part of a·s + b·z + d = 0 inside a rectangle, or null. */
-function clipLineToRect(a, b, d, s0, s1, z0, z1) {
-  const hits = [];
-  const add = (s, z) => {
-    if (s < s0 - 1e-6 || s > s1 + 1e-6 || z < z0 - 1e-6 || z > z1 + 1e-6) return;
-    if (hits.some((p) => Math.hypot(p[0] - s, p[1] - z) < 1e-6)) return;
-    hits.push([s, z]);
+/**
+ * Break a traced run wherever it passes through a cell that straddles a
+ * younger fault, and drop that point. `torn` holds those faults' own fields,
+ * whose sign is which wall a sample sits on.
+ */
+function splitAtTears(run, torn, cols, rows) {
+  const keep = [];
+  if (!torn.length) return run.length > 1 ? [run] : [];
+
+  const whole = (gx, gy) => {
+    const i0 = Math.max(0, Math.min(cols - 2, Math.floor(gx)));
+    const j0 = Math.max(0, Math.min(rows - 2, Math.floor(gy)));
+    for (const t of torn) {
+      const a = t[j0 * cols + i0] > 0;
+      if ((t[j0 * cols + i0 + 1] > 0) !== a) return false;
+      if ((t[(j0 + 1) * cols + i0] > 0) !== a) return false;
+      if ((t[(j0 + 1) * cols + i0 + 1] > 0) !== a) return false;
+    }
+    return true;
   };
-  if (Math.abs(b) > 1e-9) {
-    add(s0, -(a * s0 + d) / b);
-    add(s1, -(a * s1 + d) / b);
+
+  let cur = [];
+  for (const p of run) {
+    if (whole(p[0], p[1])) { cur.push(p); continue; }
+    if (cur.length > 1) keep.push(cur);
+    cur = [];
   }
-  if (Math.abs(a) > 1e-9) {
-    add(-(b * z0 + d) / a, z0);
-    add(-(b * z1 + d) / a, z1);
+  if (cur.length > 1) keep.push(cur);
+  return keep;
+}
+
+/**
+ * A signed field that is zero on the structure and read in the structure's own
+ * frame — the same quantity the corresponding test in unmake.js compares
+ * against, so the two cannot disagree.
+ */
+function structureField(e) {
+  switch (e.type) {
+    case 'fault': {
+      // `side` in undoEvent: which wall of the plane the point is on.
+      const n = e.normal;
+      return (p) => (p[0] - e.centerX) * n[0]
+        + (p[1] - e.centerY) * n[1]
+        + (p[2] - e.centerZ) * n[2];
+    }
+    case 'dike': {
+      // The dike is a slab crossed with a depth range, so its boundary is the
+      // largest of the three distances — negative only inside all of them.
+      const n = e.normal;
+      const half = Math.max(1, e.thickness) * 0.5;
+      const zTop = Math.max(e.topZ, e.bottomZ);
+      const zBot = Math.min(e.topZ, e.bottomZ);
+      return (p) => Math.max(
+        Math.abs((p[0] - e.centerX) * n[0] + (p[1] - e.centerY) * n[1] + p[2] * n[2]) - half,
+        p[2] - zTop,
+        zBot - p[2],
+      );
+    }
+    case 'unconformity':
+      // Height above the erosion surface. The compiled event already carries
+      // the derived datum, so this is the surface rockAt actually tests.
+      return (p) => p[2] - surfaceHeight(e.surface, p[0], p[1]);
+    default:
+      return null;
   }
-  return hits.length >= 2 ? [hits[0], hits[1]] : null;
+}
+
+/**
+ * Cut polylines back to the rock: the part of a trace above the land surface
+ * is in the air, and nothing is there to be a fault or an unconformity.
+ * Returns a new list of runs, split wherever one crosses the ground.
+ */
+export function clipRunsToGround(runs, groundAt) {
+  const out = [];
+  for (const run of runs) {
+    let cur = [];
+    for (let i = 0; i < run.length; i++) {
+      const p = run[i];
+      const under = p[1] <= groundAt(p[0]);
+      if (under) { cur.push(p); continue; }
+      // Leaving the rock: end on the ground rather than at the last sample.
+      if (cur.length) {
+        const q = run[i - 1];
+        cur.push(crossGround(q, p, groundAt));
+        out.push(cur);
+        cur = [];
+      }
+      // Coming back in on the next step is handled when that step is under.
+      const nx = run[i + 1];
+      if (nx && nx[1] <= groundAt(nx[0])) cur.push(crossGround(p, nx, groundAt));
+    }
+    if (cur.length > 1) out.push(cur);
+  }
+  return out;
+}
+
+/** Bisect for where the segment a-b meets the ground. */
+function crossGround(a, b, groundAt) {
+  let lo = a;
+  let hi = b;
+  for (let i = 0; i < 12; i++) {
+    const m = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2];
+    if (m[1] <= groundAt(m[0])) lo = m; else hi = m;
+  }
+  return lo;
 }
 
 /**

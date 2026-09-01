@@ -306,8 +306,8 @@ the four walls. On it:
 - **contacts** are inked wherever two different units meet, which includes the
   ones a fault makes by putting one unit against another — that is what makes
   an offset visible even where the same unit sits on both sides
-- **faults** are drawn in red and **dike walls** in blue, as the straight lines
-  a plane makes where it meets a vertical plane
+- **faults** are drawn in red and **dike walls** in blue, folded and offset by
+  whatever happened to them after they formed
 - **unconformities** are the dashed green line, with the older beds visibly
   truncated against it
 - **stations** near the line are projected on to it and drawn at their
@@ -1761,12 +1761,33 @@ document changes. A few dozen is nothing; a few thousand would not be.
   block's lid — so neither can drift out of agreement with the block it was
   cut from. If the section and the block face ever disagreed, the bug would be
   in the history, not in the drawing.
-- **Faults and dike walls are drawn exactly, not traced.** A plane meets a
-  vertical plane in a straight line, so substituting the section's
-  parametrisation into the plane equation leaves `a·s + b·z + d = 0`, which is
-  clipped to the frame. A vertical fault falls out as `b = 0` with no special
-  case, and the drawn line lands on the raster's own discontinuity to within a
-  metre.
+- **A structure is not where it was made.** A fault plane is planar in the
+  frame it cut and an erosion surface is a heightfield in the frame it eroded,
+  and every event *younger* than either has moved it since. Fold a faulted
+  block and the fault folds with it. Drawing a fault as the plane it started as
+  puts a straight red line through rock that is offset along a curve, and says
+  the deformation politely stopped at the fault.
+- **They are found with the same inverse the rest of the model is built on.**
+  There is no forward map here, and there is not meant to be — the point of
+  unmaking is that each event only ever has to be undone. But an inverse is
+  all this needs: a structure is the set of points that land *on* it once the
+  younger events are undone, so sampling `undoAfter` over the section and
+  contouring at zero gives the trace, in exactly the frame `rockAt` asked its
+  own question in. Measured against the field it contours, the drawn lines are
+  within 0.03 m — a fault carried through a plunging fold and a tilt, and a
+  dike carried through a fold and a fault.
+- **A younger fault tears the field, and the tear must not be contoured.** The
+  fault carries one wall of an older structure away from the other, so the
+  field really is discontinuous across it — which is the whole content of "the
+  fault cuts the unconformity". Marching squares cannot know that: it sees the
+  two halves at very different values, finds a sign change between them, and
+  bridges the gap with a green dashed line lying exactly along the fault,
+  saying the fault is an unconformity. So a cell whose corners are not all in
+  the same fault block is not contoured, and the trace comes out as the two
+  pieces the fault actually left it in.
+- **Traces stop at the land surface.** Nothing is a fault where there is no
+  rock, so a trace is cut back at the skyline rather than carrying on into the
+  air above it.
 - **The section's roof comes from the ground along that line**, not from the
   highest point in the block. A section down a valley should not spend half
   its height on the sky over a summit two kilometres away.

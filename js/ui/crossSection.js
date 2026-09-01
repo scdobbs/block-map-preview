@@ -12,13 +12,14 @@
 
 import { el, clear } from './widgets.js';
 import { footprint } from '../render/block.js';
-import { surfaceHeight, isDemSurface } from '../geo/surfaces.js';
-import { planeFrame, DEG, clamp, quadrantBearing } from '../geo/math.js';
-import { unconformityDatums, sliceCut } from '../geo/model.js';
+import { isDemSurface } from '../geo/surfaces.js';
+import { DEG, clamp, quadrantBearing } from '../geo/math.js';
+import { sliceCut } from '../geo/model.js';
 import { rockAt } from '../geo/unmake.js';
 import {
   sectionLine, sectionFrame, sectionPalette, sampleSection, groundProfile,
-  planeTrace, projectReadings, lidAt, SKY, BASEMENT, INTRUSION,
+  structureTraces, clipRunsToGround, projectReadings, lidAt,
+  SKY, BASEMENT, INTRUSION,
 } from '../geo/section.js';
 
 const FONT = '11px system-ui, -apple-system, sans-serif';
@@ -46,6 +47,13 @@ const VE_STEPS = [
   { v: 5, label: '×5' },
 ];
 
+/** How each kind of structure is inked on the section. */
+const STRUCTURE_STYLE = {
+  fault: { color: FAULT, halo: 3.6, width: 1.8, dash: [] },
+  dike: { color: '#8ecae6', halo: 2.4, width: 1.1, dash: [] },
+  unconformity: { color: UNCONF, halo: 3.2, width: 1.5, dash: [6, 3] },
+};
+
 // How much detail the raster is drawn at. Dragging an endpoint redraws on
 // every pointer move, and a full-resolution walk of the history per pixel is
 // not something to do sixty times a second — so a drag gets the coarse grid
@@ -60,6 +68,7 @@ export class CrossSection {
     this.ctx = ctx;
     this.showStations = true;
     this._raster = null;          // { key, cols, rows, canvas }
+    this._traces = null;          // { key, list } — faults, dikes, unconformities
     this._mapRaster = null;
     this._caption = '';           // what the last tap on the section identified
     this._quick = false;
@@ -267,7 +276,7 @@ export class CrossSection {
     g.beginPath();
     g.rect(ox, oy, plotW, plotH);
     g.clip();
-    this._drawStructures(g, doc, frame, PX, PZ);
+    this._drawStructures(g, doc, h, frame, PX, PZ, quick);
     this._drawGroundLine(g, doc, frame, PX, PZ, plotW);
     if (this.showStations) this._drawStations(g, frame, PX, PZ);
     g.restore();
@@ -360,60 +369,52 @@ export class CrossSection {
     return { canvas: off, cols, rows, present };
   }
 
-  /** Faults and erosion surfaces, drawn as the lines they are. */
-  _drawStructures(g, doc, frame, PX, PZ) {
-    const datums = unconformityDatums(doc);
-    for (const e of doc.events) {
-      if (e.enabled === false) continue;
+  /**
+   * Faults, dike walls and erosion surfaces, drawn where the history has since
+   * put them rather than where they were made — see structureTraces.
+   */
+  _drawStructures(g, doc, h, frame, PX, PZ, quick) {
+    // Coarser under a moving finger, like the raster, and cached on the same
+    // terms so a repaint that changes nothing costs nothing.
+    const cols = quick ? 90 : 190;
+    const rows = quick ? 70 : 140;
+    const key = JSON.stringify([
+      h.events.map((e) => [e.type, e.id]), doc.events, doc.layers.length,
+      [frame.ax, frame.ay, frame.bx, frame.by, frame.z0, frame.z1], cols, rows,
+    ]);
+    if (!this._traces || this._traces.key !== key) {
+      this._traces = { key, list: structureTraces(h, frame, cols, rows) };
+    }
 
-      if (e.type === 'fault' || e.type === 'dike') {
-        const { normal } = planeFrame(e.strike, e.dip);
-        const centers = e.type === 'fault'
-          ? [[e.centerX, e.centerY, e.centerZ]]
-          : [-1, 1].map((s) => {
-            const t = (Math.max(1, e.thickness) * 0.5) * s;
-            return [e.centerX + normal[0] * t, e.centerY + normal[1] * t, normal[2] * t];
-          });
-        for (const c of centers) {
-          const seg = planeTrace(frame, normal, c);
-          if (!seg) continue;
-          g.beginPath();
-          g.moveTo(PX(seg[0][0]), PZ(seg[0][1]));
-          g.lineTo(PX(seg[1][0]), PZ(seg[1][1]));
-          g.setLineDash([]);
-          g.strokeStyle = 'rgba(10,14,18,.65)';
-          g.lineWidth = e.type === 'fault' ? 3.6 : 2.4;
-          g.stroke();
-          g.strokeStyle = e.type === 'fault' ? FAULT : '#8ecae6';
-          g.lineWidth = e.type === 'fault' ? 1.8 : 1.1;
-          g.stroke();
-        }
-        continue;
-      }
+    // Nothing is a fault where there is no rock, so the traces stop at the
+    // land surface instead of carrying on into the sky above the skyline.
+    const prof = groundProfile(doc, frame, 200);
+    const groundAt = (s) => {
+      const t = Math.min(200, Math.max(0, (s / frame.len) * 200));
+      const i = Math.min(199, Math.floor(t));
+      return prof[i] + (prof[i + 1] - prof[i]) * (t - i);
+    };
 
-      if (e.type === 'unconformity') {
-        const d = datums.get(e.id);
-        if (!d) continue;
-        const surf = { ...e.surface, base: d.base };
+    for (const t of this._traces.list) {
+      const style = STRUCTURE_STYLE[t.kind];
+      if (!style) continue;
+      for (const run of clipRunsToGround(t.runs, groundAt)) {
+        if (run.length < 2) continue;
         g.beginPath();
-        const n = 160;
-        for (let i = 0; i <= n; i++) {
-          const s = (frame.len * i) / n;
-          const [x, y] = frame.at(s);
-          const z = surfaceHeight(surf, x, y);
-          if (i) g.lineTo(PX(s), PZ(z)); else g.moveTo(PX(s), PZ(z));
-        }
+        run.forEach(([s, z], i) => (i ? g.lineTo(PX(s), PZ(z)) : g.moveTo(PX(s), PZ(z))));
+        g.lineJoin = 'round';
+        g.lineCap = 'round';
         g.setLineDash([]);
-        g.strokeStyle = 'rgba(10,14,18,.6)';
-        g.lineWidth = 3.2;
+        g.strokeStyle = 'rgba(10,14,18,.62)';
+        g.lineWidth = style.halo;
         g.stroke();
-        g.setLineDash([6, 3]);
-        g.strokeStyle = UNCONF;
-        g.lineWidth = 1.5;
+        g.setLineDash(style.dash);
+        g.strokeStyle = style.color;
+        g.lineWidth = style.width;
         g.stroke();
-        g.setLineDash([]);
       }
     }
+    g.setLineDash([]);
   }
 
   _drawGroundLine(g, doc, frame, PX, PZ, plotW) {
