@@ -5,6 +5,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { buildFragmentShader, VERTEX, uniformPrefix } from '../geo/glsl.js';
 import { MAX_LAYERS, rock, faultRake, unconformityDatums, atTime } from '../geo/model.js';
 import { planeFrame, axisFrame, azimuthVec, slipVec, DEG } from '../geo/math.js';
+import { intrusionTurn, turnNormal, turnZRange, plutonFrame } from '../geo/warp.js';
 import { KIND_CODE, surfaceUniform, surfaceRange, niceContourInterval } from '../geo/surfaces.js';
 
 const tmpColor = new THREE.Color();
@@ -123,7 +124,7 @@ export class BlockMaterial {
     const events = activeEvents(doc);
     const datums = unconformityDatums(doc);
     for (let i = 0; i < events.length; i++) {
-      setEventUniforms(u, uniformPrefix(i), events[i], datums);
+      setEventUniforms(u, uniformPrefix(i), events, i, datums);
     }
   }
 }
@@ -134,6 +135,7 @@ function addEventUniforms(u, p, e) {
   const V3 = () => ({ value: new THREE.Vector3() });
   const V4 = () => ({ value: new THREE.Vector4() });
   const V2 = () => ({ value: new THREE.Vector2() });
+  const M3 = () => ({ value: new THREE.Matrix3() });
   const F = () => ({ value: 0 });
 
   switch (e.type) {
@@ -155,7 +157,7 @@ function addEventUniforms(u, p, e) {
       u[`${p}_normal`] = V3(); u[`${p}_geom`] = V4(); u[`${p}_zrange`] = V2(); u[`${p}_rock`] = V4();
       break;
     case 'pluton':
-      u[`${p}_center`] = V3(); u[`${p}_radii`] = V3(); u[`${p}_az`] = F(); u[`${p}_rock`] = V4();
+      u[`${p}_center`] = V3(); u[`${p}_frame`] = M3(); u[`${p}_rock`] = V4();
       break;
     case 'unconformity':
       u[`${p}_s0`] = V4(); u[`${p}_s1`] = V4(); u[`${p}_s2`] = V4(); u[`${p}_above`] = F();
@@ -163,7 +165,8 @@ function addEventUniforms(u, p, e) {
   }
 }
 
-function setEventUniforms(u, p, e, datums) {
+function setEventUniforms(u, p, events, index, datums) {
+  const e = events[index];
   switch (e.type) {
     case 'tilt': {
       const { strikeVec } = planeFrame(e.strike, e.dip);
@@ -211,11 +214,17 @@ function setEventUniforms(u, p, e, datums) {
       break;
     }
     case 'dike': {
+      // The turn every younger fold gave the beds rides in on the plane itself:
+      // the normal pulled back through it, and the depth range stretched to
+      // match. compileHistory() bakes the very same numbers on the CPU side, so
+      // the two walks are the same arithmetic. See geo/warp.js.
+      const m = intrusionTurn(events, index);
       const { normal } = planeFrame(e.strike, e.dip);
+      const [lo, hi] = turnZRange(m, Math.min(e.bottomZ, e.topZ), Math.max(e.bottomZ, e.topZ));
       const r = rock(e.rockId);
-      u[`${p}_normal`].value.set(...normal);
+      u[`${p}_normal`].value.set(...turnNormal(m, normal));
       u[`${p}_geom`].value.set(e.centerX, e.centerY, Math.max(1, e.thickness) * 0.5, 0);
-      u[`${p}_zrange`].value.set(Math.min(e.bottomZ, e.topZ), Math.max(e.bottomZ, e.topZ));
+      u[`${p}_zrange`].value.set(lo, hi);
       const [cr, cg, cb] = rgb(r.color);
       u[`${p}_rock`].value.set(cr, cg, cb, r.pattern);
       break;
@@ -223,10 +232,9 @@ function setEventUniforms(u, p, e, datums) {
     case 'pluton': {
       const r = rock(e.rockId);
       u[`${p}_center`].value.set(e.centerX, e.centerY, e.centerZ);
-      u[`${p}_radii`].value.set(
-        Math.max(1, e.radiusX), Math.max(1, e.radiusY), Math.max(1, e.radiusZ),
-      );
-      u[`${p}_az`].value = (e.azimuth || 0) * DEG;
+      // Azimuth, radii and bed turn in one map — see plutonFrame(). Row-major
+      // there, and THREE.Matrix3.set() takes rows, so they line up.
+      u[`${p}_frame`].value.set(...plutonFrame(e, intrusionTurn(events, index)));
       const [cr, cg, cb] = rgb(r.color);
       u[`${p}_rock`].value.set(cr, cg, cb, r.pattern);
       break;

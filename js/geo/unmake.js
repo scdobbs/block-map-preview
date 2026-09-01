@@ -15,15 +15,25 @@
 //   fault  - rigid translation of the hanging wall parallel to the fault
 //            plane, so the side test is unchanged by the slip itself
 //
+// Moving rock straight up and down is what keeps a fold and a dome exactly
+// invertible, and it is the right picture for a bedded pile. It is the wrong
+// picture for a body that CUTS the pile, because vertical motion cannot turn a
+// vertical line — so an intrusion is carried through a younger warp by the
+// turn it gave the beds instead, baked into the body's own geometry at compile
+// time. See `intrusionTurn` in geo/warp.js.
+//
 // This module is the CPU twin of the generated shader in glsl.js. It exists
 // so the app can answer "what unit did I just tap on?" without a GPU
 // readback, and so the geology can be unit-tested. Keep the two in step.
 
 import {
   planeFrame, axisFrame, azimuthVec, slipVec, rotateAbout, normalToStrikeDip,
-  foldWarp, foldEnvelope, foldProfile, dot, sub, DEG,
+  dot, sub,
 } from './math.js';
 import { surfaceHeight } from './surfaces.js';
+import {
+  warpOffset, intrusionTurn, turnNormal, turnZRange, plutonFrame,
+} from './warp.js';
 import {
   cumulativeDepths, totalThickness, faultRake, unconformityDatums, atTime,
 } from './model.js';
@@ -75,6 +85,24 @@ export function compileHistory(doc0) {
     }
   });
 
+  // Second pass, because a body's geometry depends on what came AFTER it. Every
+  // warp younger than an intrusion turned the beds the intrusion cuts, and it
+  // was carried round with them — so the turn is folded into the body's own
+  // test here, once, rather than carried through every query. The generated
+  // shader is handed exactly these numbers as uniforms; see geo/warp.js.
+  for (let i = 0; i < compiled.length; i++) {
+    const e = compiled[i];
+    if (e.type === 'dike') {
+      const m = intrusionTurn(compiled, i);
+      if (!m) continue;
+      const [bottomZ, topZ] = turnZRange(m, e.bottomZ, e.topZ);
+      compiled[i] = { ...e, normal: turnNormal(m, e.normal), bottomZ, topZ };
+    } else if (e.type === 'pluton') {
+      // Always a matrix, turned or not, so the query path has one shape.
+      compiled[i] = { ...e, frame: plutonFrame(e, intrusionTurn(compiled, i)) };
+    }
+  }
+
   const cum = cumulativeDepths(doc.layers);
   return {
     events: compiled,
@@ -98,53 +126,19 @@ function undoEvent(e, p) {
     }
     case 'fold': {
       // Undo the plunge tilt first, then the upright fold beneath it.
+      //
+      // Rotating about `perp` leaves the `perp` component untouched, and the
+      // fold displaces along z, which is also orthogonal to `perp`. So the
+      // wave coordinate survives both steps and the inverse stays exact — and
+      // the displacement can be read off the point's map position alone, which
+      // is what `warpOffset` is.
       const cx = e.centerX || 0;
       const cy = e.centerY || 0;
       const d = rotateAbout([p[0] - cx, p[1] - cy, p[2]], e.perp, e.plunge || 0);
-      const k = (2 * Math.PI) / Math.max(1, e.wavelength);
-      // Rotating about `perp` leaves the `perp` component untouched, and the
-      // fold displaces along z, which is also orthogonal to `perp`. So the
-      // wave coordinate survives both steps and the inverse stays exact.
-      //
-      // The same argument is what lets the shape and the envelope in here at
-      // all, and it is the one thing that could quietly break, so both of the
-      // envelope's coordinates are taken from the UNROTATED offset and from
-      // its horizontal part alone. That is not a shortcut, it is the proof:
-      // `perp` and `az` are horizontal, so neither dot product below can see
-      // p[2] at all, and the displacement stays a function of position in plan.
-      //
-      // Reading them off `d` instead would be wrong, and silently so. Rotating
-      // about `perp` leaves the `perp` component alone — so the wave itself is
-      // identical either way — but it tilts `az` out of horizontal, and the
-      // along-axis coordinate of a plunging fold would then drift with depth.
-      // The envelope would fade with height rather than along strike, and the
-      // inverse would no longer be exact.
-      //
-      // A profile that genuinely depended on z — a fold dying out downward —
-      // would make the inverse implicit, and that is the one extension here
-      // that is not free.
-      const vx = p[0] - cx;
-      const vy = p[1] - cy;
-      const across = vx * e.perp[0] + vy * e.perp[1];
-      const along = vx * e.az[0] + vy * e.az[1];
-      const amp = e.amplitude
-        * foldEnvelope(along, across, e.reachAlong, e.reachAcross);
-      const off = amp * foldProfile(
-        foldWarp(k * across + (e.phase || 0) * DEG, e.vergence, e.hinge), e.profile,
-      );
-      return [d[0] + cx, d[1] + cy, d[2] - off];
+      return [d[0] + cx, d[1] + cy, d[2] - warpOffset(e, p[0], p[1])];
     }
-    case 'domebasin': {
-      const az = (e.azimuth || 0) * DEG;
-      const dx = p[0] - e.centerX;
-      const dy = p[1] - e.centerY;
-      // Rotate into the ellipse's own frame before normalizing the radii.
-      const ex = dx * Math.cos(az) - dy * Math.sin(az);
-      const ey = dx * Math.sin(az) + dy * Math.cos(az);
-      const t = Math.hypot(ex / Math.max(1, e.radiusA), ey / Math.max(1, e.radiusB));
-      const off = t >= 1 ? 0 : e.amplitude * 0.5 * (1 + Math.cos(Math.PI * t));
-      return [p[0], p[1], p[2] - off];
-    }
+    case 'domebasin':
+      return [p[0], p[1], p[2] - warpOffset(e, p[0], p[1])];
     case 'fault': {
       const c = [e.centerX, e.centerY, e.centerZ];
       // Slip is parallel to the plane, so this side test gives the same
@@ -222,18 +216,17 @@ function insideIntrusion(e, p) {
     return p[2] <= e.topZ && p[2] >= e.bottomZ;
   }
   if (e.type === 'pluton') {
-    const az = (e.azimuth || 0) * DEG;
+    // `frame` rolls the azimuth, the radii and the bed turn into one map, so
+    // the body is a plain unit ball in the space it lands in.
+    const m = e.frame;
     const dx = p[0] - e.centerX;
     const dy = p[1] - e.centerY;
-    const ex = dx * Math.cos(az) - dy * Math.sin(az);
-    const ey = dx * Math.sin(az) + dy * Math.cos(az);
-    const ez = p[2] - e.centerZ;
-    const t = Math.hypot(
-      ex / Math.max(1, e.radiusX),
-      ey / Math.max(1, e.radiusY),
-      ez / Math.max(1, e.radiusZ),
-    );
-    return t <= 1;
+    const dz = p[2] - e.centerZ;
+    return Math.hypot(
+      m[0] * dx + m[1] * dy + m[2] * dz,
+      m[3] * dx + m[4] * dy + m[5] * dz,
+      m[6] * dx + m[7] * dy + m[8] * dz,
+    ) <= 1;
   }
   return false;
 }

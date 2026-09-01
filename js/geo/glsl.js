@@ -206,6 +206,12 @@ function emitDike(p) {
   return {
     decl: `uniform vec3 ${p}_normal; uniform vec4 ${p}_geom; uniform vec2 ${p}_zrange; uniform vec4 ${p}_rock;`,
     // _geom = (centerX, centerY, halfThickness, unused), _rock = (rgb, patternId)
+    //
+    // A fold younger than the dike turned the beds the dike cuts, and carried
+    // the dike round with them. That turn rides in on these same uniforms:
+    // _normal is the plane pulled back through it (so it is NOT a unit vector
+    // — its length is what keeps the thickness measured in the dike's own
+    // frame) and _zrange is stretched to match. See geo/warp.js.
     code: `  if (abs(dot(p - vec3(${p}_geom.xy, 0.0), ${p}_normal)) <= ${p}_geom.z
       && p.z <= ${p}_zrange.y && p.z >= ${p}_zrange.x) {
     uid = ${p}_UID; return vec4(${p}_rock.rgb, ${p}_rock.w);
@@ -215,14 +221,13 @@ function emitDike(p) {
 
 function emitPluton(p) {
   return {
-    decl: `uniform vec3 ${p}_center; uniform vec3 ${p}_radii; uniform float ${p}_az; uniform vec4 ${p}_rock;`,
-    code: `  {
-    vec3 d = p - ${p}_center;
-    float ca = cos(${p}_az), sa = sin(${p}_az);
-    vec3 e = vec3(d.x * ca - d.y * sa, d.x * sa + d.y * ca, d.z);
-    if (length(e / max(vec3(1.0), ${p}_radii)) <= 1.0) {
-      uid = ${p}_UID; return vec4(${p}_rock.rgb, ${p}_rock.w);
-    }
+    decl: `uniform vec3 ${p}_center; uniform mat3 ${p}_frame; uniform vec4 ${p}_rock;`,
+    // _frame carries the azimuth, the radii and the turn any younger fold gave
+    // the beds (see geo/warp.js), so the body is a plain unit ball by the time
+    // it is tested. One matrix rather than three steps because the bed turn is
+    // a general 3x3 and does not decompose back into an azimuth and radii.
+    code: `  if (length(${p}_frame * (p - ${p}_center)) <= 1.0) {
+    uid = ${p}_UID; return vec4(${p}_rock.rgb, ${p}_rock.w);
   }`,
   };
 }

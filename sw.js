@@ -12,7 +12,7 @@
 // would not find out until they were standing in it with no signal. So the
 // tile cache is named without a version and listed here as untouchable.
 
-const CACHE = 'blockdiagram-v61';
+const CACHE = 'blockdiagram-v62';
 
 // Must match CACHE_NAME in js/field/tiles.js.
 const TILE_CACHE = 'field-tiles';
@@ -32,6 +32,7 @@ const ASSETS = [
   './js/geo/model.js',
   './js/geo/surfaces.js',
   './js/geo/unmake.js',
+  './js/geo/warp.js',
   './js/geo/section.js',
   './js/geo/stereonet.js',
   './js/geo/glsl.js',

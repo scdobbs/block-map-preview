@@ -1329,7 +1329,7 @@ Every deformation is exactly invertible, which is what makes this work:
 | **Dome / basin** | vertical displacement depending only on map position | map position is unchanged by vertical motion |
 | **Fault** | rigid translation of the hanging wall, parallel to the fault plane | slip lies in the plane, so the hanging-wall test gives the same answer before and after |
 | **Unconformity** | splits the column: units above the erosion surface skip all older history | a branch, not a transform |
-| **Dike / pluton** | paints rock inside a region, at its own point in the history | a test, not a transform |
+| **Dike / pluton** | paints rock inside a region, at its own point in the history | a test, not a transform — but see *A folded dike* below |
 
 Two consequences worth knowing:
 
@@ -1338,6 +1338,42 @@ Two consequences worth knowing:
 - **Order matters, exactly as it does in the field.** Move a fault later in
   the history and it starts cutting the fold instead of being folded by it.
 
+### A folded dike
+
+Vertical displacement is what keeps a fold and a dome exactly invertible, and
+for a bedded pile it is the right picture — it is a similar fold, and the beds
+come out with the same thickness on the limbs as at the hinge.
+
+It is the wrong picture for a body that *cuts* the pile, because moving rock
+straight up and down cannot turn a vertical line. A dike emplaced before a fold
+therefore came back out of the walk standing exactly as it went in: a pre-fold
+dike and a post-fold dike drew the same straight wall, and the one
+cross-cutting relation the picture exists to teach was unreadable.
+
+What a geologist reads off the outcrop is that a body carried through a fold
+keeps its angle to bedding. So an intrusion is carried through by the **turn**
+the fold gave the beds where it sits, rather than by the shear that made them —
+a vertical dike comes out square to the beds it cuts, and winding the History
+tab back across the fold stands it up again. `js/geo/warp.js` has the
+arithmetic; three things about it are worth knowing:
+
+- **One turn for the whole body, read at its own centre.** Reading the dip
+  afresh at every query point is the exact *everywhere square to bedding*
+  surface, and it is not usable: the orthogonal trajectories of a similar fold
+  converge on its axial plane, so past a certain depth the map stops being
+  one-to-one and a single dike comes out as two, or as a sliver. A rigid turn
+  is affine, so a dike stays one dike of the right thickness.
+- **A concordant sill stays concordant**, however far along the fold it runs —
+  the vertical part of the turn has no along-strike term in it at all. What
+  changes is that the sill keeps its *true* thickness rather than its vertical
+  one, so it reads `1/cos(dip)` thicker in a section across a steep limb.
+- **It costs nothing per query.** The turn depends only on where the body is,
+  so it is folded into the body's own geometry once, in `compileHistory` — the
+  dike's plane normal pulled back through it, the pluton's azimuth, radii and
+  turn rolled into one matrix. The shader is handed those same numbers as
+  uniforms, so the two walks are not merely equivalent, they are identical
+  arithmetic.
+
 The history's *shape* — how many events, of which types, in what order — is
 compiled into generated GLSL. Its *numbers* are uniforms. So dragging a dip
 slider is a uniform upload, and only adding, deleting, reordering or disabling
@@ -1345,7 +1381,9 @@ an event triggers a recompile.
 
 `js/geo/unmake.js` is a CPU implementation of the same walk. It powers the
 identify tool and it is the reference the shader must agree with. **If you
-change one, change the other.**
+change one, change the other.** `js/geo/warp.js` is the piece both of them
+read, so that the one thing they cannot afford to disagree about has a single
+implementation rather than two.
 
 ## Reading a history back out of a map
 
