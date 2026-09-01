@@ -65,6 +65,10 @@ export function floodPatches({ lines, seeds, box, res = 512 }) {
     for (let k = 1; k < p.length; k++) {
       stroke(blocked, nx, ny, toI(p[k - 1][0]), toJ(p[k - 1][1]), toI(p[k][0]), toJ(p[k][1]));
     }
+    if (p.length > 1) {
+      cap(blocked, nx, ny, toI(p[0][0]), toJ(p[0][1]));
+      cap(blocked, nx, ny, toI(p[p.length - 1][0]), toJ(p[p.length - 1][1]));
+    }
   }
 
   const owner = new Int16Array(nx * ny).fill(-1);
@@ -142,9 +146,19 @@ export function floodPatches({ lines, seeds, box, res = 512 }) {
   return { owner, nx, ny, box, cell, wide, counts, outside };
 }
 
-/** The nearest unblocked cell to a seed that landed on a line. */
+/**
+ * The nearest unblocked cell to a seed that landed on a line.
+ *
+ * Kept deliberately short. A long search does not rescue a seed, it walks it
+ * through the very contact it was meant to stop at and shades the unit next
+ * door instead — confidently, and with no sign that anything went wrong. Two
+ * cells clears a line or the junction of two, and a tap further into the rock
+ * than that was never blocked to begin with.
+ */
+const SNAP = 2;
+
 function free(blocked, stamp, gen, nx, ny, si, sj) {
-  for (let r = 0; r <= 6; r++) {
+  for (let r = 0; r <= SNAP; r++) {
     for (let dj = -r; dj <= r; dj++) {
       for (let di = -r; di <= r; di++) {
         if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
@@ -160,12 +174,24 @@ function free(blocked, stamp, gen, nx, ny, si, sj) {
 }
 
 /**
- * Bresenham, thickened to the eight neighbours.
+ * Bresenham, one cell wide.
  *
- * A hairline barrier leaks: a fill crossing it diagonally passes between two
- * cells that only touch at a corner, and the colour is out. Marking the
- * neighbours costs a little accuracy at the contact and buys a boundary that
- * actually holds.
+ * A contact is a line, and on a map with a dike in it a barrier three cells
+ * thick is not a rounding error — it is the whole unit. At a sheet a kilometre
+ * across, three cells is seven metres, so the two walls of a fifteen-metre dike
+ * eat the band between them and the fill comes out as broken slivers, or
+ * escapes into the neighbouring unit entirely.
+ *
+ * One cell holds because of what is on the other side of it: the flood walks
+ * the FOUR neighbours and Bresenham lays down an EIGHT-connected line, and a
+ * 4-connected path cannot cross an 8-connected one. Where the line steps
+ * diagonally the two cells left open are themselves diagonal, so the fill
+ * cannot step between them, and going round means running along the line,
+ * which continues. The thickening was guarding against a leak that the
+ * connectivity had already ruled out.
+ *
+ * Change the flood to eight neighbours and this stops being true. The two go
+ * together.
  */
 function stroke(blocked, nx, ny, x0, y0, x1, y1) {
   let x = x0;
@@ -177,15 +203,30 @@ function stroke(blocked, nx, ny, x0, y0, x1, y1) {
   let err = dx + dy;
   let guard = 0;
   for (;;) {
-    for (let j = y - 1; j <= y + 1; j++) {
-      for (let i = x - 1; i <= x + 1; i++) {
-        if (i >= 0 && j >= 0 && i < nx && j < ny) blocked[j * nx + i] = 1;
-      }
-    }
+    if (x >= 0 && y >= 0 && x < nx && y < ny) blocked[y * nx + x] = 1;
     if ((x === x1 && y === y1) || guard++ > 100000) break;
     const e2 = 2 * err;
     if (e2 >= dy) { err += dy; x += sx; }
     if (e2 <= dx) { err += dx; y += sy; }
+  }
+}
+
+/**
+ * How far a line's END is thickened, in cells.
+ *
+ * The one place a hand-drawn map really does leak is a junction: a contact
+ * drawn to die against a fault, stopping a metre short of it. The interior of
+ * a line needs no help — it is continuous by construction — so the forgiveness
+ * is spent where it is needed and nowhere else, which is what lets the
+ * interior stay one cell wide through the narrowest band on the sheet.
+ */
+const END_CAP = 1;
+
+function cap(blocked, nx, ny, x, y) {
+  for (let j = y - END_CAP; j <= y + END_CAP; j++) {
+    for (let i = x - END_CAP; i <= x + END_CAP; i++) {
+      if (i >= 0 && j >= 0 && i < nx && j < ny) blocked[j * nx + i] = 1;
+    }
   }
 }
 

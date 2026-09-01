@@ -652,6 +652,16 @@ map costs a few dozen points of storage.
 Contacts, unconformities, faults and dikes stop a fill. A traverse does not:
 where you walked is not a boundary.
 
+**A barrier is one cell wide**, which is what lets a narrow unit be filled at
+all. A dike fifteen metres across on a sheet a kilometre wide is only a few
+cells of band, so a barrier three cells thick — which is what a thickened line
+comes to — eats the unit from both sides and the fill comes out as broken
+slivers, or escapes into the rock next door. One cell holds because the flood
+walks the four neighbours while the line is laid down eight-connected, and a
+4-connected path cannot cross an 8-connected one. Only the *ends* of a line are
+thickened, because a junction is the one place a hand-drawn map really does
+fall a metre short.
+
 **The edge of the sheet is a boundary too**, exactly as on a printed map. Real
 contacts almost never close on each other. They run off the side of the ground
 you walked, and the band between two of them is open at both ends. A fill that
