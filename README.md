@@ -604,7 +604,14 @@ carry:
 |---|---|
 | **Thrust / reverse** | filled teeth on the upper plate — the side the plane dips toward |
 | **Normal** | hachures on the side that dropped, which is the same side |
-| **Dextral / sinistral** | a half-arrow either side of the trace, each pointing the way its own block went |
+| **Dextral / sinistral** | a half-arrow either side of the trace, each pointing the way its own block went — once, twice or three times along the whole fault, never a row of them |
+
+Teeth and hachures run the length of a trace because each one says something
+local: *this* stretch has the upper plate on that side. A pair of half-arrows
+says one thing about the whole fault, so a map prints it once or twice and
+moves on — and the count comes off the length as DRAWN rather than the length
+on the ground, so the density stays right as the map is zoomed, which is what a
+map printed at two scales does anyway.
 
 A fault nobody has said anything about is drawn plain, and a dip-slip one with
 no dip direction is too: which side the marks go on IS the claim, and there is

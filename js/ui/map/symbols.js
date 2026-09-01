@@ -384,6 +384,15 @@ function hangingSide(dipDir, tx, ty) {
   return (ax * -ty + ay * tx) >= 0 ? 1 : -1;
 }
 
+/** Total drawn length of a polyline, in pixels. */
+function lineLengthPx(pts) {
+  let sum = 0;
+  for (let i = 1; i < pts.length; i++) {
+    sum += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
+  return sum;
+}
+
 /**
  * Walk a polyline, calling back at an even spacing along the whole of it.
  *
@@ -453,12 +462,29 @@ function drawFaultOrnament(ctx, pts, line, color, scale) {
     // block moved. Dextral means the far block goes to your right whichever
     // side you stand on, so the block to the right of the direction of travel
     // moves backward along it and the one to the left moves forward.
+    // A handful along the whole fault, not a row of them.
+    //
+    // Teeth and hachures run the length of a trace because each one is saying
+    // something local — this stretch of the line is the one with the upper
+    // plate on that side. A pair of half-arrows says one thing about the whole
+    // fault, so a map prints it once or twice and moves on, and a chain of
+    // them reads as ornament rather than as a sense of motion.
+    //
+    // Counted off the DRAWN length rather than the ground length, so the
+    // density stays right as the map is zoomed — which is what a map printed
+    // at two different scales does anyway.
     const dex = sense === 'dextral' ? 1 : -1;
-    const off = 5 * scale;        // how far each arrow sits off the trace
-    const len = 16 * scale;
-    const head = 5 * scale;
-    ctx.lineWidth = Math.max(1.4, 1.8 * scale);
-    alongLine(pts, 70 * scale, 30 * scale, (x, y, tx, ty) => {
+    const off = 6 * scale;        // how far each arrow sits off the trace
+    const len = 22 * scale;
+    const head = 6 * scale;
+    const total = lineLengthPx(pts);
+    const n = Math.max(1, Math.min(3, Math.round(total / (320 * scale))));
+    // Evenly spread with equal margins at both ends: one lands in the middle,
+    // two at the quarters, three at the sixths.
+    let placed = 0;
+    ctx.lineWidth = Math.max(1.5, 2 * scale);
+    alongLine(pts, total / n, total / (2 * n), (x, y, tx, ty) => {
+      if (placed++ >= n) return;    // guard the rounding at the far end
       const rx = -ty;
       const ry = tx;
       for (const side of [1, -1]) {
