@@ -597,6 +597,22 @@ mapped](#build-a-block-from-what-you-mapped): a dip where the ground was too
 flat to give one, a slip search narrowed from every direction to one, and a
 measure of the throw that does not need the same contact mapped twice.
 
+They also buy the **ornament**, which is the half of a fault no trace can
+carry:
+
+| | |
+|---|---|
+| **Thrust / reverse** | filled teeth on the upper plate — the side the plane dips toward |
+| **Normal** | hachures on the side that dropped, which is the same side |
+| **Dextral / sinistral** | a half-arrow either side of the trace, each pointing the way its own block went |
+
+A fault nobody has said anything about is drawn plain, and a dip-slip one with
+no dip direction is too: which side the marks go on IS the claim, and there is
+no honest way to draw it before somebody has made it. Screen Y grows downward,
+so the right-hand normal of a segment is `(-ty, tx)` and not `(ty, -tx)` —
+getting that backwards puts every tooth on the footwall, which on a map is not
+a rounding error but the opposite assertion.
+
 ### How well you know a line
 
 Every line carries a confidence, and is drawn the way a published map draws

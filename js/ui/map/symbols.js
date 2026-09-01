@@ -358,6 +358,130 @@ function drawChevrons(ctx, pts, w, color, scale) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Fault ornament
+// ---------------------------------------------------------------------------
+// The marks a geologic map puts on a fault to say what it did, which is the
+// half of a fault no trace can carry: teeth on the upper plate of a thrust,
+// hachures on the dropped side of a normal fault, paired half-arrows for a
+// strike-slip one.
+//
+// All three hang off two things the mapper already told the line card — the
+// sense, and which way the plane leans — so nothing here is inferred and a
+// fault that has not been asked about is drawn plain. Saying nothing is the
+// right answer to "which side went down?" when nobody has said.
+
+/**
+ * Which side of the trace the hanging wall is on, as +1 or -1 against the
+ * right-hand normal of a segment running in direction `t`.
+ *
+ * Screen Y grows downward, so the right-hand normal of (tx, ty) is (-ty, tx)
+ * and not (ty, -tx). Getting that backwards puts every tick on the footwall,
+ * which is not a subtle error on a map — it is the opposite claim.
+ */
+function hangingSide(dipDir, tx, ty) {
+  const [ax, ay] = azVec(dipDir);
+  return (ax * -ty + ay * tx) >= 0 ? 1 : -1;
+}
+
+/**
+ * Walk a polyline, calling back at an even spacing along the whole of it.
+ *
+ * Spacing is carried between segments rather than restarting at each vertex,
+ * or the marks would bunch at every bend in the trace.
+ */
+function alongLine(pts, step, first, fn) {
+  let carry = first;
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i].x - pts[i - 1].x;
+    const dy = pts[i].y - pts[i - 1].y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) continue;
+    const tx = dx / len;
+    const ty = dy / len;
+    for (let d = carry; d < len; d += step) {
+      fn(pts[i - 1].x + tx * d, pts[i - 1].y + ty * d, tx, ty);
+    }
+    carry = Math.max(0, carry + step * Math.ceil((len - carry) / step) - len);
+  }
+}
+
+function drawFaultOrnament(ctx, pts, line, color, scale) {
+  const sense = line.sense || '';
+  if (!sense) return;
+  // Dip-slip ornament sits on one side, and which side is the whole of what it
+  // says. Without a dip direction there is no hanging wall to put it on.
+  const dipSlip = sense === 'normal' || sense === 'reverse';
+  if (dipSlip && !Number.isFinite(line.dipDir)) return;
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
+
+  if (sense === 'reverse') {
+    // Teeth on the upper plate, filled, base on the trace.
+    const size = 7 * scale;
+    alongLine(pts, 34 * scale, 12 * scale, (x, y, tx, ty) => {
+      const sgn = hangingSide(line.dipDir, tx, ty);
+      const nx = -ty * sgn;
+      const ny = tx * sgn;
+      ctx.beginPath();
+      ctx.moveTo(x - tx * size * 0.62, y - ty * size * 0.62);
+      ctx.lineTo(x + nx * size, y + ny * size);
+      ctx.lineTo(x + tx * size * 0.62, y + ty * size * 0.62);
+      ctx.closePath();
+      ctx.fill();
+    });
+  } else if (sense === 'normal') {
+    // Hachures on the side that went down, which for a normal fault is the
+    // hanging wall. A bar square to the trace, not a tooth: the two must not
+    // be mistakable for each other at a glance, which is the entire reason
+    // geologic maps use different marks for them.
+    const size = 7 * scale;
+    ctx.lineWidth = Math.max(1.4, 1.8 * scale);
+    alongLine(pts, 26 * scale, 10 * scale, (x, y, tx, ty) => {
+      const sgn = hangingSide(line.dipDir, tx, ty);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + -ty * sgn * size, y + tx * sgn * size);
+      ctx.stroke();
+    });
+  } else {
+    // Strike-slip: a half-arrow either side, each pointing the way ITS OWN
+    // block moved. Dextral means the far block goes to your right whichever
+    // side you stand on, so the block to the right of the direction of travel
+    // moves backward along it and the one to the left moves forward.
+    const dex = sense === 'dextral' ? 1 : -1;
+    const off = 5 * scale;        // how far each arrow sits off the trace
+    const len = 16 * scale;
+    const head = 5 * scale;
+    ctx.lineWidth = Math.max(1.4, 1.8 * scale);
+    alongLine(pts, 70 * scale, 30 * scale, (x, y, tx, ty) => {
+      const rx = -ty;
+      const ry = tx;
+      for (const side of [1, -1]) {
+        // The block on the right of travel moves backward for a dextral fault.
+        const dir = -side * dex;
+        const bx = x + rx * off * side - tx * len * 0.5 * dir;
+        const by = y + ry * off * side - ty * len * 0.5 * dir;
+        const ex = bx + tx * len * dir;
+        const ey = by + ty * len * dir;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(ex, ey);
+        // A half barb, on the side away from the trace, so the pair reads as
+        // two blocks sliding past each other rather than as four arrows.
+        ctx.lineTo(ex - tx * head * dir + rx * head * 0.75 * side,
+          ey - ty * head * dir + ry * head * 0.75 * side);
+        ctx.stroke();
+      }
+    });
+  }
+  ctx.restore();
+}
+
 /**
  * Draw a line as a band of its true width. Returns false if it is too narrow
  * to be worth it, in which case the caller draws the ordinary line symbol.
@@ -461,6 +585,8 @@ export function drawLine(ctx, pts, line, {
     }
   }
   ctx.setLineDash([]);
+
+  if (line.kind === 'fault') drawFaultOrnament(ctx, pts, line, kind.color, scale);
 
   // Vertices are shown only while the line is being built or is selected.
   // On a finished map they would turn every contact into a string of beads.
