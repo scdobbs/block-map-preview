@@ -21,7 +21,7 @@ import { readTileBitmap, source } from '../../field/tiles.js';
 import { renderDemTile } from '../../field/dem.js';
 import { drawStation, drawPosition, drawSelection, drawAreaOutline, drawLine,
   distanceToLine } from './symbols.js';
-import { unitColor } from '../../field/model.js';
+import { unitColor, DEFAULT_DIKE_THICKNESS } from '../../field/model.js';
 
 const MIN_ZOOM = 4;
 const MAX_ZOOM = 19;          // past the imagery, where the contours carry it
@@ -450,6 +450,7 @@ export class MapCanvas {
       const selected = line.id === this.selectedLineId;
       drawLine(ctx, project(line), line, {
         selected,
+        groundWidth: this._groundWidth(line),
         active: selected && this.activeVertex?.target === line.id
           ? this.activeVertex.index : -1,
       });
@@ -467,10 +468,28 @@ export class MapCanvas {
       } else {
         drawLine(ctx, pts, this.draftLine, {
           drawing: true,
+          groundWidth: this._groundWidth(this.draftLine),
           active: this.activeVertex?.target === 'draft' ? this.activeVertex.index : -1,
         });
       }
     }
+  }
+
+  /**
+   * How wide this line's rock is on screen, in pixels, or zero for a line that
+   * has no width to have.
+   *
+   * Only a dike does. The thickness is read with its default filled in rather
+   * than only when it has been measured, so the band on the map is always the
+   * one the block will be built with — a dike drawn hairline and built twenty
+   * metres wide would be the map disagreeing with the model about the one
+   * number the map exists to carry.
+   */
+  _groundWidth(line) {
+    if (!line || line.kind !== 'dike') return 0;
+    const t = Number.isFinite(line.thickness) && line.thickness > 0
+      ? line.thickness : DEFAULT_DIKE_THICKNESS;
+    return t / this.metersPerPixel;
   }
 
   /**

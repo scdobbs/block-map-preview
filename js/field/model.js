@@ -6,11 +6,11 @@
 // of an actual outcrop, and the two should never be able to overwrite each
 // other. They share the rock list and nothing else.
 
-import { ROCKS, ROCK_BY_ID } from '../geo/model.js';
+import { ROCKS, ROCK_BY_ID, DEFAULT_DIKE_THICKNESS } from '../geo/model.js';
 
 export const FIELD_SCHEMA_VERSION = 1;
 
-export { ROCKS, ROCK_BY_ID };
+export { ROCKS, ROCK_BY_ID, DEFAULT_DIKE_THICKNESS };
 
 /** A rock type by id, always something. Named apart from the block's `rock`
  * so a file importing both cannot get them confused. */

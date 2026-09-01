@@ -248,12 +248,19 @@ export function drawPosition(ctx, x, y, { accuracyPx = 0, heading = null, scale 
  * geology is most interesting.
  */
 export function drawLine(ctx, pts, line, {
-  selected = false, scale = 1, drawing = false, active = -1,
+  selected = false, scale = 1, drawing = false, active = -1, groundWidth = 0,
 } = {}) {
   if (pts.length < 2) return;
   const kind = lineKind(line.kind);
   const dash = lineCertainty(line.certainty).dash.map((d) => d * scale);
-  const w = kind.weight * scale;
+  // A line symbol is a MINIMUM, not a width. A contact has no width — it is a
+  // surface seen edge on — so the weight in LINE_KINDS is a drawing decision
+  // and nothing more. A dike does have one, and where the sheet is wider on
+  // the ground than the symbol is on the screen, the ground wins and the line
+  // is drawn at the width the rock actually is. Zoom out far enough and the
+  // symbol takes over again, which is what stops a four-metre dike vanishing
+  // from a map of a whole valley.
+  const w = Math.max(kind.weight * scale, groundWidth);
 
   const path = () => {
     ctx.beginPath();

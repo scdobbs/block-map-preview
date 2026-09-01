@@ -13,7 +13,7 @@ import { swatchEl } from '../swatch.js';
 import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, CERTAINTIES, ROCKS, rockOf,
   unitColor, knownUnitNames, makeUnit, hasAttitude, isLinearFeature,
   formatAttitude, LINE_KINDS, LINE_CERTAINTY, lineKind, lineCertainty,
-  lineLength, FAULT_SENSES, dipChoices } from '../../field/model.js';
+  lineLength, FAULT_SENSES, dipChoices, DEFAULT_DIKE_THICKNESS } from '../../field/model.js';
 import { contactPairs } from '../../strat/model.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
@@ -799,12 +799,12 @@ function dikeRows(ctx, line) {
   // the trace may still answer it; a thickness cannot, so the block will use a
   // number either way and the only honest thing is to show which one.
   rows.push(numberRow({
-    label: 'Thickness', value: line.thickness == null ? DEFAULT_THICKNESS : line.thickness,
+    label: 'Thickness', value: line.thickness == null ? DEFAULT_DIKE_THICKNESS : line.thickness,
     min: 1, max: 500, step: 1, unit: 'm',
     onChange: (v) => set((l) => { l.thickness = v; }, `dike-thickness:${line.id}`),
   }));
   rows.push(el('div', { class: 'ctl-hint standalone', text:
-    `How wide the sheet is across, measured square to its walls. The line you drew is its middle, not its edges, so this is the one number about a dike the map cannot hold — until you set it the block uses ${DEFAULT_THICKNESS} m.` }));
+    `How wide the sheet is across, measured square to its walls. The line you drew is its middle, not its edges, so this is the one number about a dike the map cannot hold — until you set it both the map and the block use ${DEFAULT_DIKE_THICKNESS} m.` }));
 
   rows.push(selectRow({
     label: 'Rock', value: line.rockId || '',
@@ -824,9 +824,6 @@ function dikeRows(ctx, line) {
 
 /** What a dike is likely to be. The block's own igneous list, in order. */
 const DIKE_ROCKS = ['basalt', 'gabbro', 'diorite', 'granite', 'tuff'];
-
-/** Must match DEFAULT_DIKE_THICKNESS in geo/infer.js — the fit uses the same. */
-const DEFAULT_THICKNESS = 20;
 
 function faultRows(ctx, line, known) {
   const rows = [];

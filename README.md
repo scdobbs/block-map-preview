@@ -863,7 +863,12 @@ dike below the fold and it is folded with the beds, which after *A folded
 dike* above is a change you can see rather than one you take on trust.
 
 A dike is drawn as **one line**, a centreline, because at any scale where a map
-is readable a sheet a few metres across *is* a line. So the trace gives the
+is readable a sheet a few metres across *is* a line. It is *drawn* at the width
+you gave it, though: a line symbol's weight is a minimum and not a width, so
+where the sheet is wider on the ground than the symbol is on the screen the
+ground wins, and dragging the thickness slider widens the band on the map under
+your finger. Zoom out far enough and the symbol takes over again, which is what
+stops a four-metre dike disappearing from a map of a whole valley. So the trace gives the
 strike always and the dip wherever the ground has the relief to say — the same
 `faultFromTrace` a fault uses, because it is the same question — and the line
 card gives the two things no trace can: how wide the sheet is, and what it is

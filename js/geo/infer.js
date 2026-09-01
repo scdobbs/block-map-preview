@@ -43,7 +43,7 @@
 
 import { compileHistory, stratDepth, beddingAt, rockAt, undoAfter } from './unmake.js';
 import { fitBedding, poleOf } from './stereonet.js';
-import { makeEvent, makeLayer, faultKindFromRake } from './model.js';
+import { makeEvent, makeLayer, faultKindFromRake, DEFAULT_DIKE_THICKNESS } from './model.js';
 import { surfaceHeight } from './surfaces.js';
 import {
   dot, cross, sub, add, scale, normalize, normalToStrikeDip, planeFrame, axisFrame,
@@ -473,9 +473,6 @@ export function dikeLinesOf(obs) {
 
 /** What a dike is taken to be made of when the mapper did not say. */
 const DEFAULT_DIKE_ROCK = 'basalt';
-
-/** And how thick, in metres. Thin, because a dike drawn as one line is thin. */
-const DEFAULT_DIKE_THICKNESS = 20;
 
 // ---------------------------------------------------------------------------
 // Searching

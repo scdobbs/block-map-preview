@@ -194,6 +194,20 @@ export const EVENT_TYPES = {
 
 export const EVENT_ORDER = ['tilt', 'fold', 'domebasin', 'fault', 'dike', 'pluton', 'unconformity'];
 
+/**
+ * How wide a dike drawn on a MAP is taken to be, in metres, until somebody
+ * measures it. Not the same number as the dike event's own default above, and
+ * deliberately: a dike added by hand to a block is a teaching object sized to
+ * be seen, while one traced in the field is a real sheet, and real sheets are
+ * thin.
+ *
+ * It lives here rather than beside the map because three different places have
+ * to agree about it — the line card that shows it, the fit that builds a block
+ * with it, and the map that now draws the line at it — and geo/ is the only
+ * one of the three that the other two can both reach.
+ */
+export const DEFAULT_DIKE_THICKNESS = 20;
+
 let idCounter = 1;
 export function newId(prefix = 'e') {
   return `${prefix}${(idCounter++).toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
