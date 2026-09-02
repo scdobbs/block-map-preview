@@ -314,6 +314,19 @@ function inclinedMark(out, C, B, S, w, overturned = false) {
   bar(out, C, B, [off, 0], [off, -S * TICK], w);             // dip tick
 }
 
+/** Beds on end: a strike line with a tick to either side of it. */
+function verticalMark(out, C, B, S, w) {
+  bar(out, C, B, [-S * 0.75, 0], [S * 0.75, 0], w);
+  bar(out, C, B, [0, -S * 0.30], [0, S * 0.30], w);
+}
+
+/** Flat-lying beds: a cross in a circle, with no strike to point along. */
+function horizontalMark(out, C, B, S, w) {
+  bar(out, C, B, [-S * 0.62, 0], [S * 0.62, 0], w);
+  bar(out, C, B, [0, -S * 0.62], [0, S * 0.62], w);
+  ring(out, C, B, S * 0.26, w);
+}
+
 /** A rectangle from a to b in plane coordinates, `w` to either side. */
 function bar(out, C, B, a, b, w) {
   let dx = b[0] - a[0];
