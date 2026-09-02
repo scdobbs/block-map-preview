@@ -539,24 +539,32 @@ rather than a shortcut. Overturned means the succession *in* the surface
 youngs downward, so the surface has to have a succession in it. A joint, a
 fault plane and a foliation have no younger side to be on the wrong one of.
 
-The reading prints as the candy cane a geologic map uses, and which end the
-crook is on is the whole of the symbol. It sits at the **strike line**: the
-stroke starts on the strike line, loops over the top of it, and only then runs
-straight away down-dip. That reads as the dip tick having been dragged up over
-the strike line and round — carried past vertical — which is exactly what
-overturned means. The straight part still points the way the beds physically
-dip, and the dip number sits beyond it as it always did. It reads as `OT` in
-the station list, and exports as its own column.
+The reading prints as the candy cane a geologic map uses, and two things about
+the crook carry the meaning.
 
-Both halves of that were got wrong before they were got right, and both
-failures are instructive. Drawn first as two straight segments turning back
-parallel to the tick, the hook did not read as a hook at any distance: two
-strokes a few pixels apart, each carrying its own backing stroke, merge into
-one fat tick with a pale stripe down the middle, and the stripe looks like a
-doubled outline rather than a gap. Drawn second as a proper semicircle but at
-the far end of the tick, it read as a tick with a decoration on it and said
-nothing — the crook has to be where the tick meets the strike line, or the
-illusion of being pulled over the top is not there at all.
+It is at the **strike line**, not at the far end of the tick: the stroke starts
+on the strike line, loops over the top of it, and only then runs straight away
+down-dip. That reads as the dip tick having been dragged up over the strike
+line and round — carried past vertical — which is exactly what overturned
+means.
+
+And it is **centred on the point where the strike line and the dip tick cross**
+— the station itself. The loop straddles that point, with the strike line as
+its own diameter, and the straight shaft hangs off the loop's far side. The
+symbol keeps its middle where the reading has its middle. The straight part
+still points the way the beds physically dip, and the dip number sits beyond
+it, following the shaft along strike so it stays under its own tick. It reads
+as `OT` in the station list, and exports as its own column.
+
+It took three goes, and the two failures are instructive. Drawn first as two
+straight segments turning back parallel to the tick, the hook did not read as a
+hook at any distance: two strokes a few pixels apart, each carrying its own
+backing stroke, merge into one fat tick with a pale stripe down the middle, and
+the stripe looks like a doubled outline rather than a gap. Drawn second as a
+proper semicircle but at the far end of the tick, it read as a tick with a
+decoration on it and said nothing — the crook has to be where the tick meets
+the strike line, or the illusion of being pulled over the top is not there at
+all. Only when it was also centred on the crossing point did it settle.
 
 The crook is also sized off the symbol rather than off the tick. The tick
 shrinks with the dip; a shallow overturned reading would otherwise lose the one

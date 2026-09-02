@@ -116,41 +116,45 @@ export function drawStation(ctx, x, y, st, {
       }, lw, color);
     } else {
       const tick = s * (0.34 + 0.28 * (st.dip / 90));
-      // Overturned beds get the candy cane, and which end the crook is on is
-      // the whole of the symbol. It sits at the STRIKE LINE: the stroke starts
-      // on the strike line, loops over the top of it, and only then runs
-      // straight away down-dip. That reads as the dip tick having been dragged
-      // up over the strike line and round — carried past vertical — which is
-      // exactly what overturned means. Put the curl on the far end instead and
-      // it says nothing at all; it is a tick with a decoration on it.
+      // Overturned beds get the candy cane, and two things about the crook
+      // carry the meaning.
       //
-      // Drawn as one stroke that flows: the arc's tangent where it lands back
-      // on the strike line already points down-dip, so the shaft continues it
+      // It is at the STRIKE LINE rather than at the far end of the tick: the
+      // stroke starts on the strike line, loops over the top of it, and only
+      // then runs straight away down-dip. That reads as the dip tick having
+      // been dragged up over the strike line and round — carried past
+      // vertical — which is exactly what overturned means. At the far end of
+      // the tick it is a tick with a decoration on it and says nothing.
+      //
+      // And it is CENTRED on the point where the strike line and the dip tick
+      // cross, so the symbol still has its middle where the station has its
+      // middle; the straight shaft hangs off the loop's far side. The arc's
+      // tangent where it lands is already down-dip, so the shaft continues it
       // without a corner.
       const hook = isOverturned(st);
-      const hookR = s * 0.34;
+      const hookR = s * 0.30;
+      // Where the shaft hangs from, and what the dip number lines up under.
+      const ox = hook ? sx * hookR : 0;
+      const oy = hook ? sy * hookR : 0;
       stroke(() => {
         ctx.beginPath();
         ctx.moveTo(-sx * s, -sy * s); ctx.lineTo(sx * s, sy * s);
         if (hook) {
-          // Centred one radius along strike, so the loop springs from the
-          // strike line and comes back to it at the symbol's own centre.
-          const cx = -sx * hookR;
-          const cy = -sy * hookR;
           const a0 = Math.atan2(-sy, -sx);
-          ctx.moveTo(cx - sx * hookR, cy - sy * hookR);
-          ctx.arc(cx, cy, hookR, a0, a0 + Math.PI, false);
+          ctx.moveTo(-sx * hookR, -sy * hookR);
+          ctx.arc(0, 0, hookR, a0, a0 + Math.PI, false);
         } else {
           ctx.moveTo(0, 0);
         }
-        ctx.lineTo(dx * tick, dy * tick);
+        ctx.lineTo(ox + dx * tick, oy + dy * tick);
         ctx.stroke();
       }, lw, color);
 
       // The dip number, set just beyond the tick and always upright — a map
       // is read with the sheet the right way up, not turned to follow each
       // symbol round.
-      drawText(ctx, `${Math.round(st.dip)}`, dx * (tick + 9 * scale), dy * (tick + 9 * scale), {
+      drawText(ctx, `${Math.round(st.dip)}`,
+        ox + dx * (tick + 9 * scale), oy + dy * (tick + 9 * scale), {
         color, scale, weight: 600,
       });
     }
