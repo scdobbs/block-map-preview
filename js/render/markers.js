@@ -54,6 +54,7 @@ export function readMarker(doc, history, m) {
     z,
     strike: bed ? bed.strike : null,
     dip: bed ? bed.dip : null,
+    overturned: bed ? bed.overturned === true : false,
   };
 }
 
@@ -65,8 +66,11 @@ export function readMarkers(doc, history) {
 export function formatReading(r) {
   if (r.dip == null) return 'no bedding';
   if (r.dip < FLAT_DIP) return 'horizontal';
+  // Past vertical the two dip directions are indistinguishable, and so is
+  // which way up the beds are: a vertical bed is its own overturned twin.
   if (r.dip > VERTICAL_DIP) return `${pad3(r.strike)} vertical`;
-  return `${pad3(r.strike)}/${Math.round(r.dip)}`;
+  const a = `${pad3(r.strike)}/${Math.round(r.dip)}`;
+  return r.overturned ? `${a} overturned` : a;
 }
 
 export function pad3(v) { return String(Math.round(v) % 360).padStart(3, '0'); }
@@ -128,8 +132,8 @@ export function buildMarkers(doc, readings, selectedId) {
       verticalMark(ink, center, basis, S, w);
       verticalMark(halo, center, basis, S, w * 1.9);
     } else {
-      inclinedMark(ink, center, basis, S, w);
-      inclinedMark(halo, center, basis, S, w * 1.9);
+      inclinedMark(ink, center, basis, S, w, r.overturned);
+      inclinedMark(halo, center, basis, S, w * 1.9, r.overturned);
     }
 
     if (selected) {
@@ -261,9 +265,24 @@ function footprintSamples(R) {
 // Symbol shapes, in plane coordinates (u along strike, v up dip)
 // ---------------------------------------------------------------------------
 
-function inclinedMark(out, C, B, S, w) {
+/**
+ * Strike bar and dip tick, with the tick recurved when the beds are
+ * overturned — the hook a geologic map prints to say the succession in them
+ * runs the wrong way up.
+ *
+ * The hook turns sideways and comes back UP-dip rather than continuing past
+ * the end of the tick, which is not only how the printed symbol is drawn but
+ * is what keeps it free: the symbol's reach is unchanged, so the dip number
+ * still sits where it always did and `liftedZ` still clears the same
+ * footprint.
+ */
+function inclinedMark(out, C, B, S, w, overturned = false) {
+  const tip = -S * 0.48;
   bar(out, C, B, [-S * 0.75, 0], [S * 0.75, 0], w);         // strike
-  bar(out, C, B, [0, 0], [0, -S * 0.48], w);                 // dip tick
+  bar(out, C, B, [0, 0], [0, tip], w);                       // dip tick
+  if (!overturned) return;
+  bar(out, C, B, [0, tip], [S * 0.22, tip], w);              // across
+  bar(out, C, B, [S * 0.22, tip], [S * 0.22, tip + S * 0.30], w);   // and back
 }
 
 function verticalMark(out, C, B, S, w) {

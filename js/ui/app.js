@@ -1121,7 +1121,7 @@ export class App {
         bed
           ? el('div', { class: 'readout-orient' }, [
             el('strong', { text: `${pad3(bed.strike)}/${Math.round(bed.dip)}` }),
-            el('span', { text: ` ${quadrantBearing(bed.strike)} · dip ${Math.round(bed.dip)}°` }),
+            el('span', { text: ` ${quadrantBearing(bed.strike)} · dip ${Math.round(bed.dip)}°${overturnedNote(bed)}` }),
           ])
           : el('div', { class: 'readout-orient dim', text: 'no bedding here' }),
         el('div', { class: 'readout-xyz', text: `${Math.round(hit.point[0])} E, ${Math.round(hit.point[1])} N, ${Math.round(hit.point[2])} m` }),
@@ -1370,7 +1370,16 @@ function chipDetail(r) {
   if (r.dip == null) return 'no bedding beneath';
   if (r.dip < FLAT_DIP) return 'flat-lying beds';
   if (r.dip > VERTICAL_DIP) return `${quadrantBearing(r.strike)} · beds on end`;
-  return `${quadrantBearing(r.strike)} · dip ${Math.round(r.dip)}°`;
+  return `${quadrantBearing(r.strike)} · dip ${Math.round(r.dip)}°${overturnedNote(r)}`;
+}
+
+/**
+ * Said only when it is true, and only of a bed that has a dip direction to
+ * have been turned past. A vertical bed is its own overturned twin, and a
+ * flat-lying one that is upside down is a recumbent limb the block cannot make.
+ */
+function overturnedNote(r) {
+  return r.overturned && r.dip >= FLAT_DIP && r.dip <= VERTICAL_DIP ? ' · overturned' : '';
 }
 
 function pad3(v) { return String(Math.round(v)).padStart(3, '0'); }

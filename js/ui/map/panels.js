@@ -13,7 +13,8 @@ import { swatchEl } from '../swatch.js';
 import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, CERTAINTIES, ROCKS, rockOf,
   unitColor, knownUnitNames, makeUnit, hasAttitude, isLinearFeature,
   formatAttitude, LINE_KINDS, LINE_CERTAINTY, lineKind, lineCertainty,
-  lineLength, FAULT_SENSES, dipChoices, DEFAULT_DIKE_THICKNESS } from '../../field/model.js';
+  lineLength, FAULT_SENSES, dipChoices, DEFAULT_DIKE_THICKNESS,
+  canBeOverturned } from '../../field/model.js';
 import { contactPairs } from '../../strat/model.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
@@ -196,6 +197,15 @@ export function measurePanel(ctx) {
         ? 'Trend is the compass direction the line runs toward, down-plunge.'
         : 'Strike follows the right-hand rule: with the strike direction ahead of you, the beds dip to your right.' }));
   }
+
+  // Which way up the beds are. It is a separate question from strike and dip
+  // and it has to be, because the same plane holds either answer — no compass
+  // reading can settle it. What settles it is a way-up criterion in the rock:
+  // graded bedding, cross-bed truncations, load casts, ripples.
+  node.appendChild(overturnedRow(
+    draft.noAttitude ? null : draft.feature, draft.overturned === true,
+    (v) => { draft.overturned = v; ctx.touchDraft(); },
+  ));
 
   const noAttitude = toggleRow({
     label: 'No attitude here',
@@ -436,6 +446,32 @@ export function stationsPanel(ctx) {
   return node;
 }
 
+/**
+ * The overturned toggle, or nothing at all.
+ *
+ * Nothing at all for anything but bedding, and that is the honest answer
+ * rather than a tidy-up: overturned means the succession in a surface youngs
+ * downward, so the surface has to have a succession in it. A joint, a fault
+ * plane and a foliation have no younger side to be on the wrong one of.
+ *
+ * It is a separate control from strike and dip because it is a separate
+ * observation. No compass can tell you which way up a bed is — the plane is
+ * the same plane either way — so it comes from a way-up criterion in the rock,
+ * and asking for it beside the numbers is what reminds a student to go and
+ * look for one.
+ */
+function overturnedRow(featureId, value, onChange) {
+  // A fragment, not a hidden element: appending it adds nothing to the panel,
+  // so there is no empty row left behind to space things apart.
+  if (!canBeOverturned(featureId)) return document.createDocumentFragment();
+  return toggleRow({
+    label: 'Overturned',
+    value,
+    hint: 'The beds are upside down — younger underneath. Read it off graded bedding, cross-bed truncations, load casts or ripples, not off the compass. Drawn with the hooked dip tick a map prints.',
+    onChange,
+  });
+}
+
 function stationEditor(ctx, st) {
   const doc = ctx.doc();
   const box = el('div', { class: 'card-body' });
@@ -462,6 +498,8 @@ function stationEditor(ctx, st) {
       onChange: (v) => { dial.setDip(v); edit((s) => { s[incKey] = v; }, `st-inc:${st.id}`); },
     });
     box.append(dial, prot);
+    box.appendChild(overturnedRow(st.feature, st.overturned === true,
+      (v) => edit((r) => { r.overturned = v; })));
   } else {
     // A station taken without a reading is not finished, and it should not be
     // a dead end. Plenty of them are deliberate at the time — a covered

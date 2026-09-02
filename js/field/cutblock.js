@@ -22,7 +22,7 @@ import { defaultDocument, makeLayer, makeMarker, rock, ROCKS } from '../geo/mode
 import { surfaceHeight, surfaceRange } from '../geo/surfaces.js';
 import { compileHistory, stratDepth } from '../geo/unmake.js';
 import { clamp } from '../geo/math.js';
-import { hasAttitude, isLinearFeature } from './model.js';
+import { hasAttitude, isLinearFeature, isOverturned } from './model.js';
 import { floodPatches, samplePatches, extentOf, BARRIER_KINDS } from './patches.js';
 
 /** Only planar readings of bedding are evidence about the shape of the beds. */
@@ -615,12 +615,18 @@ export function surveyExtent(fieldDoc, bbox) {
   let bedding = 0;
   let other = 0;
   let faultObs = 0;
+  let overturned = 0;
   for (const st of fieldDoc.stations || []) {
     const [x, y] = toBlock(g, st.lon, st.lat);
     if (!inBlock(g, x, y)) continue;
     if (hasAttitude(st) && FAULT_FEATURES.has(st.feature)) faultObs++;
-    else if (hasAttitude(st) && !isLinearFeature(st.feature) && st.feature === FITTABLE_FEATURE) bedding++;
-    else other++;
+    else if (hasAttitude(st) && !isLinearFeature(st.feature) && st.feature === FITTABLE_FEATURE) {
+      bedding++;
+      // Counted separately because the fit cannot use it and should say so.
+      // The plane is still evidence and is still fitted; it is the way-up that
+      // goes nowhere. See the note in blockPanel.
+      if (isOverturned(st)) overturned++;
+    } else other++;
   }
   const lines = { contact: 0, fault: 0, boundary: 0, other: 0, unnamed: 0, undipped: 0 };
   for (const ln of fieldDoc.lines || []) {
@@ -642,5 +648,5 @@ export function surveyExtent(fieldDoc, bbox) {
     else if (ln.kind === 'boundary') lines.boundary++;
     else lines.other++;
   }
-  return { georef: g, bedding, other, faultObs, lines };
+  return { georef: g, bedding, other, faultObs, overturned, lines };
 }

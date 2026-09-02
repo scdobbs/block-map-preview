@@ -350,6 +350,18 @@ export function stratDepth(h, p0) {
  * works: the beds are surfaces of constant stratigraphic depth, so the
  * gradient of that scalar field is normal to bedding.
  *
+ * Also whether the beds are OVERTURNED, which is the one thing a strike and a
+ * dip cannot say on their own. A plane dipping 70 degrees is the same plane
+ * whichever way up the succession in it runs, and `normalToStrikeDip` flips
+ * the normal to point upward precisely so that it always is — so the question
+ * has to be asked here, of the gradient, before that flip throws the answer
+ * away.
+ *
+ * The gradient points toward OLDER rock, so its negative points the way the
+ * succession youngs. Where that points downward the beds have been turned past
+ * vertical and the younger rock is underneath, which is what overturned means
+ * and is the whole content of the hooked map symbol.
+ *
  * Returns null inside an intrusion, where bedding is meaningless.
  */
 export function beddingAt(h, p, eps = 1.5) {
@@ -359,8 +371,9 @@ export function beddingAt(h, p, eps = 1.5) {
   const gz = stratDepth(h, [p[0], p[1], p[2] + eps]) - stratDepth(h, [p[0], p[1], p[2] - eps]);
   const g = [gx, gy, gz];
   if (!Number.isFinite(gx + gy + gz) || Math.hypot(gx, gy, gz) < 1e-9) return null;
-  // Depth grows downward, so the up-facing bed normal is the negated gradient.
-  return normalToStrikeDip([-g[0], -g[1], -g[2]]);
+  // Depth grows downward, so the way the beds young is the negated gradient.
+  const young = [-g[0], -g[1], -g[2]];
+  return { ...normalToStrikeDip(young), overturned: young[2] < 0 };
 }
 
 /**

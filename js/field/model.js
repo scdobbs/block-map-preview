@@ -73,6 +73,22 @@ export function featureGeometry(id) { return feature(id).geometry; }
 
 export function isLinearFeature(id) { return feature(id).geometry === 'linear'; }
 
+/**
+ * Which features can be recorded as overturned.
+ *
+ * Only bedding, and that is not a simplification. Overturned means the
+ * succession in the surface youngs downward, so the surface has to have a
+ * succession in it: a joint, a fault plane and a foliation have no younger
+ * side, and a contact's way-up is the bedding's. It is also the only one the
+ * printed symbol set has a hooked tick for.
+ */
+export function canBeOverturned(featureId) { return featureId === 'bedding'; }
+
+/** True where a reading is BOTH marked overturned and of a feature that can be. */
+export function isOverturned(st) {
+  return st.overturned === true && canBeOverturned(st.feature);
+}
+
 export const PLANAR_FEATURES = FEATURES.filter((f) => f.geometry === 'planar');
 export const LINEAR_FEATURES = FEATURES.filter((f) => f.geometry === 'linear');
 
@@ -223,6 +239,10 @@ export function makeStation(over = {}) {
     dip: null,
     trend: null,
     plunge: null,
+    // Which way up the succession in a bed runs. A strike and a dip cannot
+    // say it — the same plane holds either answer — so it is recorded
+    // separately or not at all. Only bedding has it: see canBeOverturned.
+    overturned: false,
     certainty: 'measured',
     source: 'manual',       // 'compass' | 'manual'
     scatter: null,          // degrees of disagreement within the compass window
@@ -267,7 +287,8 @@ export function formatAttitude(st) {
   if (isLinearFeature(st.feature)) {
     return `${pad3(st.trend)}/${Math.round(st.plunge)} t/p`;
   }
-  return `${pad3(st.strike)}/${Math.round(st.dip)}`;
+  const a = `${pad3(st.strike)}/${Math.round(st.dip)}`;
+  return isOverturned(st) ? `${a} OT` : a;
 }
 
 function pad3(v) { return String(Math.round(v) % 360).padStart(3, '0'); }
@@ -796,6 +817,7 @@ export function toKML(doc) {
     push('<ExtendedData>');
     for (const [k, v] of [['station', st.name], ['feature', st.feature],
       ['strike', st.strike], ['dip', st.dip], ['trend', st.trend], ['plunge', st.plunge],
+      ['overturned', isOverturned(st) ? 'yes' : null],
       ['unit', st.unitName], ['rock', st.rockId], ['certainty', st.certainty],
       ['source', st.source], ['scatter_deg', st.scatter], ['declination', st.declination],
       ['elevation_m', elevOut(st.elev)], ['gps_accuracy_m', st.gpsAccuracy], ['note', st.note]]) {
@@ -877,13 +899,13 @@ function csvCell(v) {
 /** Comma-separated, for a spreadsheet — which is where marks get entered. */
 export function toCSV(doc) {
   const cols = ['station', 'latitude', 'longitude', 'elevation_m', 'feature', 'structure',
-    'strike', 'dip', 'trend', 'plunge', 'certainty', 'source', 'scatter_deg', 'unit',
+    'strike', 'dip', 'overturned', 'trend', 'plunge', 'certainty', 'source', 'scatter_deg', 'unit',
     'rock', 'gps_accuracy_m', 'declination', 'time', 'note'];
   const esc = csvCell;
   const rows = (doc.stations || []).map((s) => [
     s.name, s.lat.toFixed(6), s.lon.toFixed(6), elevOut(s.elev) ?? '', s.feature,
     featureGeometry(s.feature),
-    s.strike ?? '', s.dip ?? '', s.trend ?? '', s.plunge ?? '',
+    s.strike ?? '', s.dip ?? '', isOverturned(s) ? 'yes' : '', s.trend ?? '', s.plunge ?? '',
     s.certainty, s.source, s.scatter != null ? s.scatter.toFixed(1) : '',
     s.unitName || '', s.rockId || '', s.gpsAccuracy != null ? Math.round(s.gpsAccuracy) : '',
     s.declination ?? '', s.at, s.note || '',

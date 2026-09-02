@@ -199,6 +199,18 @@ oblique view it lies on the beds. Flat-lying beds get the cross-in-circle,
 beds on end the double tick, and a station with no bedding under it (inside a
 pluton, say) an open circle rather than an invented number.
 
+**Overturned beds get the hooked dip tick**, and the block works out for
+itself when they are. A strike and a dip cannot say which way up a bed is —
+the same plane holds either answer — so the question is asked of the geology
+instead: bedding is a surface of constant stratigraphic depth, and where the
+direction that depth *decreases* in points downward, the younger rock is
+underneath and the beds have been turned past vertical. Fold a stack and then
+tilt it sixty-five degrees and the far limb comes back overturned, the symbols
+hook, and the readout says so. It is not a switch on the marker for the same
+reason nothing else about a marker is: a marker that could be told it was
+overturned could be told wrong, and then it would disagree with the block it
+is standing on.
+
 ### The stereonet
 
 **Plot on a stereonet** opens the net *beside* the block rather than over it,
@@ -512,6 +524,29 @@ the same measurement: the trend comes out exactly strike plus ninety and the
 plunge exactly the dip. Lay the edge anywhere else on the surface and the line
 is a different line in the same plane, which is what records a slickenline.
 Both forms are shown at once, so neither has to be worked out on paper.
+
+### Which way up
+
+Under the instrument, on bedding only, is an **Overturned** switch. It is a
+separate control because it is a separate observation: no compass can tell you
+which way up a bed is, because the plane is the same plane either way. What
+tells you is the rock — graded bedding, cross-bed truncations, load casts,
+ripple forms — and having the switch sitting next to the numbers is what
+reminds you to go and look for one before walking on.
+
+It is offered on bedding and nothing else, and that is the honest answer
+rather than a shortcut. Overturned means the succession *in* the surface
+youngs downward, so the surface has to have a succession in it. A joint, a
+fault plane and a foliation have no younger side to be on the wrong one of.
+
+The reading prints as the hooked dip tick a geologic map uses — the tick turns
+along strike at its end and comes back, which is also what keeps it inside the
+symbol's own footprint so the dip number still lands clear of it. It reads as
+`OT` in the station list, and exports as its own column.
+
+If you switch a station's feature from bedding to something else the flag is
+kept but ignored, so correcting a mis-tap and correcting it back does not lose
+what you saw.
 
 A station stores one pair or the other, never both, and the feature type says
 which. A line is written **trend / plunge** and always labelled, because
@@ -1179,6 +1214,14 @@ number with no way to tell them apart.
   you, the beds dip down to your right. Recorded as an azimuth, 0–360° from
   north.
 - **Dip** and **plunge** are measured down from horizontal.
+- **Overturned** is a separate observation from strike and dip, and has to be.
+  The plane is the same plane whichever way up the succession in it runs, so no
+  compass reading settles it — a way-up criterion in the rock does: graded
+  bedding, cross-bed truncations, load casts, ripples. On the map you record
+  it, on a bedding station only, because a joint or a fault plane has no
+  younger side to be on the wrong one of. On the block it is derived from the
+  geology rather than recorded. Either way it prints as the hooked dip tick,
+  and reads as `OT` in a station list.
 - **Faults** are described the way a student describes them. Pick a type —
   normal, reverse/thrust, dextral or sinistral — then dial **oblique slip**
   from −90° to +90° to mix in the other component. Zero is the pure form of

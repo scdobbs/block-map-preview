@@ -6,7 +6,7 @@
 // geo/math.js, which is what keeps the two views from ever disagreeing.
 
 import { FLAT_DIP, VERTICAL_DIP } from '../../geo/math.js';
-import { feature, isLinearFeature, lineKind, lineCertainty } from '../../field/model.js';
+import { feature, isLinearFeature, isOverturned, lineKind, lineCertainty } from '../../field/model.js';
 
 const DEG = Math.PI / 180;
 
@@ -116,10 +116,21 @@ export function drawStation(ctx, x, y, st, {
       }, lw, color);
     } else {
       const tick = s * (0.34 + 0.28 * (st.dip / 90));
+      // Overturned beds get the recurved tick a printed map uses: at the end
+      // of the dip tick it turns along strike and comes back up. Back UP
+      // rather than on past the tick, so the symbol reaches no further than an
+      // upright one and the dip number below still lands clear of it.
+      const hook = isOverturned(st);
       stroke(() => {
         ctx.beginPath();
         ctx.moveTo(-sx * s, -sy * s); ctx.lineTo(sx * s, sy * s);
         ctx.moveTo(0, 0); ctx.lineTo(dx * tick, dy * tick);
+        if (hook) {
+          const across = s * 0.30;
+          const back = s * 0.34;
+          ctx.lineTo(dx * tick + sx * across, dy * tick + sy * across);
+          ctx.lineTo(dx * (tick - back) + sx * across, dy * (tick - back) + sy * across);
+        }
         ctx.stroke();
       }, lw, color);
 

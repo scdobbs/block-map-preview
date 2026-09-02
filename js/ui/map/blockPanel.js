@@ -103,6 +103,14 @@ export function blockPanel(ctx) {
   if (survey.lines.undipped) {
     hints.push(`${plural(survey.lines.undipped, 'fault')} has no dip on it. A trace gives the dip only where the ground has relief under it; across flat ground every plane through that line fits, and the fit has no choice but to call the fault vertical. Set its dip, which way it moved and the unit either side on the Lines tab — that is what turns a drawn fault into a solved one.`);
   }
+  // Said because the fit has nothing to fit it to, not because the reading is
+  // wrong. Overturning is a way-up, and a way-up leaves no trace in a plane:
+  // the fit sees the same strike and dip whichever answer is true, so there is
+  // no residual it could reduce by getting it right. Better heard from the
+  // panel than discovered as a block that quietly disagrees with the notebook.
+  if (survey.overturned) {
+    hints.push(`${plural(survey.overturned, 'reading')} is marked overturned. The plane is fitted like any other, but nothing in the fit can read a way-up — the same plane holds either answer, so there is nothing for it to fit to. The limb comes back at the dip you measured, and which way up the block puts it is not something the fit decided. Read the block for the structure and the notebook for the way-up.`);
+  }
   if (survey.faultObs) {
     hints.push(`${plural(survey.faultObs, 'reading')} taken on a fault surface will be used for the fault rather than for the beds: a measured plane sets its dip outright, and slickenlines give the rake — the direction of slip, which nothing else in a map can supply.`);
   }

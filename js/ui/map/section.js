@@ -1071,6 +1071,10 @@ export class MapSection {
       gpsAltitude: fix ? fix.altitude : null,
       feature: d.feature,
       strike, dip, trend, plunge, scatter,
+      // Carried, not inferred. isOverturned() is what decides whether it means
+      // anything, so a flag left set from a bedding reading before the feature
+      // was corrected to a joint is stored and ignored rather than lost.
+      overturned: d.overturned === true,
       source: src,
       certainty: bySight ? 'estimated' : d.certainty,
       declination: doc.settings.declination || 0,
@@ -2046,6 +2050,7 @@ function freshDraft() {
     scatter: null, held: false,
     noAttitude: false,
     feature: 'bedding',
+    overturned: false,
     unitId: null, unitName: '',
     rockId: 'sandstone',
     certainty: 'measured',
