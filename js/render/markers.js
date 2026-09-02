@@ -206,9 +206,16 @@ function flatBasis(r) {
   return { X, Y: [-X[1], X[0], 0], Z: [0, 0, 1] };
 }
 
-// How far from its center the symbol actually reaches, in units of S: the
-// strike bar ends at 0.75, and the dip number's far corner a little past 1.
-const REACH = 1.1;
+/**
+ * How far from its center the symbol actually reaches, in units of S: the
+ * strike bar ends at 0.75, and the dip number's far corner a little past 1.
+ *
+ * An overturned reading reaches further, because the hook hangs below the tick
+ * and pushes the number out behind it. Asked of the reading rather than fixed
+ * at the larger number so that the ordinary symbol keeps sitting as low on the
+ * ground as it always did — a lift is clearance nobody asked for.
+ */
+function reachOf(r) { return r.overturned ? 1.4 : 1.1; }
 
 /**
  * Height to hang the symbol at.
@@ -228,7 +235,7 @@ const REACH = 1.1;
  */
 function liftedZ(doc, r, S, basis, ex) {
   const clearance = Math.max(2, S * 0.06);
-  const R = S * REACH;
+  const R = S * reachOf(r);
   let need = -Infinity;
 
   // Center, plus two rings — the terrain here is built from sinusoids hundreds
@@ -266,23 +273,37 @@ function footprintSamples(R) {
 // ---------------------------------------------------------------------------
 
 /**
- * Strike bar and dip tick, with the tick recurved when the beds are
- * overturned — the hook a geologic map prints to say the succession in them
- * runs the wrong way up.
+ * Strike bar and dip tick, with the tick ending in a recurve when the beds are
+ * overturned — the candy-cane hook a geologic map prints to say the tops in
+ * them face the other way. The tick still points the way the beds dip.
  *
- * The hook turns sideways and comes back UP-dip rather than continuing past
- * the end of the tick, which is not only how the printed symbol is drawn but
- * is what keeps it free: the symbol's reach is unchanged, so the dip number
- * still sits where it always did and `liftedZ` still clears the same
- * footprint.
+ * The hook has to be a genuine half-circle, and a wide one. Drawn first as two
+ * straight segments turning back parallel to the tick, it stopped reading as a
+ * hook at any distance: two strokes close together, each carrying its own pale
+ * halo, merge into one fat tick with a stripe down it. A curve wide enough to
+ * hold its own two sides apart is the whole of the difference.
+ *
+ * Sized off the symbol rather than off the tick, so it keeps its weight
+ * whatever the dip, and identical to the arithmetic in ui/map/symbols.js:
+ * a student who reads one of these on the block should meet the same mark on
+ * the map.
  */
+const TICK = 0.48;        // plain dip tick, in units of S
+const HOOK_R = 0.27;      // radius of the overturned recurve, likewise
+
+/** How far the symbol reaches down-dip, hook included. */
+function tickReach(overturned) { return TICK + (overturned ? HOOK_R : 0); }
+
 function inclinedMark(out, C, B, S, w, overturned = false) {
-  const tip = -S * 0.48;
+  const tip = -S * TICK;
   bar(out, C, B, [-S * 0.75, 0], [S * 0.75, 0], w);         // strike
   bar(out, C, B, [0, 0], [0, tip], w);                       // dip tick
   if (!overturned) return;
-  bar(out, C, B, [0, tip], [S * 0.22, tip], w);              // across
-  bar(out, C, B, [S * 0.22, tip], [S * 0.22, tip + S * 0.30], w);   // and back
+  // Centred one radius along strike from the tick's end, so the arc picks up
+  // exactly where the tick stops and its belly is the lowest point of the
+  // symbol. Y is up-dip here, so the sweep runs 180 degrees round through
+  // straight-down.
+  arc(out, C, B, [S * HOOK_R, tip], S * HOOK_R, Math.PI, Math.PI * 2, w);
 }
 
 function verticalMark(out, C, B, S, w) {
@@ -309,6 +330,17 @@ function bar(out, C, B, a, b, w) {
   quad(out, C, B,
     [a0[0] + nx, a0[1] + ny], [b0[0] + nx, b0[1] + ny],
     [b0[0] - nx, b0[1] - ny], [a0[0] - nx, a0[1] - ny]);
+}
+
+/** A partial ring, from a0 to a1 radians about `centre` in plane coordinates. */
+function arc(out, C, B, centre, radius, a0, a1, w, seg = 14) {
+  const ri = radius - w, ro = radius + w;
+  for (let i = 0; i < seg; i++) {
+    const t0 = a0 + ((a1 - a0) * i) / seg;
+    const t1 = a0 + ((a1 - a0) * (i + 1)) / seg;
+    const at = (t, r) => [centre[0] + Math.cos(t) * r, centre[1] + Math.sin(t) * r];
+    quad(out, C, B, at(t0, ri), at(t1, ri), at(t1, ro), at(t0, ro));
+  }
 }
 
 function ring(out, C, B, radius, w, seg = 24) {
@@ -400,8 +432,10 @@ function dipNumber(r, C, B, S) {
 
   mesh.matrixAutoUpdate = false;
   mesh.matrix.makeBasis(across, up, Z);
-  // Sits past the end of the dip tick, on the down-dip side.
-  const d = -S * 0.48 - h * 0.62;
+  // Sits past the end of the dip tick — past the hook too, where there is one,
+  // which is what keeps the number off a recurve that would otherwise run
+  // straight through it.
+  const d = -S * tickReach(r.overturned) - h * 0.62;
   mesh.matrix.setPosition(
     C[0] + B.Y[0] * d, C[1] + B.Y[1] * d, C[2] + B.Y[2] * d,
   );

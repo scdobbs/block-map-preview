@@ -116,20 +116,36 @@ export function drawStation(ctx, x, y, st, {
       }, lw, color);
     } else {
       const tick = s * (0.34 + 0.28 * (st.dip / 90));
-      // Overturned beds get the recurved tick a printed map uses: at the end
-      // of the dip tick it turns along strike and comes back up. Back UP
-      // rather than on past the tick, so the symbol reaches no further than an
-      // upright one and the dip number below still lands clear of it.
+      // Overturned beds end the dip tick in a recurve — the candy-cane hook a
+      // printed map uses, curling back toward the strike line to say the tops
+      // face the other way. The tick still points the way the beds dip.
+      //
+      // It has to be an ARC, and a wide one. Drawn first as two straight
+      // segments turning back parallel to the tick, it stopped reading as a
+      // hook at any distance: two strokes a few pixels apart, each carrying a
+      // dark backing, merge into one fat tick with a pale stripe down it. A
+      // half-circle wide enough to keep its own two sides apart is the whole
+      // difference, and it is why the hook is sized off the symbol rather than
+      // off the tick — the tick shrinks with the dip and the hook must not.
       const hook = isOverturned(st);
+      const hookR = s * 0.27;
+      // How far the symbol reaches down-dip, hook included. The dip number is
+      // hung off this, so it steps out of the way on its own.
+      const reach = tick + (hook ? hookR : 0);
       stroke(() => {
         ctx.beginPath();
         ctx.moveTo(-sx * s, -sy * s); ctx.lineTo(sx * s, sy * s);
         ctx.moveTo(0, 0); ctx.lineTo(dx * tick, dy * tick);
         if (hook) {
-          const across = s * 0.30;
-          const back = s * 0.34;
-          ctx.lineTo(dx * tick + sx * across, dy * tick + sy * across);
-          ctx.lineTo(dx * (tick - back) + sx * across, dy * (tick - back) + sy * across);
+          // Centred one radius along strike from the tick's end, so the arc
+          // starts exactly where the tick stops and its belly is the lowest
+          // point of the whole symbol. Down-dip sits a quarter turn clockwise
+          // of strike in azimuth and screen Y runs the other way, which is why
+          // the sweep is the anticlockwise one.
+          const cx = dx * tick + sx * hookR;
+          const cy = dy * tick + sy * hookR;
+          const a0 = Math.atan2(-sy, -sx);
+          ctx.arc(cx, cy, hookR, a0, a0 - Math.PI, true);
         }
         ctx.stroke();
       }, lw, color);
@@ -137,7 +153,7 @@ export function drawStation(ctx, x, y, st, {
       // The dip number, set just beyond the tick and always upright — a map
       // is read with the sheet the right way up, not turned to follow each
       // symbol round.
-      drawText(ctx, `${Math.round(st.dip)}`, dx * (tick + 9 * scale), dy * (tick + 9 * scale), {
+      drawText(ctx, `${Math.round(st.dip)}`, dx * (reach + 9 * scale), dy * (reach + 9 * scale), {
         color, scale, weight: 600,
       });
     }
