@@ -986,11 +986,21 @@ html, body {
 
 /* Everything transient along the bottom of the map, in one column, clear of
    the scale bar and the attribution in the corners. */
+/* Stretched across the pane and inset, rather than centred by a transform and
+   left to shrink-wrap its children.
+   Shrink-wrapping looks equivalent and is not. Each chip in here caps itself
+   at a percentage of its parent, for the days it is not in a stack at all; a
+   shrink-to-fit parent is sized BY those children, so the percentage would be
+   measured against a width the cap itself decides, and it settles a little
+   narrower than the text every time. That is what put a station's unit on its
+   own line with the separator dot stranded above it, and wrapped "4 tiles
+   loading" in half. Two fixed edges give the percentages something real to be
+   a percentage of, and align-items keeps every chip its own width. */
 .map-bottom {
-  position: absolute; z-index: 6; left: 50%; transform: translateX(-50%);
+  position: absolute; z-index: 6; left: 12px; right: 12px;
   bottom: calc(38px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  max-width: calc(100% - 24px); pointer-events: none;
+  pointer-events: none;
 }
 .map-bottom > * { pointer-events: auto; }
 .map-bottom .map-status,
@@ -1477,11 +1487,13 @@ html, body {
   bottom: calc(10px + env(safe-area-inset-bottom));
   pointer-events: none; font-variant-numeric: tabular-nums;
 }
+/* Two fixed edges rather than a centring transform, for the reason .map-bottom
+   has them. */
 .strat-bottom {
-  position: absolute; z-index: 6; left: 50%; transform: translateX(-50%);
+  position: absolute; z-index: 6; left: 12px; right: 12px;
   bottom: calc(38px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  max-width: calc(100% - 24px); pointer-events: none;
+  pointer-events: none;
 }
 .strat-bottom > * { pointer-events: auto; }
 

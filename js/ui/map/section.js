@@ -721,7 +721,7 @@ export class MapSection {
       : 'no attitude';
     this.readout.append(
       el('strong', { text: `${st.name || '—'}  ${attitude}` }),
-      el('span', { text: st.unitName ? ` · ${st.unitName}` : '' }),
+      el('span', { text: st.unitName ? ` ·\u00a0${st.unitName}` : '' }),
       el('button', {
         class: 'chip-close', type: 'button', text: '×', 'aria-label': 'Deselect',
         onclick: () => this.selectStation(null),
