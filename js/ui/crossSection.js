@@ -50,6 +50,10 @@ const VE_STEPS = [
 /** How each kind of structure is inked on the section. */
 const STRUCTURE_STYLE = {
   fault: { color: FAULT, halo: 3.6, width: 1.8, dash: [] },
+  // A thrust is inked like any other fault, because that is what it is. The
+  // ramp, the flats and the tip are geometry, not a different kind of line.
+  rampflat: { color: FAULT, halo: 3.6, width: 1.8, dash: [] },
+  propfold: { color: FAULT, halo: 3.6, width: 1.8, dash: [] },
   dike: { color: '#8ecae6', halo: 2.4, width: 1.1, dash: [] },
   unconformity: { color: UNCONF, halo: 3.2, width: 1.5, dash: [6, 3] },
 };

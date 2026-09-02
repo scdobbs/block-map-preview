@@ -157,6 +157,22 @@ export const EVENT_TYPES = {
       centerX: 0, centerY: 0, centerZ: -400,
     }),
   },
+  rampflat: {
+    label: 'Thrust ramp & flat',
+    blurb: 'A thrust that steps up a ramp between two bedding-parallel flats. The sheet bends to stay on it — a fault-bend fold. Stack a few for a duplex.',
+    defaults: () => ({
+      transport: 90, ramp: 30, floorZ: -900, rise: 450, slip: 750,
+      round: 80, centerX: 0, centerY: 0,
+    }),
+  },
+  propfold: {
+    label: 'Fault-propagation fold',
+    blurb: 'A thrust that dies upward at a tip. The slip it can no longer carry folds the wedge of rock ahead of it — trishear.',
+    defaults: () => ({
+      transport: 90, ramp: 30, tipZ: -250, slip: 320,
+      apical: 60, ps: 2, centerX: 0, centerY: 0,
+    }),
+  },
   dike: {
     label: 'Dike / Sill',
     blurb: 'Tabular intrusion cutting everything older than it.',
@@ -192,7 +208,7 @@ export const EVENT_TYPES = {
   },
 };
 
-export const EVENT_ORDER = ['tilt', 'fold', 'domebasin', 'fault', 'dike', 'pluton', 'unconformity'];
+export const EVENT_ORDER = ['tilt', 'fold', 'domebasin', 'fault', 'rampflat', 'propfold', 'dike', 'pluton', 'unconformity'];
 
 /**
  * How wide a dike drawn on a MAP is taken to be, in metres, until somebody
@@ -582,5 +598,45 @@ export const PRESETS = [
       makeEvent('fold', { trend: 0, plunge: 0, wavelength: 1500, amplitude: 260 }),
       makeEvent('fault', { strike: 0, dip: 25, kind: 'reverse', slip: 500, centerX: -200, name: 'Thrust fault' }),
     ],
+  },
+  {
+    id: 'faultbend',
+    label: 'Fault-bend fold',
+    blurb: 'A thrust sheet rides up a ramp between two flats and folds over the bends.',
+    build: () => [
+      makeEvent('rampflat', {
+        transport: 90, ramp: 30, floorZ: -900, rise: 400, slip: 1000,
+        centerX: -850, name: 'Ramp & flat thrust',
+      }),
+    ],
+  },
+  {
+    id: 'propfold',
+    label: 'Fault-propagation fold',
+    blurb: 'A blind thrust dying upward, with a steep forelimb folded ahead of its tip.',
+    build: () => [
+      makeEvent('propfold', {
+        transport: 90, ramp: 30, tipZ: -350, slip: 450, apical: 80, ps: 1,
+        centerX: -250, name: 'Blind thrust tip',
+      }),
+    ],
+  },
+  {
+    // Three ramps off one floor thrust and into one roof thrust. They are
+    // added hinterland-first, so each new horse is the foreland-most one and
+    // rides every earlier horse forward on its back — which is what "in
+    // sequence", or breaking forward, means, and is why nothing here has to
+    // know what a duplex is: it is three of the same event in a row.
+    id: 'duplex',
+    label: 'Thrust duplex',
+    blurb: 'Three horses stacked off one floor thrust, cut in sequence.',
+    // Spacing beats slip beats ramp length, and it has to, in that order. Slip
+    // shorter than the ramp and a horse never rides up on to its roof; slip as
+    // long as the spacing and each horse is carried exactly on to the one in
+    // front, which is a real antiformal stack but draws as one thick fault.
+    build: () => [-1400, -700, 0].map((cx, i) => makeEvent('rampflat', {
+      transport: 90, ramp: 35, floorZ: -1000, rise: 220, slip: 450,
+      centerX: cx, name: `Horse ${i + 1}`,
+    })),
   },
 ];

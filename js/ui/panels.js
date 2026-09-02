@@ -15,6 +15,7 @@ import {
   FAULT_KINDS, FAULT_KIND_ORDER, faultRake, faultSense, unconformityDatums,
 } from '../geo/model.js';
 import { quadrantBearing } from '../geo/math.js';
+import { thrustStrike, rampGeometry, PS_MIN } from '../geo/thrust.js';
 import { formatReading, FLAT_DIP } from '../render/markers.js';
 import { formatLine, formatPlane } from '../geo/stereonet.js';
 import { surfaceRange, niceContourInterval, isDemSurface } from '../geo/surfaces.js';
@@ -574,6 +575,23 @@ function summarise(ev, doc) {
     ].filter(Boolean).join(' · ');
     case 'domebasin': return `${ev.amplitude >= 0 ? 'Dome' : 'Basin'} · ${Math.round(Math.abs(ev.amplitude))} m · r ${Math.round(ev.radiusA)} m`;
     case 'fault': return `${p(ev.strike)}/${Math.round(ev.dip)} · ${faultSense(ev)} · slip ${Math.round(ev.slip)} m`;
+    // Named the way a thrust is read off a section: the plane it lies in, then
+    // which way the sheet went, then how far. The strike is derived rather than
+    // stored, so it cannot fall out of step with the transport direction.
+    case 'rampflat': return [
+      `${p(thrustStrike(ev))}/${Math.round(ev.ramp)}`,
+      `transport ${p(ev.transport)}`,
+      `rise ${Math.round(ev.rise)} m`,
+      `slip ${Math.round(ev.slip)} m`,
+      ev.slip > rampGeometry(ev).len ? 'crest reached' : 'still on the ramp',
+    ].join(' · ');
+    case 'propfold': return [
+      `${p(thrustStrike(ev))}/${Math.round(ev.ramp)}`,
+      `tip ${Math.round(ev.tipZ)} m`,
+      `slip ${Math.round(ev.slip)} m`,
+      `trishear ${Math.round(ev.apical)}°`,
+      `P/S ${(+ev.ps).toFixed(1)}`,
+    ].join(' · ');
     case 'dike': return `${p(ev.strike)}/${Math.round(ev.dip)} · ${Math.round(ev.thickness)} m · ${rock(ev.rockId).label}`;
     case 'pluton': return `${rock(ev.rockId).label} · ${Math.round(ev.radiusX)}×${Math.round(ev.radiusY)}×${Math.round(ev.radiusZ)} m`;
     case 'unconformity': {
@@ -817,6 +835,78 @@ function buildEventControls(ctx, ev, index, body) {
       break;
     }
 
+    case 'rampflat': {
+      // The dial asks for the transport direction, not the strike. A thrust
+      // sheet is a thing that MOVED, and which way it moved is the fact a
+      // student has in hand — the strike falls out of it, and is reported in
+      // the summary line rather than dialed in a second time and left to
+      // disagree.
+      body.appendChild(compassDial({
+        label: 'Transport', value: ev.transport, onChange: set('transport'),
+      }));
+      body.appendChild(el('div', { class: 'ctl-hint standalone', text:
+        `The way the hanging wall moved, and the way the ramp climbs. The fault plane strikes ${Math.round(thrustStrike(ev))}° and dips back the other way.` }));
+
+      body.appendChild(protractor({
+        label: 'Ramp dip', value: ev.ramp, max: 75, onChange: set('ramp'),
+      }));
+      body.appendChild(numberRow({
+        label: 'Flat depth', value: ev.floorZ, min: -2500, max: 200, step: 25, unit: 'm',
+        onChange: set('floorZ'),
+        hint: 'The décollement the sheet slides on. The upper flat sits one rise above it.',
+      }));
+      body.appendChild(numberRow({
+        label: 'Ramp rise', value: ev.rise, min: 50, max: 1500, step: 25, unit: 'm',
+        onChange: set('rise'),
+        hint: 'How far the fault steps up. This is the height of the anticline it makes.',
+      }));
+      body.appendChild(numberRow({
+        label: 'Slip', value: ev.slip, min: 0, max: 3000, step: 25, unit: 'm',
+        onChange: set('slip'),
+        hint: 'Displacement along the flat. Past the ramp length the fold grows a flat crest instead of getting taller.',
+      }));
+      body.appendChild(el('div', { class: 'ctl-hint standalone', text: rampNote(ev) }));
+      body.appendChild(numberRow({
+        label: 'Bend rounding', value: ev.round, min: 0, max: 400, step: 10, unit: 'm',
+        onChange: set('round'),
+        hint: 'How sharp the two bends are. Zero is a kink band; a few tens of metres is a real fault.',
+      }));
+      body.appendChild(centerRow(ctx, ev, index, ['centerX', 'centerY']));
+      break;
+    }
+
+    case 'propfold': {
+      body.appendChild(compassDial({
+        label: 'Transport', value: ev.transport, onChange: set('transport'),
+      }));
+      body.appendChild(protractor({
+        label: 'Ramp dip', value: ev.ramp, max: 75, onChange: set('ramp'),
+      }));
+      body.appendChild(numberRow({
+        label: 'Tip elevation', value: ev.tipZ, min: -2000, max: 600, step: 25, unit: 'm',
+        onChange: set('tipZ'),
+        hint: 'Where the fault stops. Above this the rock is folded, not broken — put the tip under the ground surface and the fault is blind.',
+      }));
+      body.appendChild(numberRow({
+        label: 'Slip', value: ev.slip, min: 0, max: 1000, step: 10, unit: 'm',
+        onChange: set('slip'),
+        hint: 'How far the sheet moved. Most of it is taken up by the fold near the tip and by the break further down.',
+      }));
+      body.appendChild(numberRow({
+        label: 'Trishear angle', value: ev.apical, min: 20, max: 120, step: 5, unit: '°',
+        onChange: set('apical'),
+        hint: 'How wide the triangle of deforming rock ahead of the tip opens. Narrow makes a tight, steep forelimb; wide spreads the same slip into a gentle monocline.',
+      }));
+      body.appendChild(numberRow({
+        label: 'Propagation / slip', value: ev.ps, min: PS_MIN, max: 4, step: 0.1,
+        onChange: set('ps'),
+        ends: ['fold takes it up', 'break outruns it'],
+        hint: 'How fast the tip climbs for every metre the sheet slips. Low leaves the fold to take up most of the shortening; high drives the break out through it. Natural ones run about 1 to 3, and a tip that barely moves at all piles up strain on itself rather than making a structure.',
+      }));
+      body.appendChild(centerRow(ctx, ev, index, ['centerX', 'centerY']));
+      break;
+    }
+
     case 'dike': {
       const dial = compassDial({ label: 'Strike', value: ev.strike, dip: ev.dip, onChange: set('strike') });
       body.appendChild(dial);
@@ -925,6 +1015,24 @@ function buildEventControls(ctx, ev, index, body) {
       break;
     }
   }
+}
+
+/**
+ * What the slip has bought, in the words a fault-bend fold is read in.
+ *
+ * The crest of a ramp anticline is as wide as the slip exceeds the ramp, and
+ * until the slip gets there the fold is still a triangle growing on the ramp
+ * and has not reached its full height. That is the one number in the event
+ * that is not on a slider, and it is the one that decides what the block will
+ * look like — so it is said rather than left to be discovered by dragging.
+ */
+function rampNote(ev) {
+  const len = rampGeometry(ev).len;
+  const crest = ev.slip - len;
+  if (crest <= 0) {
+    return `The ramp is ${Math.round(len)} m long. With ${Math.round(ev.slip)} m of slip the fold is still climbing it — a peaked anticline ${Math.round(ev.slip * Math.tan((ev.ramp || 0) * Math.PI / 180))} m high. It reaches full height at ${Math.round(len)} m of slip.`;
+  }
+  return `The ramp is ${Math.round(len)} m long, so the sheet is over the top: a flat-topped anticline ${Math.round(ev.rise)} m high with a crest ${Math.round(crest)} m wide, and both limbs dipping at the ramp angle.`;
 }
 
 function centerRow(ctx, ev, index, keys) {

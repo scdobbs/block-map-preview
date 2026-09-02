@@ -1391,7 +1391,8 @@ Undo the youngest event, then the next, and so on, until the point lands back
 in the flat layer cake it was deposited in. Then it is a matter of which layer
 that depth falls in.
 
-Every deformation is exactly invertible, which is what makes this work:
+Nearly every deformation is exactly invertible, which is what makes this work
+— and the one that is not says so in its own row:
 
 | Event | Forward | Why the inverse is exact |
 |---|---|---|
@@ -1399,6 +1400,8 @@ Every deformation is exactly invertible, which is what makes this work:
 | **Fold** | an upright fold (vertical displacement, a warped and enveloped wave — or a fitted series of harmonics — read across the horizontal `perp` axis), then a rigid tilt about `perp` by the plunge | neither step changes the horizontal coordinates the profile is read from, whatever shape that profile has |
 | **Dome / basin** | vertical displacement depending only on map position | map position is unchanged by vertical motion |
 | **Fault** | rigid translation of the hanging wall, parallel to the fault plane | slip lies in the plane, so the hanging-wall test gives the same answer before and after |
+| **Thrust ramp & flat** | the hanging wall slides along a flat-ramp-flat surface by vertical shear, keeping its height above the fault | that height is preserved exactly, so it can be read off the present position — and it is also the hanging-wall test, before and after |
+| **Fault-propagation fold** | trishear: a rigid hanging wall, a fixed footwall, and a wedge of distributed shear opening ahead of a tip that advances as the sheet slips | **it is not.** A flow with no closed form, so it is integrated back in a fixed number of increments — the same number on the CPU and in the shader |
 | **Unconformity** | splits the column: units above the erosion surface skip all older history | a branch, not a transform |
 | **Dike / pluton** | paints rock inside a region, at its own point in the history | a test, not a transform — but see *A folded dike* below |
 
@@ -1485,6 +1488,99 @@ identify tool and it is the reference the shader must agree with. **If you
 change one, change the other.** `js/geo/warp.js` is the piece both of them
 read, so that the one thing they cannot afford to disagree about has a single
 implementation rather than two.
+
+### Thrusts, and the folds they make for themselves
+
+A planar fault slides one rigid wall past another and leaves the beds in each
+wall exactly as it found them. Real thrusts almost never do. The two structures
+that make a fold-and-thrust belt look the way it does are both consequences of
+the fault's own shape, and both are events of their own.
+
+**Thrust ramp & flat.** The fault steps up from one bedding-parallel flat to
+another along a ramp, and the sheet has to bend twice to stay on it — once at
+the bottom of the ramp and once at the top. The fold that falls out is the
+uplift `f(t) - f(t - S)`, with `f` the fault's surface and `S` the slip: zero
+behind the ramp, climbing the backlimb at the ramp angle, flat across a crest
+as wide as the slip exceeds the ramp, then down the forelimb. So the three
+numbers that decide the picture are not independent, and the editor says so
+under the slip slider rather than leaving you to find it by dragging — slip
+shorter than the ramp and the anticline is still a peak climbing it, not yet at
+full height; slip longer and it is flat-topped.
+
+One thing about it reads as a bug and is not: along the two **flats** there is
+no visible offset at all, even though the fault plainly passed through. Slip on
+a flat is bedding-parallel, so it slides each bed along itself and puts the
+same rock back where it was. Only the ramp cuts across bedding, and only the
+ramp shows a cut-out and a repeat. That is exactly why a décollement is hard to
+find in the field, and it is the sort of thing a block diagram is for.
+
+**Fault-propagation fold.** The fault ends upward at a tip, and the slip it can
+no longer carry goes into folding the wedge of rock ahead of it. The forelimb
+comes out steep and thinned, and the fold tightens downward toward the tip
+because the wedge is narrow there and widens upward. Two dials do most of the
+work: the trishear angle — narrow gives a tight steep forelimb, wide spreads
+the same slip into a gentle monocline — and the propagation-to-slip ratio, low
+leaving the fold to take up nearly all the shortening and high driving the
+break out through it.
+
+**A duplex is three of the first one in a row.** Nothing in the code knows what
+a duplex is. Each horse is a ramp-flat thrust sharing a floor thrust with the
+others, cut in sequence from the hinterland forward, and because a younger
+event deforms everything older, each new horse rides the earlier ones forward
+on its own back — which is what "in sequence", or breaking forward, means. The
+preset only has to get one ordering right: spacing beats slip beats ramp
+length. Slip shorter than the ramp and a horse never gets up on to its roof;
+slip as long as the spacing and each horse is carried exactly on to the one in
+front, which is a real antiformal stack and draws as one thick fault.
+
+**Where the fault has been, the beds are broken; above it they are only bent.**
+That is the whole structure, and it is worth saying because getting it wrong is
+easy and looks plausible. Behind the tip the hanging wall takes the whole
+increment and the footwall none of it, and that jump *is* the fault — not an
+approximation to be smoothed, but the same rigid translation the planar fault
+event makes, taken a sixteenth at a time. Ahead of the tip the wedge opens and
+the same field goes continuous. The two halves meet exactly, because the wedge
+closes to nothing at the tip and the interpolation across it is already pinned
+to the step the fault side is making.
+
+This was built wrong first, in a way worth recording. Widening the wedge to a
+blunt nose — a floor under its half-width, held through the tip and back down
+the fault — makes the map comfortably invertible and destroys the structure:
+the fault becomes a band of distributed shear about a tenth of the slip wide,
+and beds cross it as an unbroken S-bend. Which is a ductile shear zone, not a
+thrust. It drew as a fold everywhere and a fault nowhere.
+
+The reason the blunt nose looked necessary was a misread of what can turn the
+map over. Write out the field's gradient for a zone of half-width `w` and two
+of its four entries carry a factor `w'`, the rate the zone *opens*, and two do
+not. Only the two with `w'` in them can fold the map: the other two displace
+rock along a direction the displacement does not vary in, which is simple shear
+and is invertible however hard it shears. So a knife-edge fault costs nothing
+at all — behind the tip `w'` is zero. Ahead of it the condition works out as
+`ux > s`, one increment's length from the tip, on the fault trace where a red
+line is drawn anyway.
+
+**The one thing that genuinely does not work is a tip that stands still.** The
+zone is pinned to the tip, so at a propagation-to-slip ratio of zero the same
+rock is fed through the same apex increment after increment and the strain
+there grows without bound. That is a true statement about trishear rather than
+about sixteen steps, and the measurements say so: integrating it more finely
+makes the pile-up *worse*, not better, while every ratio at or above about a
+half is clean at any slip and any angle. So the slider starts at a half, and
+`trishearFrame` clamps there for a file written by hand. Natural
+fault-propagation folds run from about one to three anyway.
+
+**A trace that has to stop.** A fault-propagation fold's fault is a ray, not a
+plane — above the tip the rock is folded and unbroken. The shader gets that for
+free, because it inks from a distance and the distance to a ray is honest. The
+cross section does not: it finds traces by contouring a signed field, and a
+signed distance to a ray still changes sign across the ray's forward
+continuation while its magnitude stays large. Marching squares reads plus a
+hundred beside minus a hundred as a crossing and draws the fault straight on up
+through the fold it dies into — the one thing the structure exists to say it
+does not do. So the sign stays with the plane, where it is continuous, and
+where the fault stops is said with a mask instead: the same mechanism that
+already stops a trace at rock the structure never reached.
 
 ## Reading a history back out of a map
 
@@ -1749,11 +1845,32 @@ fragment uniform budget of older mobile GPUs.
 
 ## The block
 
-**Faults are planar and slip is uniform.** Listric and bend faults, and blind
-thrusts whose slip tapers to a tip line, break the exactly-invertible property
-the whole model rests on, so they need a different, iterative approach. The
-fault code is written around a signed distance to the fault surface, so a
-curved surface can be slotted in later.
+**The plain fault is planar and its slip is uniform.** The two thrusts are not,
+and they are where the exactly-invertible property gets tested.
+
+A **ramp-flat thrust** keeps it. Moving the hanging wall by vertical shear —
+every column of rock holding its height above the fault as it slides — turns
+the curved surface into a closed form that inverts by being read the other way,
+and it degenerates back to the planar fault wherever the surface is planar.
+What it gives up is Suppe's kink-band construction: vertical shear lets bed
+thickness change on the limbs, and it makes the forelimb dip at the ramp angle
+where Suppe's makes it steeper than the backlimb. The ramp anticline's height,
+its flat crest and where its limbs sit are all right.
+
+A **fault-propagation fold** does not keep it. Trishear is a velocity field and
+its deformation is a flow, path-dependent because the tip advances while the
+rock is moving through the zone, and there is no closed form to invert. So it
+is integrated instead — sixteen equal increments, walking the tip back down the
+ramp as it goes — and that number is shared with the generated shader so the
+CPU walk and the GPU one take literally the same steps. It is the only loop in
+the fragment shader and the only event here whose inverse is approximate. It
+also carries the one parameter floor in the app: the propagation-to-slip ratio
+cannot go below a half, because a trishear tip that stands still piles unbounded
+strain on its own apex.
+
+**Listric normal faults are not in yet**, and are the obvious next thing: the
+ramp-flat machinery with the sheet moving the other way down a surface that
+flattens with depth instead of stepping up.
 
 **A fold has a shape and a reach, not just a size.** The profile is a cosine
 warped by two numbers and multiplied by an envelope, all of them functions of

@@ -16,6 +16,7 @@
 // This file must stay numerically identical to js/geo/unmake.js.
 
 import { MAX_LAYERS } from './model.js';
+import { TRISHEAR_STEPS } from './thrust.js';
 
 // ---------------------------------------------------------------------------
 // Shared GLSL preamble
@@ -23,6 +24,7 @@ import { MAX_LAYERS } from './model.js';
 
 const COMMON = /* glsl */ `
 #define MAX_LAYERS ${MAX_LAYERS}
+#define TRISHEAR_N ${TRISHEAR_STEPS}
 #define PI 3.141592653589793
 
 uniform vec4  uLayerA[MAX_LAYERS];   // rgb = color, a = cumulative depth (m)
@@ -98,6 +100,33 @@ float surfH(vec4 a, vec4 b, vec4 c, vec2 xy) {
     h += c.y * a.y * 0.35 * hillField(xy, max(1e-3, a.z) * 0.45);
   }
   return a.x + h;
+}
+
+/**
+ * The ramp-flat fault surface — the GLSL twin of rampHeight() in geo/thrust.js.
+ * g = (floorZ, tan(ramp), ramp length, rounding radius), t the transport
+ * coordinate with the lower bend at zero.
+ *
+ * rampDZ is its slope, and has no twin over there: the walk does not need it,
+ * and this does, to divide the vertical distance to the fault into the
+ * perpendicular one so the trace holds one width up the ramp.
+ */
+float softRamp(float u, float r) {
+  if (u <= -r) return 0.0;
+  if (u >= r) return u;
+  float s = u + r;
+  return s * s / (4.0 * r);
+}
+float softRampD(float u, float r) {
+  if (u <= -r) return 0.0;
+  if (u >= r) return 1.0;
+  return (u + r) / (2.0 * r);
+}
+float rampZ(vec4 g, float t) {
+  return g.x + g.y * (softRamp(t, g.w) - softRamp(t - g.z, g.w));
+}
+float rampDZ(vec4 g, float t) {
+  return g.y * (softRampD(t, g.w) - softRampD(t - g.z, g.w));
 }
 `;
 
@@ -213,6 +242,102 @@ function emitFault(p) {
   };
 }
 
+/**
+ * Ramp-flat thrust — the GLSL twin of undoRampFlat() in geo/thrust.js.
+ *
+ * _t = (transport.x, transport.y, anchorX, anchorY)
+ * _g = (floorZ, tan(ramp), ramp length, bend rounding)
+ * _s = slip along the flat
+ */
+function emitRampFlat(p) {
+  return {
+    decl: `uniform vec4 ${p}_t; uniform vec4 ${p}_g; uniform float ${p}_s;`,
+    // The height above the fault, measured straight up, is preserved by the
+    // motion — that is the whole construction — so it can be read here, off
+    // the present position, and used to place the point before the slip. It
+    // also means the trace can be inked from the same number, before or after,
+    // exactly as the planar fault does with its plane distance.
+    //
+    // The vertical distance is turned into the perpendicular one by the
+    // surface's own slope, so the trace holds one width all the way along
+    // rather than fattening where it climbs the ramp.
+    code: `  {
+    float t = dot(p.xy - ${p}_t.zw, ${p}_t.xy);
+    float v = p.z - rampZ(${p}_g, t);
+    float sl = rampDZ(${p}_g, t);
+    faultD = min(faultD, abs(v) * inversesqrt(1.0 + sl * sl));
+    if (v > 0.0) {
+      p.xy -= ${p}_s * ${p}_t.xy;
+      p.z = rampZ(${p}_g, t - ${p}_s) + v;
+    }
+  }`,
+  };
+}
+
+/**
+ * Fault-propagation fold — the GLSL twin of undoPropFold() in geo/thrust.js,
+ * integrating the same TRISHEAR_N increments in the same order.
+ *
+ * _t = (transport.x, transport.y, anchorX, anchorY)
+ * _f = (up-dip.t, up-dip.z, tan(half apical angle), tip elevation)
+ * _p = (total slip, total propagation)
+ *
+ * The one loop in the whole shader, and it has to be one: trishear is a flow,
+ * and there is no closed form to fold it into. TRISHEAR_N is imported from
+ * geo/thrust.js rather than written twice, so the CPU walk and this take
+ * literally the same steps.
+ */
+function emitPropFold(p) {
+  return {
+    decl: `uniform vec4 ${p}_t; uniform vec4 ${p}_f; uniform vec2 ${p}_p;`,
+    code: `  {
+    float t0 = dot(p.xy - ${p}_t.zw, ${p}_t.xy);
+    float t = t0;
+    float z = p.z - ${p}_f.w;
+    vec2 f2 = ${p}_f.xy;
+    vec2 n2 = vec2(-f2.y, f2.x);
+    float m = ${p}_f.z;
+
+    // The fault is a ray running down-dip from the tip, not a plane: above the
+    // tip the rock is folded and unbroken, so the trace has to stop there.
+    // Measuring to the tip point itself ahead of it closes the line off in a
+    // rounded end exactly at the tip.
+    {
+      float ux = t * f2.x + z * f2.y;
+      float uy = t * n2.x + z * n2.y;
+      faultD = min(faultD, ux <= 0.0 ? abs(uy) : length(vec2(ux, uy)));
+    }
+
+    float s = ${p}_p.x / float(TRISHEAR_N);
+    for (int i = 0; i < TRISHEAR_N; i++) {
+      // Increment i counted from the present: the tip stood one more increment
+      // of propagation back down the ramp for each one taken off.
+      float back = ${p}_p.y * float(i + 1) / float(TRISHEAR_N);
+      vec2 d = vec2(t, z) + f2 * back;
+      float ux = dot(d, f2);
+      float uy = dot(d, n2);
+      // trishearStep(), in the same two halves: a knife-edge fault behind the
+      // tip, a wedge opening at the trishear angle ahead of it. They meet
+      // continuously because the wedge closes to nothing at the tip.
+      float phiX, phiY;
+      if (ux <= 0.0) {
+        phiX = uy > 0.0 ? 1.0 : 0.0;
+        phiY = 0.0;
+      } else {
+        float eta = clamp(uy / max(m * ux, 1e-3), -1.0, 1.0);
+        phiX = 0.5 * (1.0 + eta);
+        phiY = m * 0.25 * (eta * eta - 1.0);
+      }
+      t -= s * (phiX * f2.x + phiY * n2.x);
+      z -= s * (phiX * f2.y + phiY * n2.y);
+    }
+
+    p.xy += (t - t0) * ${p}_t.xy;
+    p.z = ${p}_f.w + z;
+  }`,
+  };
+}
+
 function emitDike(p) {
   return {
     decl: `uniform vec3 ${p}_normal; uniform vec4 ${p}_geom; uniform vec2 ${p}_zrange; uniform vec4 ${p}_rock;`,
@@ -276,6 +401,8 @@ const EMITTERS = {
   fold: emitFold,
   domebasin: emitDomeBasin,
   fault: emitFault,
+  rampflat: emitRampFlat,
+  propfold: emitPropFold,
   dike: emitDike,
   pluton: emitPluton,
   unconformity: emitUnconformity,

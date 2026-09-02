@@ -17,6 +17,9 @@ import { traceContours, chainSegments } from './marching.js';
 import { surfaceHeight, surfaceRange } from './surfaces.js';
 import { rock, sliceCut } from './model.js';
 import { wrap360, RAD, DEG } from './math.js';
+import {
+  isThrust, rampFlatField, propFoldField, propFoldBelowTip,
+} from './thrust.js';
 
 /** Above the land surface — the part of the section that is air. */
 export const SKY = -9999;
@@ -218,6 +221,13 @@ export function structureTraces(h, frame, cols = 190, rows = 140) {
     if (inert.has(e.id)) continue;
     const field = structureField(e);
     if (!field) continue;
+    // Some structures stop somewhere of their own accord, quite apart from
+    // what younger rock buried them: a fault that dies upward at a tip is not
+    // a break above it. That cannot be said in the field itself — a contour
+    // tracer only knows sign changes, and every field that stops mid-plane
+    // still changes sign along the continuation — so it is said here, in the
+    // same mask that already stops a trace at rock the structure never reached.
+    const extent = structureExtent(e);
     const g = new Float32Array(cols * rows);
     const seen = new Uint8Array(cols * rows);
     for (let j = 0; j < rows; j++) {
@@ -226,7 +236,7 @@ export function structureTraces(h, frame, cols = 190, rows = 140) {
         const s = ((i + 0.5) / cols) * frame.len;
         const [x, y] = frame.at(s);
         const r = reachEvent(h, [x, y, z], k);
-        seen[j * cols + i] = r.reached ? 1 : 0;
+        seen[j * cols + i] = r.reached && (!extent || extent(r.p)) ? 1 : 0;
         g[j * cols + i] = field(r.p);
       }
     }
@@ -244,9 +254,16 @@ export function structureTraces(h, frame, cols = 190, rows = 140) {
   // saying the fault is an unconformity. So a cell whose corners are not all
   // in the same fault block is not contoured, and the trace comes out as the
   // two pieces the fault actually left.
-  const faults = fields.filter((x) => x.e.type === 'fault');
+  // Every kind of fault tears, not just the planar one: a thrust carries its
+  // hanging wall away from its footwall the same way, and leaves the same
+  // discontinuity for marching squares to misread.
+  //
+  // A wall only counts as carried away where the fault is actually a fault, so
+  // the tear reads the same mask the trace does: above a blind thrust's tip
+  // nothing is torn, and an older trace crossing there stays whole.
+  const faults = fields.filter((x) => x.e.type === 'fault' || isThrust(x.e));
   for (const { k, e, g, seen } of fields) {
-    const torn = faults.filter((x) => x.k > k).map((x) => x.g);
+    const torn = faults.filter((x) => x.k > k);
     const runs = [];
     for (const { seg } of traceContours(g, cols, rows, [0])) {
       for (const run of chainSegments(seg)) {
@@ -268,12 +285,15 @@ export function structureTraces(h, frame, cols = 190, rows = 140) {
  * continuous, meaningful thing across all four corners. Two ways it can fail,
  * and a cell that fails either is not drawn:
  *
- *   - part of the cell is rock this structure never reached (`seen`), so the
- *     contour there would be the trace of a structure that is not in that rock
+ *   - part of the cell is rock this structure never reached, or is past where
+ *     the structure stops (`seen`), so the contour there would be the trace of
+ *     a structure that is not in that rock
  *   - the cell straddles a younger fault (`torn`), which carried one wall of
  *     this structure away from the other, leaving the field genuinely
  *     discontinuous. Marching squares reads the jump as a sign change and
- *     bridges it, drawing a line along the fault
+ *     bridges it, drawing a line along the fault. Each entry is that fault's
+ *     own { g, seen }, and a corner counts as carried only where the fault is
+ *     both present and on its hanging-wall side
  *
  * Both leave the trace in the pieces the history actually left it in, which is
  * the point: where a fault trace stops IS the cross-cutting relation.
@@ -288,8 +308,9 @@ function splitAtGaps(run, seen, torn, cols, rows) {
       (j0 + 1) * cols + i0, (j0 + 1) * cols + i0 + 1];
     for (const q of c) if (!seen[q]) return false;
     for (const t of torn) {
-      const a = t[c[0]] > 0;
-      for (let m = 1; m < 4; m++) if ((t[c[m]] > 0) !== a) return false;
+      const moved = (q) => t.seen[q] === 1 && t.g[q] > 0;
+      const a = moved(c[0]);
+      for (let m = 1; m < 4; m++) if (moved(c[m]) !== a) return false;
     }
     return true;
   };
@@ -318,6 +339,14 @@ function structureField(e) {
         + (p[1] - e.centerY) * n[1]
         + (p[2] - e.centerZ) * n[2];
     }
+    // Height above the ramp-flat surface: `v` in undoRampFlat, and the same
+    // number the hanging-wall test is made on.
+    case 'rampflat':
+      return (p) => rampFlatField(e, p);
+    // Signed distance to the fault PLANE. Where it stops is `structureExtent`
+    // below, not this — see the note on propFoldField().
+    case 'propfold':
+      return (p) => propFoldField(e, p);
     case 'dike': {
       // The dike is a slab crossed with a depth range, so its boundary is the
       // largest of the three distances — negative only inside all of them.
@@ -338,6 +367,15 @@ function structureField(e) {
     default:
       return null;
   }
+}
+
+/**
+ * Where a structure exists at all, quite apart from what buried it. Null for
+ * the structures that run on to the edge of the block, which is most of them.
+ */
+function structureExtent(e) {
+  if (e.type === 'propfold') return (p) => propFoldBelowTip(e, p);
+  return null;
 }
 
 /**

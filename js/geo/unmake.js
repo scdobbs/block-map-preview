@@ -15,6 +15,12 @@
 //   fault  - rigid translation of the hanging wall parallel to the fault
 //            plane, so the side test is unchanged by the slip itself
 //
+// The two thrusts in geo/thrust.js are the exceptions worth naming. A ramp-flat
+// thrust is still exact — vertical shear preserves the height above the fault,
+// which is the coordinate its inverse is written in — but a fault-propagation
+// fold is a flow, and is inverted by integrating it back in fixed increments
+// rather than in closed form. See the note at the top of that file.
+//
 // Moving rock straight up and down is what keeps a fold and a dome exactly
 // invertible, and it is the right picture for a bedded pile. It is the wrong
 // picture for a body that CUTS the pile, because vertical motion cannot turn a
@@ -34,6 +40,9 @@ import { surfaceHeight } from './surfaces.js';
 import {
   warpOffset, intrusionTurn, turnNormal, turnZRange, plutonFrame,
 } from './warp.js';
+import {
+  transportFrame, rampGeometry, trishearFrame, undoRampFlat, undoPropFold,
+} from './thrust.js';
 import {
   cumulativeDepths, totalThickness, faultRake, unconformityDatums, atTime,
 } from './model.js';
@@ -76,6 +85,12 @@ export function compileHistory(doc0) {
         const u = slipVec(e.strike, e.dip, faultRake(e));
         return { ...e, normal, slip3: [u[0] * e.slip, u[1] * e.slip, u[2] * e.slip] };
       }
+      // Both thrusts are cylindrical about their transport direction, so what
+      // they need precomputed is that direction and the shape of their fault.
+      case 'rampflat':
+        return { ...e, ...transportFrame(e), rampG: rampGeometry(e) };
+      case 'propfold':
+        return { ...e, ...transportFrame(e), tri: trishearFrame(e) };
       case 'dike': {
         const { normal } = planeFrame(e.strike, e.dip);
         return { ...e, normal };
@@ -139,6 +154,10 @@ function undoEvent(e, p) {
     }
     case 'domebasin':
       return [p[0], p[1], p[2] - warpOffset(e, p[0], p[1])];
+    case 'rampflat':
+      return undoRampFlat(e, p);
+    case 'propfold':
+      return undoPropFold(e, p);
     case 'fault': {
       const c = [e.centerX, e.centerY, e.centerZ];
       // Slip is parallel to the plane, so this side test gives the same

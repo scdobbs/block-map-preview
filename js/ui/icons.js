@@ -71,6 +71,25 @@ export const EVENT_ICONS = {
     path('M16.5 19 L21 19'),
   ]),
 
+  // A flat, a ramp, a flat — with the bed above it humped over the step.
+  rampflat: icon(() => [
+    frame(),
+    path('M3 17 L9 17 L15 10 L21 10', 'evicon-line strong'),
+    path('M3 12 L8 12 L14 5 L21 5'),
+  ]),
+
+  // The whole structure in two facts, one above the other: a bed BROKEN where
+  // the fault has been, and a bed only BENT above where it stops. The ramp
+  // ends between the two, so where it stops is read off the icon rather than
+  // having to be inferred from a curve.
+  propfold: icon(() => [
+    frame(),
+    path('M3 5 L9 5 L14 8.5 L21 8.5'),
+    path('M6 21 L13 10.5', 'evicon-line strong'),
+    path('M3 13.5 L9.5 13.5'),
+    path('M14.5 19 L21 19'),
+  ]),
+
   // A steep tabular sheet cutting flat-lying beds.
   dike: icon(() => [
     frame(),

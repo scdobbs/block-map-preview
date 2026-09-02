@@ -596,6 +596,11 @@ function structureDepth(events, across) {
     if (e.type === 'fold') d = Math.max(d, (e.amplitude || 0) * 2 + pad);
     if (e.type === 'domebasin') d = Math.max(d, Math.abs(e.amplitude || 0) * 2 + pad);
     if (e.type === 'fault') d = Math.max(d, (e.slip || 0) * 1.5 + pad);
+    // A thrust's deepest thing is its own fault surface, not its slip: the
+    // block has to reach below the flat it slides on or the décollement is cut
+    // off by the bottom of the model.
+    if (e.type === 'rampflat') d = Math.max(d, -(e.floorZ || 0) + pad);
+    if (e.type === 'propfold') d = Math.max(d, -(e.tipZ || 0) + (e.slip || 0) + pad);
     if (e.type === 'tilt') d = Math.max(d, across * 0.5);
   }
   return d;

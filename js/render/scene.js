@@ -8,6 +8,7 @@ import { buildBlockGeometry, buildEdgeLines, footprint } from './block.js';
 import { planeFrame, axisFrame, rotateAbout, foldProfileExtrema, foldEnvelope, DEG } from '../geo/math.js';
 import { surfaceHeight, surfaceRange, isDemSurface } from '../geo/surfaces.js';
 import { unconformityDatums, sliceCut } from '../geo/model.js';
+import { transportFrame, rampGeometry, rampHeight } from '../geo/thrust.js';
 import { buildContourLabels, buildLabelMeshes, MAX_LABELS } from './contours.js';
 import { buildMarkers } from './markers.js';
 
@@ -349,6 +350,57 @@ export class BlockScene {
         g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
         this.helpers.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({
           color: accent, transparent: true, opacity: 0.85,
+        })));
+        break;
+      }
+
+      // Both thrusts carry a fault SURFACE rather than a plane, so the guide
+      // is ruled rather than clipped: sample the surface's own height over the
+      // block's footprint and drop any quad that leaves the block. Drawn from
+      // rampHeight() itself, so the guide is the surface the rock is walked
+      // against and not a second drawing of it.
+      case 'rampflat':
+      case 'propfold': {
+        const tf = transportFrame(event);
+        const g = event.type === 'rampflat' ? rampGeometry(event) : null;
+        const tan = Math.tan((event.ramp || 30) * DEG);
+        const zAt = (t) => (g
+          ? rampHeight(g, t)
+          // The propagation fold's fault is a ray: it runs down-dip from the
+          // tip and simply is not there above it, which is the whole point of
+          // the structure. NaN drops the quad.
+          : (t <= 0 ? event.tipZ + t * tan : NaN));
+
+        const n = 40;
+        const pos = [];
+        const idx = [];
+        const zs = [];
+        for (let j = 0; j <= n; j++) {
+          for (let i = 0; i <= n; i++) {
+            const x = (i / n - 0.5) * B.width;
+            const y = (j / n - 0.5) * B.depth;
+            const t = (x - tf.cx) * tf.tx + (y - tf.cy) * tf.ty;
+            const z = zAt(t);
+            zs.push(z);
+            pos.push(x, y, Number.isFinite(z) ? z : 0);
+          }
+        }
+        const inside = (k) => Number.isFinite(zs[k]) && zs[k] >= box.z0 && zs[k] <= box.z1;
+        for (let j = 0; j < n; j++) {
+          for (let i = 0; i < n; i++) {
+            const a = j * (n + 1) + i;
+            const quad = [a, a + 1, a + n + 2, a + n + 1];
+            if (!quad.every(inside)) continue;
+            idx.push(quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]);
+          }
+        }
+        if (!idx.length) break;
+        const g3 = new THREE.BufferGeometry();
+        g3.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g3.setIndex(idx);
+        this.helpers.add(new THREE.Mesh(g3, new THREE.MeshBasicMaterial({
+          color: 0xff6b6b, transparent: true, opacity: 0.22,
+          side: THREE.DoubleSide, depthWrite: false,
         })));
         break;
       }

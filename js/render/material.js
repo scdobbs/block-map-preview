@@ -6,6 +6,7 @@ import { buildFragmentShader, VERTEX, uniformPrefix } from '../geo/glsl.js';
 import { MAX_LAYERS, rock, faultRake, unconformityDatums, atTime } from '../geo/model.js';
 import { planeFrame, axisFrame, azimuthVec, slipVec, DEG } from '../geo/math.js';
 import { intrusionTurn, turnNormal, turnZRange, plutonFrame } from '../geo/warp.js';
+import { transportFrame, rampGeometry, trishearFrame } from '../geo/thrust.js';
 import { KIND_CODE, surfaceUniform, surfaceRange, niceContourInterval } from '../geo/surfaces.js';
 
 const tmpColor = new THREE.Color();
@@ -163,6 +164,12 @@ function addEventUniforms(u, p, e) {
     case 'fault':
       u[`${p}_normal`] = V3(); u[`${p}_center`] = V3(); u[`${p}_slip`] = V3();
       break;
+    case 'rampflat':
+      u[`${p}_t`] = V4(); u[`${p}_g`] = V4(); u[`${p}_s`] = F();
+      break;
+    case 'propfold':
+      u[`${p}_t`] = V4(); u[`${p}_f`] = V4(); u[`${p}_p`] = V2();
+      break;
     case 'dike':
       u[`${p}_normal`] = V3(); u[`${p}_geom`] = V4(); u[`${p}_zrange`] = V2(); u[`${p}_rock`] = V4();
       break;
@@ -221,6 +228,24 @@ function setEventUniforms(u, p, events, index, datums) {
       u[`${p}_normal`].value.set(...normal);
       u[`${p}_center`].value.set(e.centerX, e.centerY, e.centerZ);
       u[`${p}_slip`].value.set(sv[0] * e.slip, sv[1] * e.slip, sv[2] * e.slip);
+      break;
+    }
+    // Both thrusts are handed the very numbers geo/thrust.js computes for the
+    // CPU walk, from the very same functions, so the two cannot drift.
+    case 'rampflat': {
+      const { tx, ty, cx, cy } = transportFrame(e);
+      const g = rampGeometry(e);
+      u[`${p}_t`].value.set(tx, ty, cx, cy);
+      u[`${p}_g`].value.set(g.floorZ, g.tan, g.len, g.round);
+      u[`${p}_s`].value = e.slip;
+      break;
+    }
+    case 'propfold': {
+      const { tx, ty, cx, cy } = transportFrame(e);
+      const fr = trishearFrame(e);
+      u[`${p}_t`].value.set(tx, ty, cx, cy);
+      u[`${p}_f`].value.set(fr.f2[0], fr.f2[1], fr.m, e.tipZ);
+      u[`${p}_p`].value.set(fr.slip, fr.prop);
       break;
     }
     case 'dike': {
