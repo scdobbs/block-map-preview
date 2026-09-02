@@ -206,7 +206,7 @@ instead: bedding is a surface of constant stratigraphic depth, and where the
 direction that depth *decreases* in points downward, the younger rock is
 underneath and the beds have been turned past vertical. Fold a stack and then
 tilt it sixty-five degrees and the far limb comes back overturned, the ticks
-recurve, and the readout says so. It is not a switch on the marker for the same
+grow their crook, and the readout says so. It is not a switch on the marker for the same
 reason nothing else about a marker is: a marker that could be told it was
 overturned could be told wrong, and then it would disagree with the block it
 is standing on.
@@ -539,21 +539,28 @@ rather than a shortcut. Overturned means the succession *in* the surface
 youngs downward, so the surface has to have a succession in it. A joint, a
 fault plane and a foliation have no younger side to be on the wrong one of.
 
-The reading prints as the hooked dip tick a geologic map uses: the usual long
-strike line and short dip tick, with the tick ending in a small semicircular
-recurve — a candy cane — that loops back toward the strike line. The tick and
-its hook still point the way the beds physically dip; the recurve is what says
-the tops face the other way. The dip number sits beyond the hook, as it always
-sits beyond the tick. It reads as `OT` in the station list, and exports as its
-own column.
+The reading prints as the candy cane a geologic map uses, and which end the
+crook is on is the whole of the symbol. It sits at the **strike line**: the
+stroke starts on the strike line, loops over the top of it, and only then runs
+straight away down-dip. That reads as the dip tick having been dragged up over
+the strike line and round — carried past vertical — which is exactly what
+overturned means. The straight part still points the way the beds physically
+dip, and the dip number sits beyond it as it always did. It reads as `OT` in
+the station list, and exports as its own column.
 
-The hook has to be a curve, and a wide one. Drawn first as two straight
-segments turning back parallel to the tick, it did not read as a hook at any
-distance: two strokes a few pixels apart, each carrying its own backing stroke,
-merge into one fat tick with a pale stripe down the middle. A half-circle wide
-enough to hold its own two sides apart is the whole of the difference, and it
-is why the hook is sized off the symbol rather than off the tick — the tick
-shrinks with the dip, and the hook must not shrink with it.
+Both halves of that were got wrong before they were got right, and both
+failures are instructive. Drawn first as two straight segments turning back
+parallel to the tick, the hook did not read as a hook at any distance: two
+strokes a few pixels apart, each carrying its own backing stroke, merge into
+one fat tick with a pale stripe down the middle, and the stripe looks like a
+doubled outline rather than a gap. Drawn second as a proper semicircle but at
+the far end of the tick, it read as a tick with a decoration on it and said
+nothing — the crook has to be where the tick meets the strike line, or the
+illusion of being pulled over the top is not there at all.
+
+The crook is also sized off the symbol rather than off the tick. The tick
+shrinks with the dip; a shallow overturned reading would otherwise lose the one
+mark that distinguishes it.
 
 If you switch a station's feature from bedding to something else the flag is
 kept but ignored, so correcting a mis-tap and correcting it back does not lose

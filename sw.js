@@ -12,7 +12,7 @@
 // would not find out until they were standing in it with no signal. So the
 // tile cache is named without a version and listed here as untouchable.
 
-const CACHE = 'blockdiagram-v74';
+const CACHE = 'blockdiagram-v75';
 
 // Must match CACHE_NAME in js/field/tiles.js.
 const TILE_CACHE = 'field-tiles';
