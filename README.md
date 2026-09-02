@@ -2405,12 +2405,27 @@ aerial and elevation from zoom 10:
 
 ## Testing without a browser
 
-There is no Node here, so the checks run under JavaScriptCore via `osascript`.
-The orientation maths in particular is worth testing that way rather than by
-holding a phone. The compass bug that put every strike out by the local
-declination, and the one that made the strike swing as the phone was turned on
-the rock, were both found and fixed against a numerical model of what the
-sensors report, before either was seen on a device.
+    tools/smoke.sh
+
+There is no Node here, so the checks run under JavaScriptCore, which macOS
+ships and which speaks ES modules. `tools/smoke.mjs` stubs enough of a DOM and
+a 2D context to let the drawing run headless, then walks every preset, builds
+every shader, traces every cross section, and draws all four bedding symbols
+both on the block and on the map.
+
+It is not a test of the arithmetic. It is the cheapest possible answer to *does
+every path still have all its functions*, and it exists because of one bug: a
+range-based edit deleted `horizontalMark` and `verticalMark` from
+`render/markers.js`, nothing in the rewritten code referred to them, and every
+check run afterwards happened to draw INCLINED bedding — the only one of the
+four symbols that never calls either. The app shipped unable to render a block
+with a flat-lying or on-end reading in it, which is most blocks.
+
+The orientation maths is worth testing the same way rather than by holding a
+phone. The compass bug that put every strike out by the local declination, and
+the one that made the strike swing as the phone was turned on the rock, were
+both found and fixed against a numerical model of what the sensors report,
+before either was seen on a device.
 
 ## Deploying
 
