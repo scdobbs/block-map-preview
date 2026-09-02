@@ -554,7 +554,38 @@ export class App {
     this.selectedEventId = id;
     if (tab && this.activeTab !== tab) { this.activeTab = tab; this._renderTabs(); }
     else this._renderPanel();
+    this._revealEvent(id);
     this._syncHelper();
+  }
+
+  /**
+   * Scroll the panel until the selected event's row is actually on screen.
+   *
+   * Adding an event rebuilds the panel from the top, and the list of events
+   * lives below the add buttons and the time machine. On a short panel — a
+   * phone at half height above all — that puts the row you just made below the
+   * fold, and the panel looks as though the tap did nothing. Nothing was
+   * broken; it was off screen, and the fix for that is to go to it.
+   *
+   * The row goes to the TOP of the view rather than merely into it, because an
+   * open event is mostly editor: bring in only its last few pixels and the
+   * controls it exists for are still hidden. Left alone when it is already
+   * sitting there, so re-selecting a row does not jump under the finger.
+   *
+   * Scrolls the sheet body itself rather than calling scrollIntoView, which is
+   * entitled to scroll any ancestor it likes and on a stacked layout takes the
+   * whole app with it.
+   */
+  _revealEvent(id) {
+    if (!id) return;
+    const body = this.sheetBody;
+    const row = body.querySelector(`.event-row[data-ev-id="${id}"]`);
+    if (!row) return;
+    const pad = 10;
+    const view = body.getBoundingClientRect();
+    const rect = row.getBoundingClientRect();
+    if (rect.top >= view.top && rect.bottom <= view.bottom) return;
+    body.scrollTop += rect.top - view.top - pad;
   }
 
   // -------------------------------------------------------------------------
