@@ -372,8 +372,14 @@ export class App {
     if (this.mode === mode) return;
     // Nothing left running behind a screen nobody is looking at.
     this.stopPlay();
+    const prev = this.mode;
     this.mode = mode;
     saveMode(mode);
+    // The section's full screen is the sheet dropped to its handle, and the
+    // sheet is shared, so that is put back on the way out and restored on the
+    // way back in. The other two hide the sheet by a class, handled below.
+    if (prev === 'strata' && this.stratFull) this._setSheet('half');
+    if (mode === 'strata' && this.stratFull) this._setSheet('peek');
 
     if (mode === 'map' || mode === 'strata') this.fieldSection();
     if (mode === 'strata' && !this.stratSection) {
@@ -382,6 +388,7 @@ export class App {
     }
     this.root.classList.toggle('mode-map', mode === 'map');
     this.root.classList.toggle('mode-strata', mode === 'strata');
+    this._syncFullClass();
 
     if (mode === 'map') {
       if (this.markerMode) this.setMarkerMode(null);
@@ -404,8 +411,23 @@ export class App {
   /** The section over the whole screen, panel down to its handle. */
   setStratFull(on) {
     this.stratFull = on;
-    this.root.classList.toggle('strat-full', on);
+    this._syncFullClass();
     this._setSheet(on ? 'peek' : 'half');
+  }
+
+  /**
+   * Full screen is a fact about one section, not about the app.
+   *
+   * Each of the three keeps its own flag, and only the section on screen gets
+   * to hide the sheet. This used to be three classes toggled from three places,
+   * and the block's stayed on the root when the map came up: the sheet was
+   * gone, and the map's own button, reading its own flag, said it was not.
+   */
+  _syncFullClass() {
+    const r = this.root.classList;
+    r.toggle('block-full', this.mode === 'block' && this.blockFull);
+    r.toggle('map-full', this.mode === 'map' && !!this.mapSection?.fullMap());
+    r.toggle('strat-full', this.mode === 'strata' && this.stratFull);
   }
 
   /** The section, map or strata, that currently owns the sheet. */
@@ -780,7 +802,7 @@ export class App {
     const next = on == null ? !this.blockFull : on;
     if (next === this.blockFull) return;
     this.blockFull = next;
-    this.root.classList.toggle('block-full', next);
+    this._syncFullClass();
     this._syncFullButton();
     // The stage just changed size and the canvas does not watch its own box.
     requestAnimationFrame(() => this.scene.resize());

@@ -204,7 +204,7 @@ export class MapSection {
 
   activate() {
     this._started = true;
-    this.host.root.classList.toggle('map-full', this.fullMap());
+    this.host._syncFullClass();
     this.geo.start();
     // Persistence is worth asking for the moment the map is genuinely being
     // used, and not before — an unprompted permission on first launch is the
@@ -217,8 +217,6 @@ export class MapSection {
     clearTimeout(this._indexTimer);
     if (this.ready) this.store.flush().then(() => this._writeIndex());
     this.closeMeasure();
-    // The block section has no full-screen mode and must never inherit one.
-    this.host.root.classList.remove('map-full');
     this._started = false;
     this.geo.stop();
     this.clino.stop();
@@ -757,7 +755,7 @@ export class MapSection {
   toggleFullMap(on = null) {
     const next = on == null ? !this.fullMap() : on;
     this.store.edit((d) => { d.settings.mapFull = next; }, { silent: true, transient: true });
-    this.host.root.classList.toggle('map-full', next);
+    this.host._syncFullClass();
     this._syncFullButton();
     // The sheet has gone or come back, so the map has a different amount of
     // screen. The canvas watches its own box, but the block's canvas does not.
