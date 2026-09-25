@@ -596,6 +596,9 @@ function drawBand(ctx, pts, line, kind, w, { selected, dash, scale }) {
 
 export function drawLine(ctx, pts, line, {
   selected = false, scale = 1, drawing = false, active = -1, groundWidth = 0,
+  // Circles, in the same frame as pts, that the stroke is kept out of: a
+  // station symbol the line passes through. Handles are drawn over them.
+  holes = [],
 } = {}) {
   if (pts.length < 2) return;
   const kind = lineKind(line.kind);
@@ -618,6 +621,18 @@ export function drawLine(ctx, pts, line, {
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+
+  if (holes.length) {
+    // Everything except the discs: the canvas rectangle with the holes cut
+    // out of it, by the even-odd rule.
+    ctx.beginPath();
+    ctx.rect(-1e5, -1e5, 2e5, 2e5);
+    for (const h of holes) {
+      ctx.moveTo(h.x + h.r * scale, h.y);
+      ctx.arc(h.x, h.y, h.r * scale, 0, Math.PI * 2);
+    }
+    ctx.clip('evenodd');
+  }
 
   // Wide enough to have an inside? Then it is a body and not a boundary, and
   // it is drawn as one. A couple of pixels of margin over the symbol's own
@@ -649,6 +664,8 @@ export function drawLine(ctx, pts, line, {
 
   // Vertices are shown only while the line is being built or is selected.
   // On a finished map they would turn every contact into a string of beads.
+  // Drawn outside the clip, so a handle on a station is still there to hold.
+  if (holes.length) { ctx.restore(); ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; }
   if (drawing || selected) {
     for (let i = 0; i < pts.length; i++) {
       const last = drawing && i === pts.length - 1;

@@ -497,25 +497,38 @@ export class MapSection {
   // -------------------------------------------------------------------------
 
   onTap({ lon, lat }, screen) {
-    if (this.drawing) { this.addVertex(lon, lat); return; }
+    if (this.drawing) {
+      // A tap on a station while drawing puts the vertex ON the station, so a
+      // contact walked through a reading passes exactly through it. Same
+      // finger's-width test as selecting one.
+      const st = this._stationAt(screen);
+      if (st) this.addVertex(st.lon, st.lat);
+      else this.addVertex(lon, lat);
+      return;
+    }
     if (this.shadeMode) { this.placePatch(lon, lat); return; }
     if (this.placeMode) {
       this.placeStation(lon, lat, { source: 'manual', bySight: true });
       return;
     }
-    // Nearest station within a finger's width.
-    let best = null, bestD = 30;
-    for (const st of this.store.doc.stations) {
-      const p = this.map.lonLatToScreen(st.lon, st.lat);
-      const d = Math.hypot(p.x - screen.x, p.y - screen.y);
-      if (d < bestD) { bestD = d; best = st; }
-    }
+    const best = this._stationAt(screen);
     if (best) { this.selectStation(best.id); return; }
     // Stations win ties: they are smaller targets and a line under one is
     // still reachable by tapping any other part of it.
     const line = this.map.lineAt(screen.x, screen.y);
     this.selectStation(null);
     this.selectLine(line ? line.id : null);
+  }
+
+  /** The nearest station within a finger's width of a screen point, or null. */
+  _stationAt(screen) {
+    let best = null, bestD = 30;
+    for (const st of this.store.doc.stations) {
+      const p = this.map.lonLatToScreen(st.lon, st.lat);
+      const d = Math.hypot(p.x - screen.x, p.y - screen.y);
+      if (d < bestD) { bestD = d; best = st; }
+    }
+    return best;
   }
 
   // -------------------------------------------------------------------------

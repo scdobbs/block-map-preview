@@ -528,6 +528,20 @@ export class MapCanvas {
 
   _drawLines(ctx) {
     const project = (line) => line.points.map((p) => this._projLL(p[0], p[1]));
+    // Where a vertex sits exactly on a station, the line is broken around
+    // the symbol so the reading stays legible on it. Display only: the
+    // geometry is continuous and exports as such. Decided by coincidence of
+    // coordinates rather than by a stored link, so dragging the vertex off
+    // the station closes the gap and deleting the station leaves the line.
+    const holes = (line) => {
+      const out = [];
+      if (!this.showStations || !this.stations.length) return out;
+      for (const p of line.points) {
+        const st = this._stationIndex().get(`${p[0]},${p[1]}`);
+        if (st) { const q = this._projLL(st.lon, st.lat); out.push({ x: q.x, y: q.y, r: 20 }); }
+      }
+      return out;
+    };
     for (const line of this.lines) {
       if (!line.points || line.points.length < 2) continue;
       const selected = line.id === this.selectedLineId;
@@ -536,6 +550,7 @@ export class MapCanvas {
         groundWidth: this._groundWidth(line),
         active: selected && this.activeVertex?.target === line.id
           ? this.activeVertex.index : -1,
+        holes: holes(line),
       });
     }
     if (this.draftLine && this.draftLine.points.length) {
@@ -553,9 +568,20 @@ export class MapCanvas {
           drawing: true,
           groundWidth: this._groundWidth(this.draftLine),
           active: this.activeVertex?.target === 'draft' ? this.activeVertex.index : -1,
+          holes: holes(this.draftLine),
         });
       }
     }
+  }
+
+  /** Stations by exact position, rebuilt when the list changes. */
+  _stationIndex() {
+    if (this._stIndexFor !== this.stations || this._stIndexN !== this.stations.length) {
+      this._stIndexFor = this.stations;
+      this._stIndexN = this.stations.length;
+      this._stIndex = new Map(this.stations.map((s) => [`${s.lon},${s.lat}`, s]));
+    }
+    return this._stIndex;
   }
 
   /**
