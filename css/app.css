@@ -25,6 +25,22 @@
 
 * { box-sizing: border-box; }
 
+/* Controls are not text. A firm press on iOS otherwise tries to select the
+   strike-and-dip symbol, a slider or a button as though it were a word, and
+   puts a callout over it. Selection is turned off for the whole app and
+   turned back on only where there is text to select: fields, and the few
+   lines a student may want to copy out. */
+html, body, #app {
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+input, textarea, select, [contenteditable="true"],
+.ctl-hint.stamp, .provenance, .coord-line, .about, .fatal pre, code {
+  -webkit-user-select: text; user-select: text;
+  -webkit-touch-callout: default;
+}
+
 html, body {
   margin: 0;
   height: 100%;
