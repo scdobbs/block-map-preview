@@ -193,16 +193,19 @@ html, body {
    Overlapping controls are worse than a second row: a full-screen button
    sitting on top of "Strata" is two controls one tap can hit.
 
-   The threshold is the width at which they genuinely stop fitting, measured
-   rather than guessed: the switch is 198px centred, and the widest corner
-   cluster is the block's right-hand one at 160px (recenter, full screen and
-   the compass), which collide below 554. */
+   Only the left cluster drops: the right-hand one is a column under the
+   rose, 56px wide, which clears a centred 198px switch on any phone.
+   The threshold is where the left cluster (undo, redo, clear, and a chip
+   or two) genuinely stops fitting. */
 @media (max-width: 560px) {
-  .hud { top: calc(62px + env(safe-area-inset-top)); }
+  .hud-left { top: calc(62px + env(safe-area-inset-top)); }
   /* Down here the switch already has the first row to itself, so the left
      cluster has the whole width and the cap below is not needed. */
   .hud-left { max-width: none; }
 }
+/* The right-hand cluster is a column under the rose on both the block and
+   the map: one shape for the same controls. */
+.hud-right { flex-direction: column; align-items: center; }
 
 /* A chip beside undo and redo makes the left cluster two or three times its
    usual width, which is enough to reach a centred switch on a window that is
@@ -226,8 +229,10 @@ html, body {
 .icon-btn.clear-btn { font-size: 26px; line-height: 1; color: var(--danger); }
 .icon-btn:active:not(:disabled) { background: var(--bg-3); }
 
-.compass { width: 56px; height: 56px; cursor: pointer; }
+.compass { width: 56px; height: 56px; cursor: pointer; outline: none; -webkit-tap-highlight-color: transparent; }
 .compass:active .compass-face { fill: var(--bg-3); }
+/* iOS drew its focus ring round the rose after a tap and left it there. */
+.compass:focus { outline: none; }
 /* Over the map the same rose turns with the sheet; its rim lights when the
    sheet is off north, which is when tapping it does something. */
 .compass.turned .compass-face { stroke: var(--accent); }
@@ -1094,7 +1099,11 @@ html, body {
 /* Behind the map the page is the map's own ground: whatever the phone
    leaves unpainted at the edge of the screen, under the home indicator,
    reads as map rather than as a stripe of page. */
-body.map-mode { background: var(--canvas); }
+/* What reaches the bottom of the screen: the sheet, or in full screen the
+   map or the block. */
+body { background: var(--bg-2); }
+body.full-map { background: var(--canvas); }
+body.full-block { background: var(--scene); }
 
 .hud-icon { width: 22px; height: 22px; display: block; }
 .icon-btn.on { background: var(--accent); border-color: var(--accent); }
@@ -1492,13 +1501,7 @@ body.map-mode { background: var(--canvas); }
    Block/Map switch nowhere to sit on a phone held upright — they overlapped.
    A column is also what every other map puts there. The block section keeps
    its compass in the corner and is untouched. */
-.map-pane .hud-right { flex-direction: column; align-items: center; }
-/* The map's column is 56px wide and sits clear of the centred switch even
-   on a phone, so it keeps the top row where the block's wider cluster has
-   to drop; that also keeps its last button off the sheet. */
-@media (max-width: 560px) {
-  .map-pane .hud-right { top: calc(10px + env(safe-area-inset-top)); }
-}
+
 
 /* Full-screen map: the panel goes away entirely, the same way the map goes
    away when the clinometer is open. Whichever one is being used gets the

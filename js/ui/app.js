@@ -203,7 +203,6 @@ export class App {
     // The rose is a control as well as a readout: one tap turns the block
     // north-up, two within a beat square the map as well.
     this.compass.node.setAttribute('role', 'button');
-    this.compass.node.setAttribute('tabindex', '0');
     this.compass.node.setAttribute('aria-label', 'North. Tap to put north up; double-tap to square the map too');
     this._compassTapAt = 0;
     this.compass.node.addEventListener('click', () => {
@@ -250,7 +249,7 @@ export class App {
     this.blockPane = el('div', { class: 'block-pane' }, [
       this.canvas,
       el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn, this.clearBtn, this.mapChip, this.timeChip]),
-      el('div', { class: 'hud hud-right' }, [this.recenterBtn, this.fullBtn, this.compass.node]),
+      el('div', { class: 'hud hud-right' }, [this.compass.node, this.recenterBtn, this.fullBtn]),
       this.scaleChip,
       this.markerChip,
       this.modeBanner,
@@ -423,7 +422,6 @@ export class App {
     }
     this.root.classList.toggle('mode-map', mode === 'map');
     this.root.classList.toggle('mode-strata', mode === 'strata');
-    document.body.classList.toggle('map-mode', mode === 'map');
     this._syncFullClass();
 
     if (mode === 'map') {
@@ -461,9 +459,17 @@ export class App {
    */
   _syncFullClass() {
     const r = this.root.classList;
-    r.toggle('block-full', this.mode === 'block' && this.blockFull);
-    r.toggle('map-full', this.mode === 'map' && !!this.mapSection?.fullMap());
+    const blockFull = this.mode === 'block' && this.blockFull;
+    const mapFull = this.mode === 'map' && !!this.mapSection?.fullMap();
+    r.toggle('block-full', blockFull);
+    r.toggle('map-full', mapFull);
     r.toggle('strat-full', this.mode === 'strata' && this.stratFull);
+    // The page's own colour follows whatever reaches the bottom of the
+    // screen. On an iPhone the app's layout stops short of the home
+    // indicator and iOS paints that band with the page background, so the
+    // band reads as sheet, map or block rather than as a black stripe.
+    document.body.classList.toggle('full-block', blockFull);
+    document.body.classList.toggle('full-map', mapFull);
   }
 
   /** The section, map or strata, that currently owns the sheet. */

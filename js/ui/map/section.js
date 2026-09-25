@@ -140,7 +140,6 @@ export class MapSection {
     this.northRose = compassRose();
     this.northBtn = this.northRose.node;
     this.northBtn.setAttribute('role', 'button');
-    this.northBtn.setAttribute('tabindex', '0');
     this.northBtn.setAttribute('aria-label', 'North. Tap to put north up; double-tap to square the block too');
     this.northBtn.addEventListener('click', () => this._northTap());
     this._northTapAt = 0;
