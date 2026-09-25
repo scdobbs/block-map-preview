@@ -1470,11 +1470,11 @@ export function areasPanel(ctx) {
     ]);
     node.appendChild(layerChoice);
 
-    // NAIP goes past the zoom the other layers stop at, and how far past is
+    // Aerial (NAIP) goes past the zoom topo stops at, and how far past is
     // most of the download. Offered only when it is in the box.
     if (area.sources.includes('naip')) {
       node.appendChild(chipsRow({
-        label: 'NAIP detail',
+        label: 'Aerial detail',
         value: String(Math.min(18, Math.max(16, area.maxZoom || 18))),
         options: [
           { id: '16', label: 'Zoom 16 · 2 m' },

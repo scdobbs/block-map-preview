@@ -742,6 +742,9 @@ export function migrateFieldDoc(doc) {
     .filter((a) => a && Array.isArray(a.bbox) && a.bbox.length === 4)
     .map((a) => ({ ...makeArea(), ...a }));
   out.version = FIELD_SCHEMA_VERSION;
+  // The USGS imagery layers were replaced by NAIP; a phone left on one of
+  // them comes back on the layer that replaced them.
+  if (out.settings.baseLayer === 'aerial' || out.settings.baseLayer === 'imagery') out.settings.baseLayer = 'naip';
   // Stations recorded before their unit existed get their link on the way in.
   linkStationsToUnits(out);
   return out;

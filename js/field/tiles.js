@@ -49,10 +49,14 @@ export const SOURCES = {
     url: (z, x, y) =>
       `https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/${z}/${y}/${x}`,
   },
+  // The two USGS imagery layers are kept only so that areas downloaded
+  // before NAIP arrived still verify, repair and delete correctly. They are
+  // not offered any more: NAIP is the same photography at full resolution.
   aerial: {
     id: 'aerial',
-    label: 'Aerial',
+    label: 'Aerial (USGS, zoom 16)',
     kind: 'base',
+    retired: true,
     detail: 'Plain aerial photography. Wider coverage than the combined layer.',
     maxZoom: 16,
     minZoom: 4,
@@ -63,8 +67,9 @@ export const SOURCES = {
   },
   imagery: {
     id: 'imagery',
-    label: 'Aerial + topo',
+    label: 'Aerial + topo (USGS, zoom 16)',
     kind: 'base',
+    retired: true,
     // Prettier than plain aerial and gappier: USGS has not cached this
     // combined layer everywhere it has cached the two it is made of. The
     // White-Inyo Mountains have a column of it missing outright.
@@ -84,9 +89,9 @@ export const SOURCES = {
   // the tiles per zoom level. Public domain; the USDA asks to be credited.
   naip: {
     id: 'naip',
-    label: 'NAIP aerial',
+    label: 'Aerial',
     kind: 'base',
-    detail: 'USDA NAIP orthoimagery at 0.6 m. Sharp to zoom 18; a much bigger download than Aerial.',
+    detail: 'USDA NAIP orthoimagery at 0.6 m, sharp to zoom 18.',
     maxZoom: 18,
     minZoom: 8,
     bytes: 12000,
@@ -115,7 +120,7 @@ export const SOURCES = {
   },
 };
 
-export const BASE_SOURCES = ['topo', 'aerial', 'imagery', 'naip'];
+export const BASE_SOURCES = ['topo', 'naip'];
 
 /** A Web Mercator tile's extent in metres, for a server with no tile cache. */
 const HALF_WORLD = Math.PI * 6378137;
