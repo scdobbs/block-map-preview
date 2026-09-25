@@ -16,3 +16,6 @@ __pycache__/
 # copy of geo/infer.js and a superseded georef.js, so it must not ship
 # alongside the real modules.
 lab/
+
+# Session guide for AI collaborators. Local only, never shipped.
+working-with-steve.md
