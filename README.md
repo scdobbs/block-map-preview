@@ -47,7 +47,7 @@ to install.
 - **Left-drag** turns the block
 - **Scroll** zooms; **right-drag** or **shift-drag** pans
 - **Click the block** to identify the unit and read its strike and dip
-- **History → Wind it back** runs the block from flat beds to what it is now
+- **History → Geologic history** runs the block from flat beds to what it is now
 - **View → Cut a cross section** draws it along a line you drag across the map
 - **View → Slice down through it** lowers the top of the block one contact at a time
 
@@ -125,7 +125,7 @@ and both accept typed numbers.
 the editor do the same). You can also disable an event without deleting it,
 which is the quickest way to see what it was doing.
 
-### Wind it back
+### Geologic history
 
 A slider above the timeline runs the history: at the far left the block is the
 flat-lying beds it started as, and every step to the right is one more event

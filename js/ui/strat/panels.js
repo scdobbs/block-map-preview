@@ -42,15 +42,12 @@ export function columnPanel(ctx) {
   if (!doc.units.length) {
     node.appendChild(el('div', { class: 'empty' }, [
       el('p', { text: 'Nothing in the column yet.' }),
-      el('p', { class: 'dim', text: 'Names first, youngest at the top. '
-        + 'Thicknesses can wait.' }),
+      el('p', { class: 'dim', text: 'Youngest at the top.' }),
     ]));
     node.appendChild(el('button', {
       class: 'btn primary wide', type: 'button', text: 'Add the first unit',
       onclick: () => ctx.addUnit(null, 'below'),
     }));
-    node.appendChild(el('div', { class: 'ctl-hint standalone',
-      text: 'Units here are the map’s units too.' }));
     return node;
   }
 
@@ -90,7 +87,7 @@ export function columnPanel(ctx) {
   if (selected) node.appendChild(unitEditor(ctx, doc, selected));
   else {
     node.appendChild(el('div', { class: 'ctl-hint standalone',
-      text: 'Tap a unit, here or on the section, to edit it.' }));
+      text: 'Tap a unit to edit it.' }));
   }
 
   return node;
@@ -155,7 +152,7 @@ function unitEditor(ctx, doc, u) {
   box.appendChild(el('div', { class: 'sub-head', text: u.name || 'This unit' }));
 
   box.appendChild(textRow({
-    label: 'Name', value: u.name, placeholder: 'e.g. Poleta Formation',
+    label: 'Name', value: u.name,
     onChange: (v) => set((x) => { x.name = v.trim(); }),
   }));
 
@@ -219,7 +216,7 @@ function unitEditor(ctx, doc, u) {
 
   box.appendChild(noteRow({
     label: 'Description', value: u.description,
-    placeholder: 'Thin-bedded, ripple cross-laminated, sharp erosive bases…',
+
     onChange: (v) => set((x) => { x.description = v; }),
     rows: 4,
   }));
@@ -339,7 +336,7 @@ function rockBlock(ctx, u, set) {
   box.appendChild(el('div', { class: 'ctl ctl-inline' }, [
     el('div', {}, [
       el('label', { class: 'ctl-label', text: 'Colour' }),
-      el('div', { class: 'ctl-hint', text: 'Every outcrop of it, here and on the map.' }),
+
     ]),
     el('div', { class: 'swatch-pair' }, [swatchEl(unitColor(u), rk.pattern, 'swatch small'), color]),
   ]));
@@ -404,7 +401,7 @@ function grainBlock(ctx, doc, u) {
   ]));
   if (drawing) {
     box.appendChild(el('div', { class: 'ctl-hint standalone',
-      text: 'Drag inside a unit. Left is fine, right is coarse.' }));
+      text: 'Drag inside a unit.' }));
   }
   return box;
 }
@@ -420,7 +417,6 @@ export function marksPanel(ctx) {
 
   node.appendChild(el('div', { class: 'section-head' }, [
     el('h2', { text: 'Fossils and structures' }),
-    el('p', { text: 'What was in the rock, and what the rock was doing.' }),
   ]));
 
   if (!doc.units.length) {
@@ -500,7 +496,6 @@ export function legendPanel(ctx) {
 
   node.appendChild(el('div', { class: 'section-head' }, [
     el('h2', { text: 'Explanation' }),
-    el('p', { text: 'Lithologies and symbols in use.' }),
   ]));
 
   node.appendChild(el('div', { class: 'sub-head', text: 'The column' }));
@@ -573,7 +568,6 @@ export function stratSetupPanel(ctx) {
 
   node.appendChild(el('div', { class: 'section-head' }, [
     el('h2', { text: 'The sheet' }),
-    el('p', { text: 'How the section is drawn, and where it goes.' }),
   ]));
 
   node.appendChild(selectRow({
@@ -582,7 +576,7 @@ export function stratSetupPanel(ctx) {
     onChange: (v) => ctx.setSetting({ grainScale: v }),
   }));
   node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'Wentworth for siliciclastics, Dunham for carbonates. Profiles you have drawn are kept.' }));
+    'Profiles you have drawn are kept.' }));
 
   node.appendChild(numberRow({
     label: 'Vertical scale', value: Number(s.columnScale) || 0,

@@ -404,7 +404,7 @@ function verdict(fit, mapFit, modelled = false) {
   if (fit.kind === 'few') {
     box.append(
       el('div', { class: 'stereo-title', text: 'Not enough yet' }),
-      el('p', { text: 'Three readings is the minimum, and they have to come from different parts of the structure. Two limbs of a fold beats twenty stations on one of them.' }),
+      el('p', { text: 'Three readings from different parts of the structure is the minimum.' }),
     );
     return box;
   }
@@ -416,7 +416,7 @@ function verdict(fit, mapFit, modelled = false) {
         el('strong', { text: formatPlane(fit.mean) }),
         el('span', { text: ` ${quadrantBearing(fit.mean.strike)}` }),
       ]),
-      el('p', { text: `The poles fall in one spot, spanning only ${Math.round(fit.spread)}° of a girdle. Every reading is telling you the same thing, so there is no fold axis to find — go and measure somewhere the beds are doing something else.` }),
+      el('p', { text: `The poles cluster, spanning ${Math.round(fit.spread)}° of a girdle. No fold axis.` }),
     );
     return box;
   }
@@ -429,10 +429,10 @@ function verdict(fit, mapFit, modelled = false) {
         el('strong', { text: `${Math.round(fit.cone.angle)}°` }),
         el('span', { text: `half-angle about ${formatLine(ax)}` }),
       ]),
-      el('p', { text: `The poles lie on a small circle, not a great one — every bed is tilted the same amount but in a different direction. That is a dome or a basin, and it has no hinge line: there is no direction the beds fail to bend in, so no fold axis to report.` }),
+      el('p', { text: `The poles lie on a small circle: a dome or basin, with no hinge line.` }),
       el('p', { text: ax.plunge > 80
-        ? 'The cone is about the vertical, so the structure closes on itself in map view — look for the bullseye outcrop pattern.'
-        : 'The cone leans, so the structure has been tilted since it formed.' }),
+        ? 'The cone axis is vertical.'
+        : 'The cone leans: tilted since it formed.' }),
     );
     return box;
   }
@@ -440,7 +440,7 @@ function verdict(fit, mapFit, modelled = false) {
   if (fit.kind === 'scattered') {
     box.append(
       el('div', { class: 'stereo-title', text: 'Not one cylinder' }),
-      el('p', { text: `The poles miss any single girdle by ${Math.round(fit.misfit)}° on average. Something other than one cylindrical fold is going on — a dome or basin, two generations of folding, or readings from either side of a fault.` }),
+      el('p', { text: `The poles miss any single girdle by ${Math.round(fit.misfit)}° on average: not one cylindrical fold.` }),
     );
     return box;
   }
@@ -508,7 +508,6 @@ function disagreement(measured, fit) {
     box.appendChild(el('p', { text: 'The two agree on what kind of structure this is.' }));
   }
 
-  box.appendChild(el('p', { class: 'dim', text: 'The Field tab carries the number this is worth: how far the block sits from each reading, in degrees, live as you edit the history.' }));
   return box;
 }
 

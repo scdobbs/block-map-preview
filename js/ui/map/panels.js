@@ -90,8 +90,7 @@ export function measurePanel(ctx) {
   const draft = ctx.draft;
   const node = el('div', { class: 'panel' });
 
-  node.appendChild(head('Take a reading',
-    'Stand on the outcrop, lay the phone flat on the surface, and hold it still.'));
+  node.appendChild(head('Take a reading'));
 
   // --- where -------------------------------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: 'Position' }));
@@ -116,8 +115,8 @@ export function measurePanel(ctx) {
     label: 'Measuring',
     value: linear ? 'linear' : 'planar',
     options: [
-      { id: 'planar', label: 'A plane', hint: 'Bedding, foliation, a joint, a fault surface, a contact.' },
-      { id: 'linear', label: 'A line', hint: 'A lineation, a fold hinge, slickenlines.' },
+      { id: 'planar', label: 'A plane' },
+      { id: 'linear', label: 'A line' },
     ],
     onChange: (v) => ctx.setGeometry(v),
   }));
@@ -134,8 +133,8 @@ export function measurePanel(ctx) {
     label: 'Read it with',
     value: draft.source,
     options: [
-      { id: 'compass', label: 'Phone compass', hint: 'Lay the phone on the surface.' },
-      { id: 'manual', label: 'Type it', hint: 'From a Brunton, or by eye.' },
+      { id: 'compass', label: 'Phone compass' },
+      { id: 'manual', label: 'Type it' },
     ],
     onChange: (v) => { draft.source = v; ctx.rebuild(); },
   });
@@ -181,13 +180,12 @@ export function measurePanel(ctx) {
   const noAttitude = toggleRow({
     label: 'No attitude here',
     value: draft.noAttitude,
-    hint: 'Record the rock and the place without a measurement — scree, float, a covered contact.',
     onChange: (v) => { draft.noAttitude = v; ctx.rebuild(); },
   });
   node.appendChild(noAttitude);
 
   // --- which rock ---------------------------------------------------------
-  node.appendChild(el('div', { class: 'sub-head', text: 'What it is' }));
+  node.appendChild(el('div', { class: 'sub-head' }));
 
   const known = knownUnitNames(doc);
   const listId = 'field-unit-names';
@@ -213,9 +211,7 @@ export function measurePanel(ctx) {
   node.appendChild(textRow({
     label: known.length ? 'Or type a unit name' : 'Unit',
     value: draft.unitName,
-    placeholder: 'e.g. Wingate Sandstone',
     list: listId,
-    hint: known.length ? null : 'Type it once and it becomes a tap next time.',
     onChange: (v) => {
       draft.unitName = v.trim();
       const u = doc.units.find((x) => x.name.toLowerCase() === draft.unitName.toLowerCase());
@@ -242,7 +238,7 @@ export function measurePanel(ctx) {
   node.appendChild(noteRow({
     label: 'Note',
     value: draft.note,
-    placeholder: 'Grain size, color, fossils, weathering, what it sits on…',
+
     onChange: (v) => { draft.note = v; ctx.touchDraft(); },
   }));
 
@@ -329,7 +325,7 @@ function buildCompassLauncher(ctx, draft, wrap, linear) {
   if (c.error === 'unsupported') {
     wrap.appendChild(el('div', { class: 'notice' }, [
       el('p', { text: 'This browser does not report device orientation.' }),
-      el('p', { class: 'dim', text: 'Use "Type it" instead — the reading is just as good, it is your compass doing the work.' }),
+      el('p', { class: 'dim', text: 'Use "Type it" instead.' }),
     ]));
     return null;
   }
@@ -342,8 +338,6 @@ function buildCompassLauncher(ctx, draft, wrap, linear) {
     text: draft.held ? 'Open the compass again' : 'Open the compass',
     onclick: () => ctx.openMeasure(),
   }));
-  wrap.appendChild(el('div', { class: 'ctl-hint standalone',
-    text: 'Opens full screen. Lay the phone flat on the surface and hold it still.' }));
 
   const refresh = () => {
     clear(held);
@@ -371,8 +365,7 @@ export function stationsPanel(ctx) {
   const node = el('div', { class: 'panel' });
   const list = doc.stations;
 
-  node.appendChild(head(`Stations · ${list.length}`,
-    list.length ? 'Tap one to see it on the map and edit it.' : null));
+  node.appendChild(head(`Stations · ${list.length}`));
 
   if (!list.length) {
     node.appendChild(el('div', { class: 'empty' }, [
@@ -437,7 +430,6 @@ function overturnedRow(featureId, value, onChange) {
   return toggleRow({
     label: 'Overturned',
     value,
-    hint: 'The beds are upside down — younger underneath. Read it off graded bedding, cross-bed truncations, load casts or ripples, not off the compass. Drawn with the hooked dip tick a map prints.',
     onChange,
   });
 }
@@ -476,7 +468,7 @@ function stationEditor(ctx, st) {
     // contact, float, somewhere you could not reach the surface — and plenty
     // become measurable later, on the way back down or from the far side.
     box.appendChild(el('div', { class: 'ctl-hint standalone',
-      text: 'No attitude recorded here yet.' }));
+      text: 'No attitude recorded.' }));
     box.appendChild(el('div', { class: 'row-actions' }, [
       el('button', {
         class: 'btn small', type: 'button', text: 'Type one in',
@@ -517,7 +509,7 @@ function stationEditor(ctx, st) {
 
   const known = knownUnitNames(doc);
   box.appendChild(textRow({
-    label: 'Unit', value: st.unitName, placeholder: 'e.g. Kayenta Formation',
+    label: 'Unit', value: st.unitName,
     list: known.length ? 'field-unit-names' : null,
     onChange: (v) => edit((s) => {
       s.unitName = v.trim();
@@ -533,7 +525,7 @@ function stationEditor(ctx, st) {
   }));
 
   box.appendChild(noteRow({
-    label: 'Note', value: st.note, placeholder: 'What you saw.',
+    label: 'Note', value: st.note,
     onChange: (v) => edit((s) => { s.note = v; }),
   }));
 
@@ -750,13 +742,13 @@ function planeDipRows(ctx, line, noun) {
 
   const options = [
     { id: 'none', label: 'Not measured', hint: 'The fit will take it as vertical and say that it did.' },
-    { id: 'vertical', label: 'Vertical', hint: 'You looked, and it is vertical. Different from not knowing.' },
+    { id: 'vertical', label: 'Vertical', hint: 'Observed vertical.' },
   ];
   if (choices.length) {
     options.push({ id: 'a', label: `Dips toward ${azimuth(choices[0])}`,
-      hint: 'The plane leans this way from the line you drew. A compass direction, not an angle of tilt.' });
+      hint: 'Dip direction, this side of the trace.' });
     options.push({ id: 'b', label: `Dips toward ${azimuth(choices[1])}`,
-      hint: 'The plane leans the other way. A compass direction, not an angle of tilt.' });
+      hint: 'Dip direction, the other side of the trace.' });
   }
 
   rows.push(chipsRow({
@@ -860,12 +852,12 @@ function faultRows(ctx, line, known) {
   if (line.dip != null && line.dipDir != null) {
     rows.push(el('div', { class: 'ctl-pair' }, [
       textRow({
-        label: 'Hanging wall', value: line.unitUpper, placeholder: 'e.g. Campito Fm',
+        label: 'Hanging wall', value: line.unitUpper,
         list: known.length ? 'field-unit-names' : null,
         onChange: (v) => set((l) => { l.unitUpper = v.trim(); }),
       }),
       textRow({
-        label: 'Footwall', value: line.unitLower, placeholder: 'e.g. Poleta Fm',
+        label: 'Footwall', value: line.unitLower,
         list: known.length ? 'field-unit-names' : null,
         onChange: (v) => set((l) => { l.unitLower = v.trim(); }),
       }),
@@ -908,8 +900,6 @@ export function linesPanel(ctx) {
       options: LINE_CERTAINTY.map((c) => ({ id: c.id, label: c.label, hint: c.hint })),
       onChange: (v) => { drawing.certainty = v; ctx.rebuild(); },
     }));
-    node.appendChild(el('div', { class: 'ctl-hint standalone',
-      text: 'A line you walked is certain; one you traced across a covered slope is not. Drawing the difference is most of what makes a map honest, and both of these can be changed afterwards.' }));
     node.appendChild(el('div', { class: 'ctl-hint standalone',
       text: 'Points can be dragged while you draw. Undo takes back the last one.' }));
     return node;
@@ -957,7 +947,7 @@ export function linesPanel(ctx) {
     if (selected) {
       const box = el('div', { class: 'card-body' });
       box.appendChild(textRow({
-        label: 'Name', value: line.name, placeholder: 'e.g. Poleta–Campito contact',
+        label: 'Name', value: line.name,
         onChange: (v) => ctx.editLine(line.id, (l) => { l.name = v.trim(); }),
       }));
       box.appendChild(chipsRow({
@@ -980,12 +970,12 @@ export function linesPanel(ctx) {
         // across a fault.
         box.appendChild(el('div', { class: 'ctl-pair' }, [
           textRow({
-            label: 'Upper unit', value: line.unitUpper, placeholder: 'e.g. Poleta Fm',
+            label: 'Upper unit', value: line.unitUpper,
             list: known.length ? 'field-unit-names' : null,
             onChange: (v) => ctx.editLine(line.id, (l) => { l.unitUpper = v.trim(); }),
           }),
           textRow({
-            label: 'Lower unit', value: line.unitLower, placeholder: 'e.g. Campito Fm',
+            label: 'Lower unit', value: line.unitLower,
             list: known.length ? 'field-unit-names' : null,
             onChange: (v) => ctx.editLine(line.id, (l) => { l.unitLower = v.trim(); }),
           }),
@@ -1028,7 +1018,7 @@ export function linesPanel(ctx) {
       }
 
       box.appendChild(noteRow({
-        label: 'Note', value: line.note, placeholder: 'What you saw along it.',
+        label: 'Note', value: line.note,
         onChange: (v) => ctx.editLine(line.id, (l) => { l.note = v; }),
       }));
 
@@ -1157,7 +1147,7 @@ export function packsBlock(ctx) {
   const online = navigator.onLine !== false;
   const prog = ctx.packProgress();
   const wrap = el('div', {});
-  wrap.appendChild(el('div', { class: 'sub-head', text: 'Course packs' }));
+  wrap.appendChild(el('div', { class: 'sub-head', text: 'Map packs' }));
 
   const bars = new Map();
 
@@ -1227,8 +1217,8 @@ export function packsBlock(ctx) {
 
   wrap.appendChild(el('div', { class: 'ctl-hint standalone',
     text: online
-      ? 'A pack is the same map everybody else on the course has, already assembled. Install it anywhere with a connection — it does not have to be near the field area.'
-      : 'Installing a pack needs a connection, but only briefly, and any connection will do.' }));
+      ? 'A pack is a prepared map area. Install it anywhere with a connection.'
+      : 'Installing a pack needs a connection.' }));
 
   wrap.refreshBars = (p) => bars.get(p.packId)?.set(p);
   return wrap;
@@ -1286,7 +1276,7 @@ export function areasPanel(ctx) {
       onclick: () => ctx.beginSelection(),
     }));
     node.appendChild(el('div', { class: 'ctl-hint standalone',
-      text: 'Pan and zoom to your field area first — the box starts on whatever is on screen, and its corners drag.' }));
+      text: 'The box starts on the current view. Drag its corners.' }));
   } else {
     const area = ctx.draftArea();
     const est = estimateArea(area);
@@ -1302,7 +1292,7 @@ export function areasPanel(ctx) {
     node.appendChild(el('div', { class: 'stats' }, [sizeStat, tilesStat, bytesStat]));
 
     node.appendChild(textRow({
-      label: 'Name', value: area.name, placeholder: 'e.g. Comb Ridge day 2',
+      label: 'Name', value: area.name,
       onChange: (v) => ctx.setDraftArea({ name: v.trim() }),
     }));
 
@@ -1322,7 +1312,7 @@ export function areasPanel(ctx) {
         }, [el('span', { text: s.label })]);
       })),
       el('div', { class: 'ctl-hint',
-        text: 'Elevation is small and it is what draws the hillshade, the contours and every station’s height. Worth taking.' }),
+        text: 'Elevation draws the hillshade and contours and gives station heights.' }),
     ]);
     node.appendChild(layerChoice);
 
@@ -1470,7 +1460,7 @@ export function setupPanel(ctx) {
   const s = doc.settings;
   const node = el('div', { class: 'panel' });
 
-  node.appendChild(head('Setup', 'Set declination before you take a single reading.'));
+  node.appendChild(head('Setup', 'Set declination first.'));
 
   // --- projects ------------------------------------------------------------
   // First, because it decides what everything below applies to. Two field
@@ -1505,7 +1495,6 @@ export function setupPanel(ctx) {
   node.appendChild(textRow({
     label: 'Name of this project',
     value: doc.name,
-    placeholder: 'e.g. Poleta folds, day 2',
     onChange: (v) => ctx.renameProject(v.trim() || 'Field notes'),
   }));
 
@@ -1524,9 +1513,7 @@ export function setupPanel(ctx) {
   ]));
 
   node.appendChild(el('div', { class: 'ctl-hint standalone',
-    text: projects.length > 1
-      ? 'Each project keeps its own stations, lines, units, downloaded areas and declination. Nothing crosses between them.'
-      : 'A project keeps its own stations, lines, units, downloaded areas and declination. Start a second one for a different field area and the two never mix.' }));
+    text: 'Each project keeps its own stations, lines, units, downloaded areas and declination.' }));
 
   // --- declination ---------------------------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: 'Magnetic declination' }));
@@ -1534,7 +1521,7 @@ export function setupPanel(ctx) {
   const declRow = numberRow({
     label: 'Declination', value: s.declination, min: -30, max: 30, step: 0.1, unit: '°',
     ends: ['west', 'east'],
-    hint: 'East is positive. This is the same number you would dial into a Brunton.',
+    hint: 'East positive.',
     onChange: (v) => ctx.setSetting({ declination: v, declinationSet: true, declinationSource: 'manual' }),
   });
   node.appendChild(declRow);
@@ -1555,23 +1542,20 @@ export function setupPanel(ctx) {
     }),
   ]));
 
-  node.appendChild(el('div', { class: 'about' }, [
-    el('p', { text: 'A phone’s magnetometer finds magnetic north. A map is drawn to true north. The gap between them is the declination, and it is up to 20° across the United States — enough to move a strike into the wrong quadrant without ever looking wrong.' }),
-    el('p', { text: 'Every phone browser reports a magnetic bearing — iPhones included, despite offering a property that sounds like it means true north. So this correction is applied here, on every platform, and nothing else applies it. If your readings sit a consistent ten or fifteen degrees off a Brunton, this setting is the first thing to check.' }),
-    el('p', { text: 'The value is stored with every reading, so a wrong one can be corrected later in a spreadsheet without retaking anything.' }),
-  ]));
+  node.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: 'The phone reports a magnetic bearing on every platform; this correction is applied here and stored with each reading.' }));
 
   // --- accuracy ------------------------------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: 'Position' }));
   node.appendChild(numberRow({
     label: 'Require a fix better than', value: s.minAccuracy, min: 5, max: 100, step: 1, unit: 'm',
-    hint: 'A station cannot be recorded on a fix worse than this. Loosen it under a canopy, tighten it in the open.',
+    hint: 'A station cannot be recorded on a worse fix.',
     onChange: (v) => ctx.setSetting({ minAccuracy: v }),
   }));
   node.appendChild(toggleRow({
     label: 'Follow my position',
     value: s.follow,
-    hint: 'Keep the map centered on you as you walk. Dragging the map turns this off; the crosshair button turns it back on.',
+    hint: 'Dragging the map turns this off; the crosshair turns it back on.',
     onChange: (v) => ctx.setSetting({ follow: v }),
   }));
 
@@ -1584,12 +1568,11 @@ export function setupPanel(ctx) {
   }));
   node.appendChild(toggleRow({
     label: 'Hillshade', value: s.showHillshade,
-    hint: 'Relief worked out from the cached elevation. Needs the Elevation layer downloaded.',
+    hint: 'Needs the Elevation layer.',
     onChange: (v) => ctx.setSetting({ showHillshade: v }),
   }));
   node.appendChild(toggleRow({
     label: 'Contours', value: s.showContours,
-    hint: 'Drawn from elevation numbers, so they stay sharp past zoom 16 where the photography stops.',
     onChange: (v) => ctx.setSetting({ showContours: v }),
   }));
   node.appendChild(selectRow({
@@ -1607,8 +1590,6 @@ export function setupPanel(ctx) {
 
   // --- units ---------------------------------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: `Map units · ${doc.units.length}` }));
-  node.appendChild(el('div', { class: 'ctl-hint standalone',
-    text: 'Set these up before a field course and naming a unit is one tap. Leave it empty and type names as you go — they become taps either way.' }));
 
   for (const u of doc.units) {
     const rock = rockOf(u.rockId);
@@ -1626,7 +1607,7 @@ export function setupPanel(ctx) {
       ]),
       el('div', { class: 'card-body' }, [
         textRow({
-          label: 'Name', value: u.name, placeholder: 'e.g. Navajo Sandstone',
+          label: 'Name', value: u.name,
           onChange: (v) => ctx.editUnit(u.id, (x) => { x.name = v.trim(); }),
         }),
         selectRow({
@@ -1683,7 +1664,7 @@ export function setupPanel(ctx) {
     text: `${APP_VERSION} \u00b7 doc ${docFingerprint(doc)}` });
   node.appendChild(stamp);
   node.appendChild(el('div', { class: 'ctl-hint standalone', text:
-    'Quote both when comparing a fit between devices. The left is the app build, the right is this project\u2019s evidence \u2014 stations, lines, shaded units, the column, and the local-folds switch. Notes and colours are left out, because they change no answer. Two devices that agree here can still cut different blocks: the box you drag round your mapping sets the size of the block and the largest offset the fault search will consider, and it is drawn by hand.' }));
+    'App build, and a hash of the evidence the fit reads (stations, lines, shaded units, the column, the local-folds switch). Quote both when comparing a fit between devices.' }));
 
   // Whether the code running is the code that was downloaded. The worker calls
   // skipWaiting, so an update installs into the cache while this page carries

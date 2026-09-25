@@ -26,41 +26,35 @@ export function rockOf(id) { return ROCK_BY_ID[id] || ROCK_BY_ID.sandstone; }
 export const FEATURES = [
   {
     id: 'bedding', label: 'Bedding', short: 'Bd', geometry: 'planar',
-    hint: 'The depositional surface. This is what a fold axis is fitted from.',
+    hint: 'Fitted for the fold axis.',
   },
   {
     id: 'foliation', label: 'Foliation', short: 'Fol', geometry: 'planar',
-    hint: 'Cleavage or schistosity.',
   },
   {
     id: 'joint', label: 'Joint', short: 'Jt', geometry: 'planar',
-    hint: 'A fracture with no measurable offset.',
   },
   {
     id: 'fault', label: 'Fault plane', short: 'Flt', geometry: 'planar',
-    hint: 'A fracture the rock has moved along.',
   },
   {
     id: 'contact', label: 'Contact', short: 'Ct', geometry: 'planar',
-    hint: 'The surface between two units.',
   },
   // Lines, not planes. Measured by laying the long edge of the phone along the
   // structure and pointing it down-plunge, and recorded as trend and plunge.
   {
     id: 'lineation', label: 'Lineation', short: 'Ln', geometry: 'linear',
-    hint: 'A mineral or stretching lineation on a surface.',
   },
   {
     id: 'hinge', label: 'Fold hinge', short: 'Hng', geometry: 'linear',
-    hint: 'A hinge line measured directly, rather than fitted from bedding.',
+    hint: 'Measured directly.',
   },
   {
     id: 'slickenline', label: 'Slickenline', short: 'Slk', geometry: 'linear',
-    hint: 'Slip striae on a fault surface. Lay the phone on the fault with its edge along the striae and it records both.',
+    hint: 'Lay the phone on the fault with its edge along the striae; the plane is recorded too.',
   },
   {
     id: 'axis', label: 'Other line', short: 'Ln', geometry: 'linear',
-    hint: 'Any other linear structure.',
   },
 ];
 
@@ -103,8 +97,8 @@ export const FITTABLE = new Set(['bedding']);
 // notebook rather than being flattened on the way in.
 
 export const CERTAINTIES = [
-  { id: 'measured', label: 'Measured', hint: 'Instrument on the surface.' },
-  { id: 'estimated', label: 'Estimated', hint: 'Eyeballed, or read from a distance.' },
+  { id: 'measured', label: 'Measured' },
+  { id: 'estimated', label: 'Estimated', hint: 'By eye, or from a distance.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -117,23 +111,19 @@ export const CERTAINTIES = [
 export const LINE_KINDS = [
   {
     id: 'contact', label: 'Contact', color: '#16232b', weight: 2.2,
-    hint: 'Where one unit gives way to another.',
   },
   {
     id: 'fault', label: 'Fault', color: '#c0392b', weight: 3.4,
-    hint: 'A surface the rock has moved along. Drawn heavier, the way a map prints it.',
   },
   {
     id: 'unconformity', label: 'Unconformity', color: '#b5651d', weight: 2.8,
-    hint: 'A contact with time missing across it.',
   },
   {
     id: 'dike', label: 'Dike', color: '#7d3c98', weight: 2.4,
-    hint: 'An intrusive sheet cutting the units it crosses.',
   },
   {
     id: 'traverse', label: 'Traverse', color: '#1f7a8c', weight: 1.8,
-    hint: 'Where you walked. Not a geologic boundary.',
+    hint: 'Not a geologic boundary.',
   },
   {
     // The edge of the ground you are claiming to have mapped — a neat line,
@@ -142,11 +132,10 @@ export const LINE_KINDS = [
     // geology: it says where you stopped looking, which is a fact about the
     // survey and not about the rock.
     id: 'boundary', label: 'Map boundary', color: '#6b7b86', weight: 1.6,
-    hint: 'The edge of your map. Bounds the shading; means nothing to the geology.',
+    hint: 'Bounds the shading; not a geologic line.',
   },
   {
     id: 'other', label: 'Other', color: '#2f3a42', weight: 2.2,
-    hint: 'Anything else worth a line.',
   },
 ];
 
@@ -163,10 +152,10 @@ export function lineKind(id) { return LINE_KIND_BY_ID[id] || LINE_KIND_BY_ID.con
  * and both are worse.
  */
 export const LINE_CERTAINTY = [
-  { id: 'certain', label: 'Certain', dash: [], hint: 'Walked, or clearly exposed.' },
-  { id: 'approximate', label: 'Approximate', dash: [9, 6], hint: 'Located to within a stride or two.' },
-  { id: 'inferred', label: 'Inferred', dash: [18, 7], hint: 'Interpolated between exposures.' },
-  { id: 'concealed', label: 'Concealed', dash: [2.5, 5], hint: 'Under cover — soil, scree, alluvium.' },
+  { id: 'certain', label: 'Certain', dash: [] },
+  { id: 'approximate', label: 'Approximate', dash: [9, 6] },
+  { id: 'inferred', label: 'Inferred', dash: [18, 7] },
+  { id: 'concealed', label: 'Concealed', dash: [2.5, 5] },
 ];
 
 export const LINE_CERTAINTY_BY_ID = Object.fromEntries(LINE_CERTAINTY.map((c) => [c.id, c]));
@@ -187,11 +176,11 @@ export function lineCertainty(id) {
  * what a student picks here is passed through rather than translated.
  */
 export const FAULT_SENSES = [
-  { id: '', label: 'Not sure', hint: 'Say so rather than guess. The fit will search every sense and tell you it could not decide.' },
-  { id: 'reverse', label: 'Thrust / reverse', hint: 'Hanging wall up. Older rock ends up on top of younger.' },
-  { id: 'normal', label: 'Normal', hint: 'Hanging wall down. Section is cut out rather than repeated.' },
-  { id: 'dextral', label: 'Dextral', hint: 'Standing on one side, the far block moved to your right.' },
-  { id: 'sinistral', label: 'Sinistral', hint: 'Standing on one side, the far block moved to your left.' },
+  { id: '', label: 'Not sure', hint: 'The fit searches every sense.' },
+  { id: 'reverse', label: 'Thrust / reverse' },
+  { id: 'normal', label: 'Normal' },
+  { id: 'dextral', label: 'Dextral' },
+  { id: 'sinistral', label: 'Sinistral' },
 ];
 
 export const FAULT_SENSE_BY_ID = Object.fromEntries(FAULT_SENSES.map((s) => [s.id, s]));

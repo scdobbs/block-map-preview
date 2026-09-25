@@ -15,7 +15,7 @@ function extentIntro(ctx) {
       onclick: () => ctx.beginSelection(),
     }),
     el('div', { class: 'ctl-hint standalone',
-      text: 'The box starts on whatever is on screen and its corners drag — the same box the Areas tab downloads with. Everything inside it goes into the block.' }),
+      text: 'The box starts on the current view. Drag its corners.' }),
   ];
 }
 
@@ -50,7 +50,6 @@ export function blockPanel(ctx) {
   const node = el('div', { class: 'panel' });
   node.appendChild(el('div', { class: 'section-head' }, [
     el('h2', { text: 'Build a block' }),
-    el('p', { text: 'Turn what you have mapped into a 3D block, on the real ground, and find out whether it explains your readings.' }),
   ]));
 
   const sel = ctx.selection();
@@ -249,7 +248,7 @@ function reportBlock(ctx, r) {
     ]));
     wrap.appendChild(el('div', { class: 'stats' }, rows));
     wrap.appendChild(el('div', { class: 'ctl-hint standalone',
-      text: 'Two contacts at a known structure differ by the thickness of what lies between them, so these were read off the map rather than measured with a tape. The top and bottom units are open-ended — nothing in the box says how thick they are.' }));
+      text: 'Read off the map from contact spacing at the fitted structure. The top and bottom units are open-ended.' }));
   }
 
   // What the build handed back to the stratigraphic column. Said here rather
@@ -301,7 +300,7 @@ function reportBlock(ctx, r) {
       onclick: () => ctx.beginSelection() }),
   ]));
   wrap.appendChild(el('div', { class: 'ctl-hint standalone',
-    text: 'The block opens in the Block half, where the fitted history is on the History tab as ordinary events. Change them — that is the point. The map keeps your notes as they were.' }));
+    text: 'The fitted history is on the block\u2019s History tab as ordinary events. The map is not changed.' }));
 
   return wrap;
 }

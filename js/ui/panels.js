@@ -34,10 +34,7 @@ export function layersPanel(ctx) {
     clear(root);
     const doc = ctx.store.doc;
 
-    root.appendChild(sectionHead(
-      'Stratigraphic column',
-      'Youngest unit at the top, the way you would draw it in a notebook.',
-    ));
+    root.appendChild(sectionHead('Stratigraphic column'));
 
     const list = el('div', { class: 'layer-list' });
 
@@ -300,10 +297,7 @@ export function historyPanel(ctx) {
     clear(root);
     const doc = ctx.store.doc;
 
-    root.appendChild(sectionHead(
-      'Geologic history',
-      'Newest event at the top. Each event deforms everything older than it.',
-    ));
+    root.appendChild(sectionHead('Events'));
 
     const add = el('div', { class: 'add-grid' });
     for (const type of EVENT_ORDER) {
@@ -458,17 +452,11 @@ function timeMachine(ctx) {
 
   const box = el('div', { class: 'time-machine' }, [
     el('div', { class: 'time-head' }, [
-      el('label', { class: 'ctl-label', text: 'Wind it back' }),
+      el('label', { class: 'ctl-label', text: 'Geologic history' }),
       readout,
     ]),
     el('div', { class: 'time-row' }, [play, range]),
     pending,
-    el('div', {
-      class: 'ctl-hint',
-      text: 'Drag to run the history forward from flat-lying beds. Everything '
-        + 'the block shows — the map face, a tap on it, the cross section — is '
-        + 'the block as it stood at that moment.',
-    }),
   ]);
   box.restate = restate;
   restate();
@@ -507,7 +495,6 @@ function eventRow(ctx, ev, index) {
   if (!isOpen) return row;
 
   const body = el('div', { class: 'event-body' });
-  body.appendChild(el('div', { class: 'ctl-hint standalone', text: def.blurb }));
   buildEventControls(ctx, ev, index, body);
 
   body.appendChild(el('div', { class: 'row-actions' }, [
@@ -700,11 +687,11 @@ function buildEventControls(ctx, ev, index, body) {
       body.appendChild(protractor({ label: 'Plunge', value: ev.plunge, max: 80, onChange: set('plunge') }));
       body.appendChild(numberRow({
         label: 'Wavelength', value: ev.wavelength, min: 200, max: 6000, step: 25, unit: 'm',
-        onChange: set('wavelength'), hint: 'Crest-to-crest distance.',
+        onChange: set('wavelength'),
       }));
       body.appendChild(numberRow({
         label: 'Amplitude', value: ev.amplitude, min: 0, max: 1200, step: 10, unit: 'm',
-        onChange: set('amplitude'), hint: 'Half the height from trough to crest.',
+        onChange: set('amplitude'),
       }));
       body.appendChild(numberRow({
         label: 'Hinge shift', value: ev.phase, min: -180, max: 180, step: 5, unit: '°',
@@ -722,7 +709,7 @@ function buildEventControls(ctx, ev, index, body) {
         // A fitted profile is not a cosine and the sliders below shape a
         // cosine, so say what the fold is carrying and offer the way back.
         const wrap = el('div', { class: 'ctl-hint standalone' });
-        wrap.appendChild(el('span', { text: 'This fold\u2019s cross-section was solved from your mapping rather than assumed, as a series of harmonics. Wavelength above is the fundamental the series is built on, and amplitude its peak. Vergence and hinge shape still warp it. ' }));
+        wrap.appendChild(el('span', { text: 'Profile solved from your mapping as a series of harmonics; wavelength is the fundamental, amplitude its peak. ' }));
         const reset = el('button', { class: 'btn small', text: 'Replace with a plain cosine' });
         reset.onclick = () => set('profile')([]);
         wrap.appendChild(reset);
@@ -732,14 +719,14 @@ function buildEventControls(ctx, ev, index, body) {
         label: 'Vergence', value: ev.vergence || 0, min: -0.9, max: 0.9, step: 0.05,
         ends: vergenceEnds(ev),
         onChange: (v) => { set('vergence')(v); verge.setEnds(...vergenceEnds({ ...ev, vergence: v })); },
-        hint: 'Moves the troughs off centre, so one limb is short and steep and the other long and gentle. Zero is a symmetric fold; the crests keep their height either way.',
+        hint: 'Zero is symmetric.',
       });
       body.appendChild(verge);
       body.appendChild(numberRow({
         label: 'Hinge shape', value: ev.hinge || 0, min: -0.9, max: 0.9, step: 0.05,
         ends: ['flat crests', 'tight hinges'],
         onChange: set('hinge'),
-        hint: 'Where the steep part of each limb sits. Left opens the crests and troughs out into a box fold, flat on top with steep sides; right pulls the steepness against the hinges and tightens them. Both hinges change together, so this is never vergence. A true chevron — straight limbs, angular hinge — is not in this family: tightening here always flattens the middle of the limb.',
+        hint: 'Left toward a box fold, right toward tight hinges. Not a chevron: limbs stay curved.',
       }));
 
       // --- how far it reaches ----------------------------------------------
@@ -750,15 +737,13 @@ function buildEventControls(ctx, ev, index, body) {
       body.appendChild(numberRow({
         label: 'Along the axis', value: ev.reachAlong || 0, min: 0, max: 6000, step: 50, unit: 'm',
         onChange: set('reachAlong'),
-        hint: 'The fold fades to nothing this far along its own hinge. Zero means it never does.',
+        hint: 'Zero: no die-out.',
       }));
       body.appendChild(numberRow({
         label: 'Across the axis', value: ev.reachAcross || 0, min: 0, max: 6000, step: 50, unit: 'm',
         onChange: set('reachAcross'),
-        hint: 'How far the train of folds carries sideways before dying out. Zero means it never does.',
+        hint: 'Zero: no die-out.',
       }));
-      body.appendChild(el('div', { class: 'ctl-hint standalone', text:
-        'Both at zero is a fold that runs at full amplitude to every edge of the block, which is what this event used to be and is still the right answer for one structure filling one map. Set them and the fold becomes local — which is what lets a second fold, with its own shape, hold a different part of the block.' }));
 
       body.appendChild(centerRow(ctx, ev, index, ['centerX', 'centerY']));
       break;
@@ -809,7 +794,6 @@ function buildEventControls(ctx, ev, index, body) {
           onclick: () => ctx.store.edit((d) => { d.events[index].kind = id; }, { structural: true }),
         }))),
       ]));
-      body.appendChild(el('div', { class: 'ctl-hint standalone', text: kindDef().blurb }));
 
       const obliqRow = numberRow({
         label: 'Oblique slip', value: ev.obliquity || 0, min: -90, max: 90, step: 5, unit: '°',
@@ -851,23 +835,23 @@ function buildEventControls(ctx, ev, index, body) {
       body.appendChild(numberRow({
         label: 'Flat depth', value: ev.floorZ, min: -2500, max: 200, step: 25, unit: 'm',
         onChange: set('floorZ'),
-        hint: 'The décollement the sheet slides on. The upper flat sits one rise above it.',
+        hint: 'Décollement depth.',
       }));
       body.appendChild(numberRow({
         label: 'Ramp rise', value: ev.rise, min: 50, max: 1500, step: 25, unit: 'm',
         onChange: set('rise'),
-        hint: 'How far the fault steps up. This is the height of the anticline it makes.',
+        hint: 'Height of the ramp.',
       }));
       body.appendChild(numberRow({
         label: 'Slip', value: ev.slip, min: 0, max: 3000, step: 25, unit: 'm',
         onChange: set('slip'),
-        hint: 'Displacement along the flat. Past the ramp length the fold grows a flat crest instead of getting taller.',
+        hint: 'Displacement along the flat.',
       }));
       body.appendChild(el('div', { class: 'ctl-hint standalone', text: rampNote(ev) }));
       body.appendChild(numberRow({
         label: 'Bend rounding', value: ev.round, min: 0, max: 400, step: 10, unit: 'm',
         onChange: set('round'),
-        hint: 'How sharp the two bends are. Zero is a kink band; a few tens of metres is a real fault.',
+        hint: 'Zero is a kink.',
       }));
       body.appendChild(centerRow(ctx, ev, index, ['centerX', 'centerY']));
       break;
@@ -883,23 +867,22 @@ function buildEventControls(ctx, ev, index, body) {
       body.appendChild(numberRow({
         label: 'Tip elevation', value: ev.tipZ, min: -2000, max: 600, step: 25, unit: 'm',
         onChange: set('tipZ'),
-        hint: 'Where the fault stops. Above this the rock is folded, not broken — put the tip under the ground surface and the fault is blind.',
+        hint: 'Below the surface, the fault is blind.',
       }));
       body.appendChild(numberRow({
         label: 'Slip', value: ev.slip, min: 0, max: 1000, step: 10, unit: 'm',
         onChange: set('slip'),
-        hint: 'How far the sheet moved. Most of it is taken up by the fold near the tip and by the break further down.',
       }));
       body.appendChild(numberRow({
         label: 'Trishear angle', value: ev.apical, min: 20, max: 120, step: 5, unit: '°',
         onChange: set('apical'),
-        hint: 'How wide the triangle of deforming rock ahead of the tip opens. Narrow makes a tight, steep forelimb; wide spreads the same slip into a gentle monocline.',
+        hint: 'Apical angle of the trishear zone.',
       }));
       body.appendChild(numberRow({
         label: 'Propagation / slip', value: ev.ps, min: PS_MIN, max: 4, step: 0.1,
         onChange: set('ps'),
         ends: ['fold takes it up', 'break outruns it'],
-        hint: 'How fast the tip climbs for every metre the sheet slips. Low leaves the fold to take up most of the shortening; high drives the break out through it. Natural ones run about 1 to 3, and a tip that barely moves at all piles up strain on itself rather than making a structure.',
+        hint: 'Natural values run about 1 to 3.',
       }));
       body.appendChild(centerRow(ctx, ev, index, ['centerX', 'centerY']));
       break;
@@ -1001,11 +984,6 @@ function buildEventControls(ctx, ev, index, body) {
         onChange: (v) => ctx.store.edit((d) => { d.events[index].fill = v; }, { structural: true }),
       }));
       body.appendChild(el('div', { class: 'sub-head', text: 'Erosion surface' }));
-      body.appendChild(el('div', {
-        class: 'ctl-hint standalone',
-        text: 'Its relief is what truncates the older beds and gives the younger'
-          + ' ones something to onlap; its depth follows the unit above.',
-      }));
       body.appendChild(surfaceEditor(ev.surface, (patch, key) => {
         ctx.store.edit((d) => { Object.assign(d.events[index].surface, patch); },
           { coalesce: `${ev.id}:${key}` });
@@ -1247,8 +1225,8 @@ export function terrainPanel(ctx) {
     root.appendChild(sectionHead(
       measured ? 'Measured ground' : 'Land surface',
       measured
-        ? 'This block is capped with real topography, sampled from the elevation data for the area you mapped.'
-        : 'The map face of the block. Relief is what makes outcrop patterns interesting.',
+        ? 'Real topography from the area you mapped.'
+        : null,
     ));
 
     if (measured) {
@@ -1262,7 +1240,7 @@ export function terrainPanel(ctx) {
         statRow('Samples', `${doc.topo.nx} × ${doc.topo.ny}`),
       ].filter(Boolean)));
       root.appendChild(el('div', { class: 'ctl-hint standalone',
-        text: 'Heights on this block are metres about that datum, so the middle of the ground is zero. The Map half is where this came from, and where its readings still live.' }));
+        text: 'Heights are metres about that datum.' }));
     } else {
       root.appendChild(surfaceEditor(doc.topo, (patch, key) => {
         ctx.store.edit((d) => { Object.assign(d.topo, patch); }, { coalesce: `topo:${key}` });
@@ -1272,7 +1250,7 @@ export function terrainPanel(ctx) {
     root.appendChild(el('div', { class: 'sub-head', text: 'Contours' }));
     root.appendChild(toggleRow({
       label: 'Contour lines', value: doc.settings.showContours !== false,
-      hint: 'Drawn on the map face only. Every fifth line is heavier.',
+      hint: 'Every fifth line is heavier.',
       onChange: (v) => ctx.store.edit((d) => { d.settings.showContours = v; },
         { structural: true }),
     }));
@@ -1299,7 +1277,7 @@ export function terrainPanel(ctx) {
       // off the place it was recorded — so only the depth of the block is left
       // free, which is the one that costs nothing.
       root.appendChild(el('div', { class: 'ctl-hint standalone',
-        text: 'Width and north–south depth are fixed by the area you mapped — they are the footprint the ground was sampled over, and the readings are pinned to it. How deep the block is cut is still yours.' }));
+        text: 'Width and depth are fixed by the area you mapped.' }));
     }
     for (const [key, label, max] of [
       ['width', 'Width (E–W)', 6000],
@@ -1316,7 +1294,6 @@ export function terrainPanel(ctx) {
     }
 
     root.appendChild(el('div', { class: 'sub-head', text: 'Cutaway' }));
-    root.appendChild(el('div', { class: 'ctl-hint standalone', text: 'Slide a wall into the block to expose a fresh cross-section. The geology does not move — you are cutting a new face through it.' }));
     for (const [key, label, dim] of [['cutE', 'Cut in from the east', 'width'], ['cutN', 'Cut in from the north', 'depth']]) {
       root.appendChild(numberRow({
         label, value: doc.block[key] || 0, min: 0, max: Math.round(doc.block[dim] * 0.85), step: 25, unit: 'm',
@@ -1335,9 +1312,7 @@ export function terrainPanel(ctx) {
     }));
     root.appendChild(el('div', {
       class: 'ctl-hint',
-      text: 'Drag A–A′ across the little map and the block is drawn along that line, '
-        + 'with faults, unconformities and the ground profile on it. Tap the section '
-        + 'to name a unit.',
+      text: 'Drag A–A′ on the inset map. Tap the section to name a unit.',
     }));
 
     const onSlice = ctx.sliceOpen();
@@ -1348,8 +1323,7 @@ export function terrainPanel(ctx) {
     }));
     root.appendChild(el('div', {
       class: 'ctl-hint',
-      text: 'Lowers the top of the block, so the fresh flat face is the map you would '
-        + 'get at that depth. The slider clicks on to the base of each unit in the column.',
+      text: 'The slider stops at the base of each unit.',
     }));
 
     root.appendChild(el('div', { class: 'sub-head', text: 'Display' }));
@@ -1386,10 +1360,7 @@ export function fieldPanel(ctx) {
     const doc = ctx.store.doc;
     const readings = ctx.readings();
 
-    root.appendChild(sectionHead(
-      'Strike & dip',
-      'Drop a reading on the ground. It clings to the surface and reports the bedding beneath it — slide it around and the numbers follow.',
-    ));
+    root.appendChild(sectionHead('Strike & dip'));
 
     const arming = ctx.markerMode() === 'add';
     root.appendChild(el('button', {
@@ -1398,9 +1369,6 @@ export function fieldPanel(ctx) {
       text: arming ? 'Placing — tap the block, or tap here to stop' : '+ Add strike & dip',
       onclick: () => ctx.setMarkerMode(arming ? null : 'add'),
     }));
-    if (arming) {
-      root.appendChild(el('div', { class: 'ctl-hint', text: 'Every tap on the block leaves another reading. Drag one afterwards to move it.' }));
-    }
 
     if (!readings.length) {
       root.appendChild(el('p', { class: 'empty-note', text: 'No readings yet.' }));
@@ -1438,12 +1406,6 @@ export function fieldPanel(ctx) {
       disabled: readings.length === 0 && !onNet,
       onclick: () => ctx.setNet(!onNet),
     }));
-    root.appendChild(el('div', {
-      class: 'ctl-hint',
-      text: readings.length === 0
-        ? 'Place some readings first — a stereonet has nothing to say about an empty notebook.'
-        : 'Opens beside the block. Edit a fold in History with it up and the girdle swings as you drag.',
-    }));
 
     // Only for a block cut from a field area: an invented landform has no map
     // that was walked, so there is nothing to hold the prediction against.
@@ -1455,7 +1417,7 @@ export function fieldPanel(ctx) {
         onclick: () => ctx.setGroundMap(!onGround),
       }));
       root.appendChild(el('div', { class: 'ctl-hint', text:
-        'Draws the contacts this block predicts over the ones you mapped. Where they part company is where the model and the ground disagree — which is the argument worth having. It shares the slot with the stereonet.' }));
+        'Draws the contacts this block predicts over the ones you mapped.' }));
     }
 
     // Everything the fit decided, for a block cut from a field area. Placed
@@ -1468,14 +1430,12 @@ export function fieldPanel(ctx) {
     root.appendChild(el('div', { class: 'sub-head', text: 'Display' }));
     root.appendChild(toggleRow({
       label: 'Show readings', value: doc.settings.showMarkers !== false,
-      hint: 'Hide them for a clean block, without losing where they sit.',
       onChange: (v) => ctx.store.edit((d) => { d.settings.showMarkers = v; },
         { structural: true }),
     }));
     root.appendChild(numberRow({
       label: 'Symbol size', value: doc.settings.markerSize || 1,
       min: 0.5, max: 2.5, step: 0.1,
-      hint: 'Bigger symbols read better across a room; smaller ones crowd less.',
       onChange: (v) => ctx.store.edit((d) => { d.settings.markerSize = v; },
         { coalesce: 'markerSize' }),
     }));
@@ -1579,7 +1539,7 @@ export function viewPanel(ctx) {
     clear(root);
     const doc = ctx.store.doc;
 
-    root.appendChild(sectionHead('Examples', 'Load a worked structure, then take it apart.'));
+    root.appendChild(sectionHead('Examples'));
     const grid = el('div', { class: 'preset-grid' });
     for (const p of PRESETS) {
       grid.appendChild(el('button', {
@@ -1602,12 +1562,6 @@ export function viewPanel(ctx) {
       text: onMap ? 'Map view — tap to return to 3D' : 'Read it as a map (2D)',
       onclick: () => ctx.setMapView(!onMap),
     }));
-    root.appendChild(el('div', {
-      class: 'ctl-hint',
-      text: onMap
-        ? 'Straight down, north up, no perspective. Strike and dip symbols lie flat, exactly as they are printed on a geologic map.'
-        : 'Flattens the block into a plan view and lays the strike and dip symbols flat — the map a geologist would be handed.',
-    }));
 
     root.appendChild(el('div', { class: 'view-grid' }, [
       viewBtn(ctx, 'Oblique', 35, 28),
@@ -1628,18 +1582,16 @@ export function viewPanel(ctx) {
     }));
     root.appendChild(toggleRow({
       label: 'Contact lines', value: doc.settings.showContacts,
-      hint: 'Dark line where two units meet.',
       onChange: (v) => ctx.store.edit((d) => { d.settings.showContacts = v; }, { structural: false }),
     }));
     root.appendChild(toggleRow({
       label: 'Fault traces', value: doc.settings.showFaults !== false,
-      hint: 'Red where a fault cuts the block, on the faces and across the ground.',
       onChange: (v) => ctx.store.edit((d) => { d.settings.showFaults = v; },
         { structural: false }),
     }));
     root.appendChild(toggleRow({
       label: 'Event guides', value: doc.settings.showEventGuides !== false,
-      hint: 'The plane or axes of whichever event is open in History. Turn off for a clean map.',
+      hint: 'The plane or axes of the event open in History.',
       onChange: (v) => ctx.store.edit((d) => { d.settings.showEventGuides = v; },
         { structural: false }),
     }));
@@ -1681,7 +1633,7 @@ export function viewPanel(ctx) {
     // requires that people who use the app over a network be able to get at
     // the source, and anyone who forks and rehosts inherits that obligation.
     root.appendChild(el('div', { class: 'about' }, [
-      el('p', { text: 'Works with no signal. Add it to your home screen and it will open like any other app.' }),
+      el('p', { text: 'Works offline. Add it to your home screen.' }),
       el('div', { class: 'about-rule' }),
       el('p', { class: 'about-title', text: 'Block — 3D geologic block diagrams' }),
       el('p', {}, [
