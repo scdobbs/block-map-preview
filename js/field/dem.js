@@ -310,7 +310,7 @@ export async function renderDemTile(z, x, y, opts = {}) {
  */
 function labelContour(ctx, level, seg, w, h, scale) {
   const text = String(Math.round(level));
-  const fs = 10 * Math.min(2, Math.max(1, scale));
+  const fs = 7.5 * Math.min(1.5, Math.max(1, scale));
   const margin = fs * 2.2;
   const cx = w / 2, cy = h / 2;
   let best = null, bestD = Infinity;

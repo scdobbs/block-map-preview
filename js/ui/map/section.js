@@ -145,7 +145,9 @@ export class MapSection {
     this.northBtn.addEventListener('click', () => this._northTap());
     this._northTapAt = 0;
     this.locateBtn = hudBtn(locateIcon(), 'Center on me', () => this.locate());
-    this.layerBtn = hudBtn(layersIcon(), 'Change layer', () => this.cycleLayer());
+    this.layerBtn = hudBtn(layersIcon(), 'Choose the base layer', () => this.toggleLayerMenu());
+    // A small menu of the base layers, beside the button that opens it.
+    this.layerMenu = el('div', { class: 'layer-menu hidden', role: 'menu' });
     this.placeBtn = hudBtn(plusIcon(), 'Place a station by hand', () => this.togglePlace());
     this.fullBtn = hudBtn(expandIcon(), 'Full screen map', () => this.toggleFullMap());
 
@@ -174,10 +176,16 @@ export class MapSection {
       el('div', { class: 'hud hud-right' }, [
         this.northBtn, this.locateBtn, this.layerBtn, this.fullBtn, this.placeBtn,
       ]),
+      this.layerMenu,
       this.scaleChip,
       this.attrib,
       this.bottomStack,
     ]);
+    // Anywhere else closes the menu.
+    this.pane.addEventListener('pointerdown', (e) => {
+      if (!this.layerMenu.classList.contains('hidden')
+        && !this.layerMenu.contains(e.target) && !this.layerBtn.contains(e.target)) this.toggleLayerMenu(false);
+    }, true);
 
     this.map = new MapCanvas(this.canvas, {
       onTap: (ll, screen) => this.onTap(ll, screen),
@@ -845,10 +853,25 @@ export class MapSection {
     this.locateBtn.setAttribute('aria-label', this.locateBtn.title);
   }
 
-  cycleLayer() {
+  toggleLayerMenu(on = null) {
+    const open = on == null ? this.layerMenu.classList.contains('hidden') : on;
+    this.layerMenu.classList.toggle('hidden', !open);
+    this.layerBtn.classList.toggle('on', open);
+    if (!open) return;
+    // Level with the button that opened it, wherever the column has put it.
+    const b = this.layerBtn.getBoundingClientRect();
+    const p = this.pane.getBoundingClientRect();
+    this.layerMenu.style.top = `${b.top - p.top}px`;
+    this.layerMenu.style.right = `${p.right - b.left + 8}px`;
     const cur = this.store.doc.settings.baseLayer;
-    const i = BASE_SOURCES.indexOf(cur);
-    this.setSetting({ baseLayer: BASE_SOURCES[(i + 1) % BASE_SOURCES.length] });
+    clear(this.layerMenu);
+    for (const id of BASE_SOURCES) {
+      this.layerMenu.appendChild(el('button', {
+        class: `layer-item ${id === cur ? 'on' : ''}`, type: 'button', role: 'menuitemradio',
+        'aria-checked': id === cur ? 'true' : 'false',
+        onclick: () => { this.setSetting({ baseLayer: id }); this.toggleLayerMenu(false); },
+      }, [el('span', { text: SOURCES[id].label })]));
+    }
   }
 
   togglePlace() {

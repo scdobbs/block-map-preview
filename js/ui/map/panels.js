@@ -1566,13 +1566,14 @@ export function setupPanel(ctx) {
     label: 'Contours', value: s.showContours,
     onChange: (v) => ctx.setSetting({ showContours: v }),
   }));
-  node.appendChild(numberRow({
-    label: 'Contour interval', value: Number(s.contourInterval) || 0,
-    min: 0, max: 250, step: 5, unit: 'm',
-    hint: (Number(s.contourInterval) || 0) === 0
-      ? 'Zero picks an interval for the relief in view. Lines fall on multiples of the interval; every fifth is heavier and labelled.'
-      : `Lines at multiples of ${s.contourInterval} m; every fifth is heavier and labelled.`,
-    onChange: (v) => ctx.setSetting({ contourInterval: Math.max(0, Math.round(v / 5) * 5) }),
+  node.appendChild(chipsRow({
+    label: 'Contour interval',
+    value: String(Number(s.contourInterval) || 0),
+    options: [
+      { id: '0', label: 'Auto' },
+      ...[5, 10, 20, 25, 50, 100].map((v) => ({ id: String(v), label: `${v} m` })),
+    ],
+    onChange: (v) => ctx.setSetting({ contourInterval: Number(v) }),
   }));
   node.appendChild(toggleRow({
     label: 'Station numbers', value: s.labelStations,

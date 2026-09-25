@@ -1499,6 +1499,21 @@ html, body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* The base-layer menu, level with the layer button in the map's right-hand
+   column; the button sets top and right when it opens. */
+.layer-menu {
+  position: absolute; z-index: 6;
+  display: grid; gap: 2px; padding: 4px; min-width: 120px;
+  background: var(--glass-2); border: 1px solid var(--line); border-radius: 12px;
+  backdrop-filter: blur(8px); box-shadow: 0 8px 24px var(--shadow);
+}
+.layer-menu.hidden { display: none; }
+.layer-item {
+  display: block; width: 100%; text-align: left; padding: 8px 12px; border-radius: 8px;
+  background: none; border: 0; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
+}
+.layer-item.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
 /* --- drawing a line ------------------------------------------------------- */
 
 .draw-bar {
