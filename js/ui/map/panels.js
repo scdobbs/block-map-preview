@@ -72,35 +72,6 @@ function progressBlock() {
   return node;
 }
 
-/**
- * Getting the work out.
- *
- * Four buttons rather than one because they go to different places: Google
- * Earth wants KML, QGIS is happiest with GeoJSON, a marks spreadsheet wants
- * CSV, and only the backup can be read back in here.
- */
-function exportBlock(ctx, { lines = false } = {}) {
-  return el('div', {}, [
-    el('div', { class: 'sub-head', text: 'Take it with you' }),
-    el('div', { class: 'row-actions wrap' }, [
-      el('button', { class: 'btn', type: 'button', text: 'Google Earth',
-        title: 'KML — stations and lines, opens by double-clicking',
-        onclick: () => ctx.exportKML() }),
-      el('button', { class: 'btn', type: 'button', text: 'GeoJSON',
-        title: 'Stations and lines, for QGIS or ArcGIS',
-        onclick: () => ctx.exportGeoJSON() }),
-      el('button', { class: 'btn', type: 'button',
-        text: lines ? 'Lines CSV' : 'Stations CSV',
-        onclick: () => (lines ? ctx.exportLinesCSV() : ctx.exportCSV()) }),
-      el('button', { class: 'btn', type: 'button', text: 'Backup',
-        onclick: () => ctx.exportBackup() }),
-    ]),
-    el('div', { class: 'ctl-hint standalone', text: lines
-      ? 'KML and GeoJSON both carry the stations as well. The lines CSV holds each line as WKT, which is what QGIS reads when you add it as a delimited text layer.'
-      : 'KML opens in Google Earth by double-clicking it. GeoJSON opens in QGIS or ArcGIS and carries strike, dip and dip direction as fields. Backup is the whole notebook, and it is what restores it.' }),
-  ]);
-}
-
 function head(title, sub) {
   return el('div', { class: 'section-head' }, [
     el('h2', { text: title }),
@@ -442,7 +413,6 @@ export function stationsPanel(ctx) {
     node.appendChild(card);
   }
 
-  node.appendChild(exportBlock(ctx));
   return node;
 }
 
@@ -1092,7 +1062,6 @@ export function linesPanel(ctx) {
   }
 
   node.appendChild(unitsBlock(ctx, doc));
-  node.appendChild(exportBlock(ctx, { lines: true }));
   return node;
 }
 
@@ -1674,12 +1643,28 @@ export function setupPanel(ctx) {
     onclick: () => ctx.addUnit(makeUnit()),
   }));
 
-  // --- data ----------------------------------------------------------------
-  node.appendChild(el('div', { class: 'sub-head', text: 'This project’s notes' }));
+  // --- save, load, export ----------------------------------------------------
+  // One place for all of it. A project file is the whole notebook and the only
+  // file that loads back in; the exports are for other software.
+  node.appendChild(el('div', { class: 'sub-head', text: 'Save and load' }));
   node.appendChild(el('div', { class: 'row-actions wrap' }, [
-    el('button', { class: 'btn', type: 'button', text: 'Backup', onclick: () => ctx.exportBackup() }),
-    el('button', { class: 'btn', type: 'button', text: 'Restore', onclick: () => ctx.importBackup() }),
-    el('button', { class: 'btn', type: 'button', text: 'Google Earth', onclick: () => ctx.exportKML() }),
+    el('button', { class: 'btn primary', type: 'button', text: 'Save project',
+      title: 'The whole project as a file', onclick: () => ctx.exportBackup() }),
+    el('button', { class: 'btn', type: 'button', text: 'Load a project',
+      title: 'Open a saved project file in place of this one', onclick: () => ctx.importBackup() }),
+  ]));
+  node.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: 'A project file holds everything here and is the only file that loads back in.' }));
+
+  node.appendChild(el('div', { class: 'sub-head', text: 'Export' }));
+  node.appendChild(el('div', { class: 'row-actions wrap' }, [
+    el('button', { class: 'btn', type: 'button', text: 'Google Earth',
+      title: 'KML: stations and lines', onclick: () => ctx.exportKML() }),
+    el('button', { class: 'btn', type: 'button', text: 'GeoJSON',
+      title: 'Stations and lines, for QGIS or ArcGIS', onclick: () => ctx.exportGeoJSON() }),
+    el('button', { class: 'btn', type: 'button', text: 'Stations CSV', onclick: () => ctx.exportCSV() }),
+    el('button', { class: 'btn', type: 'button', text: 'Lines CSV',
+      title: 'One line per row, geometry as WKT', onclick: () => ctx.exportLinesCSV() }),
   ]));
   node.appendChild(el('button', {
     class: 'btn wide danger', type: 'button', text: 'Empty this project',

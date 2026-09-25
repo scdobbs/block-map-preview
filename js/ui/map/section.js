@@ -1896,7 +1896,7 @@ export class MapSection {
       if (!file) return;
       try {
         const doc = migrateFieldDoc(JSON.parse(await file.text()));
-        if (!confirm(`Replace the current notes with "${doc.name}"?\n\n${doc.stations.length} stations. This cannot be undone by closing the app.`)) return;
+        if (!confirm(`Load "${doc.name}" in place of the current project?\n\n${doc.stations.length} stations. The current project is replaced; save it first if you want to keep it.`)) return;
         this.store.replace(doc);
         this.map.setView(doc.view.lon, doc.view.lat, doc.view.zoom, doc.view.bearing || 0);
       } catch (err) {

@@ -1668,8 +1668,8 @@ export function viewPanel(ctx) {
     ]));
 
     root.appendChild(el('div', { class: 'row-actions wrap' }, [
-      el('button', { class: 'btn', text: 'Save to file', onclick: () => ctx.exportFile() }),
-      el('button', { class: 'btn', text: 'Open file', onclick: () => ctx.importFile() }),
+      el('button', { class: 'btn', text: 'Save block', onclick: () => ctx.exportFile() }),
+      el('button', { class: 'btn', text: 'Load a block', onclick: () => ctx.importFile() }),
       el('button', { class: 'btn', text: 'Save image', onclick: () => ctx.exportImage() }),
       el('button', {
         class: 'btn danger', text: 'Start over',

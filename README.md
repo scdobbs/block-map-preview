@@ -779,15 +779,16 @@ instead.
 
 ## Getting the work out
 
-Four buttons, on both the Stations and the Lines tab, because they go to
-different places:
+All of it is on **Setup**. **Save project** writes the whole notebook to a
+file and **Load a project** reads one back in place of the current project;
+that is the only file the app reads. Under **Export**:
 
 | | |
 |---|---|
 | **Google Earth** | KML. Stations as placemarks labelled with their attitude, lines draped over the terrain in their map colours. Double-click it. |
 | **GeoJSON** | Stations as points and lines as LineStrings in one file, for QGIS or ArcGIS. Carries strike, dip and dip direction as fields, so a layer can be symbolised on `strike` directly. |
-| **CSV** | Stations one per row. The Lines tab exports lines instead, each as a WKT `LINESTRING`, which is what QGIS reads when you add a delimited text layer — so a spreadsheet of contacts comes in as real geometry rather than as a table nobody can map. |
-| **Backup** | The whole notebook, and the only one that can be read back in here. |
+| **Stations CSV** | Stations one per row. |
+| **Lines CSV** | Each line as a WKT `LINESTRING`, which is what QGIS reads when you add a delimited text layer — so a spreadsheet of contacts comes in as real geometry rather than as a table nobody can map. |
 
 Attributes go into KML's `ExtendedData` as well as the description bubble, so
 the same file opened in QGIS arrives with real fields rather than a blob of
