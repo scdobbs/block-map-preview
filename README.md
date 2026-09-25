@@ -420,49 +420,20 @@ rather than stranded.
 
 ## Before you leave, while you still have signal
 
-Everything in this section is at the top of **Map → Areas**.
+On **Map → Areas**, draw the box:
 
-**Field ready** answers the only question anybody actually asks in a parking
-lot: can this phone be walked away from a connection right now. It counts what
-is in the cache rather than trusting a flag set when a download returned, so an
-area the browser has quietly evicted since shows up here rather than on a
-ridge. Red means turn around. Amber is worth fixing and will not stop you.
-
-If the build ships a **course pack** covering your area, install that and you
-are done. One button, a few large downloads instead of a couple of thousand
-small ones, and byte-for-byte the same map everybody else on the course has.
-It does not have to be done anywhere near the field area — a dorm or an
-airport is fine, and a week early is better than the morning of.
-
-Otherwise, on **Map → Areas**, draw the box yourself:
-
-1. **Areas → Choose an area to download.** The box starts on whatever is on
-   screen and its corners drag. The panel counts the tiles and the megabytes
-   as you size it.
-2. Pick **Topo**, **Imagery**, or both. Keep **Elevation** — it is small, and
-   it is what draws the hillshade, the contour lines and every station's
-   height.
+1. **Choose an area to download.** The box starts on whatever is on screen
+   and its corners drag. The panel counts the tiles and the megabytes as you
+   size it.
+2. Pick **Topo**, **Aerial**, or both. Keep **Elevation**: it is small, and it
+   is what draws the hillshade, the contour lines and every station's height.
+   With Aerial in the box, choose how far in to go (zoom 16, 17 or 18).
 3. **Check it.** An area is marked complete when every tile it needs has been
    counted in the cache afterwards, not when the download returns. **Check**
    re-counts at any time and **Repair** fetches whatever is missing. An area
    short of tiles says so, in the list and on the map.
-4. **Declination sets itself.** The field-ready check asks NOAA for the value
-   at the centre of your field area and applies it — at the area, not at
-   wherever the phone happens to be, which is the whole point: doing this at
-   home on wifi is hundreds of miles from the field, and the declination there
-   is not the one that corrects your readings. It needs a connection once.
-
-   It does not wait for the download. A downloaded area is used when there is
-   one, but the shipped course pack already says where the field area is, so a
-   phone opened for the first time gets the right number before a single tile
-   has been fetched.
-
-   It will **replace** a value that is already there, and say so on the line.
-   A phone carrying a declination from somewhere else is the case worth
-   catching: the check would otherwise show a green line the student believes,
-   and every strike would be out by the difference without ever looking wrong.
-   Once the number came from your own area's centre it is left alone, so this
-   costs one lookup and not one per visit.
+4. **Declination.** The first download sets it from NOAA for the area's centre
+   if nothing has been set; **Setup → Look it up** does the same on demand.
 
 ## On the outcrop
 
@@ -1747,78 +1718,6 @@ for disuse whether or not the API will admit it. Reporting "not protected" to
 somebody who has already added the app to their home screen would be both wrong
 and discouraging, so the line reads from `persisted || isInstalled()`.
 
-## The course gate
-
-Removed. Earlier builds released the app in stages for one field course, with
-a password from the instructor opening each one on an **EPS 105** tab. The
-class is over, so `js/unlock.js`, that tab and the three call sites that read
-the gate are gone, and the field-ready check and the course packs it hosted
-now sit at the top of **Map → Areas**.
-
-One thing the gate forced is kept, because it is right anyway. Declination
-lives on Map → Setup, and a readiness check that reported it unset would be
-reporting a problem and leaving the fix to the student. The check fills it in
-itself from the field area's centre, so the card can reach fully green before
-Setup has been opened. `_ensureDeclination` in `js/ui/map/section.js`.
-
-It does not wait for a downloaded area either. `_declinationPoint` takes one
-when the notebook has it and otherwise falls back to the shipped pack index,
-which is precached and carries every pack's bounds — so the very first thing a
-new phone does can be right. Requiring the 22 MB download first meant a student
-pressing **Check again** on a new phone and watching nothing happen, which is
-what this originally did.
-
-It overwrites, which a settings field normally must not, and the reason is the
-same one: with the control locked away, a wrong number is not something the
-student can correct. A phone already carrying 12.7° E for somewhere else is
-worse than one carrying nothing, because the check passes it. So the value is
-brought in line with the area and the line says what changed — the one case
-where a passing row still explains itself.
-
-The gate is deliberately not wired into the record. Nothing a student collects
-is tagged with the stage that was open when they collected it, and none of the
-geology behaves differently. Locking is a matter of which controls are on
-screen, and that is all it is.
-
-## Course packs
-
-A pack is a field area the build ships with: the same tiles, fetched once by
-whoever set up the course, stored in this repository and served from the app's
-own origin.
-
-The problem it solves is logistics rather than code. Downloading an area the
-ordinary way is a couple of thousand requests to a USGS server, from a phone,
-on whatever connection is available — and the connection near a good field
-area is usually none. The alternative is driving everyone somewhere with
-service and having twenty students download at once, which is slow when it
-works and a lost morning when it does not.
-
-Two decisions in `js/field/packs.js` are worth knowing about:
-
-**Packed tiles land under the canonical source URLs.** Once installed, nothing
-downstream can tell a packed tile from a hand-downloaded one — the same
-`verifyArea` counts it, the same **Repair** fixes it, the same reader draws
-it. A second lookup path for packed tiles would have meant a second set of
-bugs in the one part of the app that has to work on a ridge.
-
-**Tiles are concatenated into a few large chunks, not left as files.** Two
-thousand small requests is slow even on good wifi and hostile to a bad one.
-The chunk is also the resume unit: an install that was interrupted, or an area
-half-lost to eviction, re-fetches only the chunks that are actually short. An
-area missing three quarters of its tiles costs three quarters of a download,
-not a whole one.
-
-An installed pack becomes an ordinary entry in `doc.areas`, tagged with
-`packId` so re-installing repairs the area that is there instead of stacking
-up a second one.
-
-The pack payloads are the one same-origin thing `sw.js` deliberately does
-**not** cache. They are tens of megabytes and are being fetched precisely in
-order to be unpacked into the tile cache; storing them again under the shell
-would double the cost and then throw the copy away on the next version bump.
-`packs/index.json` is small, changes only when a pack is added, and has to be
-readable with no signal — so that one stays precached.
-
 ## Layout
 
 ```
@@ -1826,8 +1725,6 @@ index.html            shell
 app.webmanifest       install metadata
 sw.js                 offline cache  (bump CACHE when you change files)
 dev-server.py         no-cache static server for development
-packs/                course packs — index.json, plus one directory per pack
-tools/build-pack.py   builds a course pack from the live tile sources
 css/app.css
 vendor/three.module.js
 js/
@@ -1855,8 +1752,6 @@ js/
     model.js          stations, map units, cached areas, GeoJSON and CSV
     store.js          field notes in IndexedDB, with undo
     tiles.js          tile sources, the offline cache, download and verify
-    packs.js          course packs: a shipped field area, unpacked into the cache
-    ready.js          the field-ready check — can this phone leave signal now
     dem.js            elevation decode, hillshade, contour tracing
     sensors.js        GPS watch and the compass clinometer
     declination.js    magnetic to true north
@@ -2348,43 +2243,6 @@ Keep `field-tiles` unless you want to download your test area again. It is the
 one cache that is expensive to rebuild, and it is deliberately not versioned.
 The worker re-registers on the next load, so this is a per-session ritual, not
 a one-off.
-
-## Building a course pack
-
-Run once, from anywhere with a decent connection, and commit what it writes:
-
-```sh
-tools/build-pack.py --id poleta --name "Poleta folds" \
-    --detail "The mapping area for the whole course." \
-    --center 37.36,-118.06 --size 8 \
-    --sources topo,aerial,dem --min-zoom 10
-```
-
-`--bbox=W,S,E,N` takes explicit bounds instead of `--center`/`--size` — write
-it with the equals sign, because a western longitude starts with a minus and
-argparse reads a bare one as a flag.
-`--chunk-mb` tunes the resume granularity; smaller chunks recover better on a
-bad connection and cost more requests.
-
-It writes `packs/<id>/pack.json` and `packs/<id>/tiles-NNN.bin`, and adds the
-pack to `packs/index.json`. Re-running the same `--id` replaces that entry.
-Tiles the source does not publish are recorded as holes rather than retried
-forever, exactly as a live download records them.
-
-The source table in the builder **must** agree with `SOURCES` in
-`js/field/tiles.js` — the app rebuilds those URLs itself when it verifies an
-installed area, so a mismatch shows up as a pack that installs and then
-reports every tile missing. Note that the USGS services are addressed `z/y/x`
-and the terrain tiles `z/x/y`.
-
-A realistic area is smaller than it sounds. At Poleta's latitude, with topo,
-aerial and elevation from zoom 10:
-
-| Area | Tiles | Size |
-|---|---|---|
-| 6 × 6 km | 894 | 32 MB |
-| 10 × 10 km | 2,118 | 75 MB |
-| 15 × 15 km | 4,544 | 159 MB |
 
 ## Testing without a browser
 

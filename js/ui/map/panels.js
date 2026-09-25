@@ -19,7 +19,6 @@ import { contactPairs } from '../../strat/model.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
 import { SOURCES, BASE_SOURCES, estimateArea, storageReport } from '../../field/tiles.js';
-import { readySummary, isInstalled } from '../../field/ready.js';
 import { formatDistance, formatBytes, formatLonLat, formatDDM, distance,
   bboxSize } from '../../field/geo.js';
 import { APP_VERSION } from '../../version.js';
@@ -1211,187 +1210,16 @@ export function linesPanel(ctx) {
 // Areas
 // ---------------------------------------------------------------------------
 
-/**
- * The question that only gets asked in a parking lot.
- *
- * Everything else in this tab reports on one area. This reports on whether the
- * phone can be walked away from signal at all, which is a different question
- * and the only one that matters at the moment it is asked. It goes at the top
- * because by the time somebody scrolls past it they have already decided to
- * leave.
- *
- * The verdict is deliberately blunt. A student reading this is standing up,
- * holding a pack, with somebody waiting — a paragraph is not going to be read,
- * and a green tick that means "probably" is worse than no tick at all.
- */
-export function readyBlock(ctx) {
-  ctx.ensureReadiness();
-  const report = ctx.readiness();
-  const busy = ctx.readyChecking();
-
-  const wrap = el('div', { class: 'ready-card' });
-
-  const verdict = busy ? 'checking…'
-    : !report ? 'not checked'
-    : report.state === 'good' ? 'ready'
-    : report.state === 'warn' ? 'usable'
-    : 'not ready';
-  const klass = busy ? 'dim'
-    : !report ? 'dim'
-    : report.state === 'good' ? 'good'
-    : report.state === 'warn' ? 'warn' : 'bad';
-
-  wrap.appendChild(el('div', { class: 'ready-head' }, [
-    el('span', { class: 'ready-title', text: 'Field ready' }),
-    el('span', { class: `pill ${klass}`, text: verdict }),
-  ]));
-
-  wrap.appendChild(el('p', { class: 'ready-summary',
-    text: busy ? 'Counting what is actually in the cache…' : readySummary(report) }));
-
-  if (report && report.error) {
-    wrap.appendChild(el('p', { class: 'ctl-hint warn', text: report.error }));
+/** Opened from the home screen, where the browser keeps storage for good. */
+function isInstalled() {
+  try {
+    if (window.navigator.standalone === true) return true;       // iOS
+    return window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(display-mode: fullscreen)').matches
+      || window.matchMedia('(display-mode: minimal-ui)').matches;
+  } catch {
+    return false;
   }
-
-  for (const c of (report?.checks || [])) {
-    const row = el('div', { class: 'ready-row' }, [
-      el('div', { class: 'ready-row-head' }, [
-        el('span', { class: 'ready-label', text: c.label }),
-        el('span', { class: `stat-value ${c.state}`, text: c.value }),
-      ]),
-    ]);
-    // Only the failures explain themselves. A list where every line carries a
-    // paragraph is a list nobody reads the important line of. A note is the
-    // exception: it is set when the check changed something, and a change the
-    // student did not make has to be visible even on a line that passed.
-    if (c.state !== 'good') {
-      row.appendChild(el('p', { class: 'ready-detail', text: c.detail }));
-    } else if (c.note) {
-      row.appendChild(el('p', { class: 'ready-detail changed', text: c.note }));
-    }
-    wrap.appendChild(row);
-  }
-
-  wrap.appendChild(el('div', { class: 'row-actions' }, [
-    el('button', {
-      class: 'btn small', type: 'button', text: busy ? 'Checking…' : 'Check again',
-      disabled: busy, onclick: () => ctx.checkReadiness(),
-    }),
-  ]));
-
-  return wrap;
-}
-
-/**
- * Areas this build ships with.
- *
- * Above the hand-drawn download on purpose. For a student on a course the pack
- * is the right answer every time — it is the same area everybody else has, it
- * arrives in four requests instead of two thousand, and it does not require
- * knowing which zoom levels matter. Drawing your own box is the fallback, not
- * the default, and the order of the panel should say so.
- */
-export function packsBlock(ctx) {
-  ctx.ensurePacks();
-  const packs = ctx.packs();
-  if (!packs || !packs.length) return null;
-
-  const online = navigator.onLine !== false;
-  const prog = ctx.packProgress();
-  const wrap = el('div', {});
-  wrap.appendChild(el('div', { class: 'sub-head', text: 'Map packs' }));
-
-  const bars = new Map();
-
-  for (const p of packs) {
-    const st = ctx.packStateOf(p.id);
-    const busy = prog && prog.packId === p.id;
-
-    let state, klass;
-    if (busy) { state = 'installing…'; klass = 'dim'; }
-    else if (!st) { state = 'checking…'; klass = 'dim'; }
-    else if (st.installed) { state = 'installed'; klass = 'good'; }
-    else if (st.partial) { state = `${st.total - st.have} tiles short`; klass = 'warn'; }
-    else { state = 'not installed'; klass = 'dim'; }
-
-    const [w, h] = p.area?.bbox ? bboxSize(p.area.bbox) : [0, 0];
-
-    const card = el('div', { class: 'card area-card' }, [
-      el('div', { class: 'card-main static' }, [
-        el('span', { class: 'card-text' }, [
-          el('span', { class: 'card-title', text: p.name || p.id }),
-          el('span', { class: 'card-sub', text: [
-            w ? `${formatDistance(w)} × ${formatDistance(h)}` : null,
-            `${p.tiles} tiles`,
-            formatBytes(p.bytes || 0),
-          ].filter(Boolean).join(' · ') }),
-        ]),
-        el('span', { class: `pill ${klass}`, text: state }),
-      ]),
-    ]);
-
-    if (p.detail) {
-      card.appendChild(el('div', { class: 'ctl-hint card-note', text: p.detail }));
-    }
-
-    if (busy) {
-      const bar = packProgressBlock();
-      bar.set(prog);
-      bar.style.padding = '0 12px 12px';
-      bars.set(p.id, bar);
-      card.appendChild(bar);
-      card.appendChild(el('div', { class: 'row-actions wrap' }, [
-        el('button', { class: 'btn small danger', type: 'button', text: 'Stop',
-          onclick: () => ctx.cancelPackInstall() }),
-      ]));
-    } else {
-      card.appendChild(el('div', { class: 'row-actions wrap' }, [
-        el('button', {
-          class: `btn small ${st && st.installed ? '' : 'primary'}`, type: 'button',
-          text: st && st.installed ? 'Re-check' : (st && st.partial ? 'Finish installing' : 'Install'),
-          // An installed pack can be re-counted with no connection; fetching
-          // what is missing cannot.
-          disabled: !online && !(st && st.installed),
-          title: st && st.installed
-            ? 'Count these tiles against the cache again'
-            : 'Copy this area into the offline map',
-          onclick: () => ctx.installPack(p.id),
-        }),
-        p.area?.bbox ? el('button', {
-          class: 'btn small', type: 'button', text: 'Go to',
-          onclick: () => ctx.goToPackArea(p.id),
-        }) : null,
-      ]));
-    }
-
-    wrap.appendChild(card);
-  }
-
-  wrap.appendChild(el('div', { class: 'ctl-hint standalone',
-    text: online
-      ? 'A pack is a prepared map area. Install it anywhere with a connection.'
-      : 'Installing a pack needs a connection.' }));
-
-  wrap.refreshBars = (p) => bars.get(p.packId)?.set(p);
-  return wrap;
-}
-
-/** A pack install in flight. Bytes, because that is what the wait is made of. */
-function packProgressBlock() {
-  const fill = el('span');
-  const bar = el('div', { class: 'progress-bar' }, [fill]);
-  const text = el('div', { class: 'progress-text' });
-  const node = el('div', { class: 'progress' }, [bar, text]);
-  node.set = (p) => {
-    const frac = p.totalBytes ? p.bytes / p.totalBytes : (p.total ? p.done / p.total : 0);
-    fill.style.width = `${Math.round(Math.min(1, frac) * 100)}%`;
-    text.textContent = [
-      p.totalBytes ? `${formatBytes(p.bytes)} of ${formatBytes(p.totalBytes)}` : formatBytes(p.bytes),
-      `${p.done} of ${p.total} tiles`,
-      p.failed ? `${p.failed} failed` : null,
-    ].filter(Boolean).join('  ·  ');
-  };
-  return node;
 }
 
 export function areasPanel(ctx) {
@@ -1400,12 +1228,6 @@ export function areasPanel(ctx) {
 
   node.appendChild(head('Offline areas',
     'Download a map before you leave. This is the only part that needs a connection.'));
-
-  // Whether the phone can leave signal at all, then the shipped packs, then
-  // the hand-drawn areas: the order a student actually needs them in.
-  node.appendChild(readyBlock(ctx));
-  const packs = packsBlock(ctx);
-  if (packs) node.appendChild(packs);
 
   const online = navigator.onLine !== false;
   let sizeStat = null, tilesStat = null, bytesStat = null;
@@ -1585,8 +1407,6 @@ export function areasPanel(ctx) {
       if (newProgress && p.areaId === ctx.draftArea()?.id) newProgress.set(p);
       areaProgress.get(p.areaId)?.set(p);
     }
-    const pp = ctx.packProgress();
-    if (pp) packs?.refreshBars?.(pp);
     if (!sizeStat) return;
     const box = ctx.selection();
     if (!box) return;

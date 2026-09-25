@@ -22,8 +22,6 @@ import { Clinometer, GeoWatch, fixAge } from '../../field/sensors.js';
 import { fetchDeclination as lookupDeclination } from '../../field/declination.js';
 import { downloadArea, verifyArea, deleteArea, requestPersistence,
   SOURCES, BASE_SOURCES } from '../../field/tiles.js';
-import { fieldReady } from '../../field/ready.js';
-import { listPacks, packState, installPack } from '../../field/packs.js';
 import { elevationAt } from '../../field/dem.js';
 import { distance, formatDistance, bboxCenter } from '../../field/geo.js';
 import { cutBlock, surveyExtent } from '../../field/cutblock.js';
@@ -47,10 +45,7 @@ export class MapSection {
     this.host = host;            // the App, for the shared sheet
     this.activeTab = 'measure';
     this.ready = false;
-    // Resolves when loadWorkspace has landed. The field-ready check runs from
-    // a Block tab that can be opened before the notes have finished loading,
-    // and a check that counted a default empty document would report "no
-    // offline map" to somebody who has one.
+    // Resolves when loadWorkspace has landed.
     this.opened = new Promise((resolve) => { this._markOpened = resolve; });
     this.selectedStationId = null;
     this.selectedLineId = null;
@@ -81,17 +76,6 @@ export class MapSection {
     this._verifying = null;
     this._download = null;
     this._draftArea = null;
-    // The field-ready check and the course packs. Both answer questions asked
-    // at camp rather than in the field, and both are held here rather than
-    // recomputed per panel build: counting a thousand tiles against the cache
-    // is cheap once and silly on every keystroke.
-    this._ready = null;
-    this._readyChecking = false;
-    this._readyTried = false;
-    this._packs = null;
-    this._packsLoading = false;
-    this._packStates = new Map();
-    this._packInstall = null;
     this._elev = null;
     this._elevAt = null;
     this._started = false;
@@ -1626,7 +1610,6 @@ export class MapSection {
       }
     }, { structural: true });
 
-    this._invalidateReadiness();
 
     if (quotaHit) {
       alert('The browser ran out of storage part-way through.\n\nDelete an area you have finished with, then use Repair on this one.');
@@ -1650,7 +1633,6 @@ export class MapSection {
       const a = doc.areas.find((x) => x.id === id);
       if (a) a.check = check;
     }, { structural: true });
-    this._invalidateReadiness();
   }
 
   async repair(id) {
@@ -1680,272 +1662,11 @@ export class MapSection {
     await deleteArea(area, doc.areas);
     this.store.edit((d) => { d.areas = d.areas.filter((a) => a.id !== id); }, { structural: true });
     this.map.purge();
-    this._invalidateReadiness();
-    // Deleting the area took the pack's tiles with it, so the pack's card has
-    // to stop saying "installed". Recounted rather than cleared: a cleared
-    // entry reads as "checking…" and never resolves, because the packs are
-    // only enumerated once per open.
-    if (area.packId) {
-      const pack = (this._packs || []).find((p) => p.id === area.packId);
-      if (pack) {
-        const st = await packState(pack).catch(() => null);
-        if (st) this._packStates.set(pack.id, st);
-        this.rebuild();
-      }
-    }
   }
 
   goToArea(id) {
     const area = this.store.doc.areas.find((a) => a.id === id);
     if (area) this.map.fitBounds(area.bbox);
-  }
-
-  // -------------------------------------------------------------------------
-  // Field ready
-  // -------------------------------------------------------------------------
-
-  readiness() { return this._ready; }
-  readyChecking() { return this._readyChecking; }
-
-  /**
-   * Throw the report away because something it counted has changed.
-   *
-   * Cheaper than re-running here and more honest than leaving it: the panel
-   * re-checks the next time it is built, and until then there is no verdict on
-   * screen rather than last minute's verdict wearing this minute's colour.
-   */
-  _invalidateReadiness() {
-    this._ready = null;
-    this._readyTried = false;
-  }
-
-  /**
-   * Run the check once on its own, so opening the tab answers the question
-   * without anybody having to ask it.
-   *
-   * Once, not on every build: the panel rebuilds on every keystroke in the
-   * area-name field, and a check that re-counted the cache each time would
-   * make typing stutter. The button re-runs it on demand, which is the right
-   * moment — after a repair, or after deciding to trust it.
-   */
-  ensureReadiness() {
-    if (this._ready || this._readyChecking || this._readyTried) return;
-    this._readyTried = true;
-    this.checkReadiness();
-  }
-
-  /**
-   * Bring the declination in line with the field area.
-   *
-   * The readiness check has to be able to do this itself, because the control
-   * that would otherwise do it lives on Map -> Setup, behind the first stage:
-   * without it a student on day one is told to fix a number they cannot reach.
-   *
-   * The lookup uses the centre of the downloaded area, NOT the phone's own
-   * position. A student doing this at home on wifi is hundreds of miles from
-   * the field area, and the declination there is not the declination that will
-   * correct their readings. The area is where the readings will be taken, so
-   * the area is what gets asked about.
-   *
-   * It replaces a value that is already set, which is the opposite of what a
-   * settings field normally does and is deliberate. A phone carrying 12.7° E
-   * from somewhere else is the dangerous case, not the empty one: the check
-   * would report a green line and the student would believe it, and every
-   * strike they took would be out by the difference without ever looking
-   * wrong. The correct number for where they are going beats a number they
-   * chose for somewhere else.
-   *
-   * What it will not do is ask NOAA again for an answer it already has. A
-   * value that came from this same area's centre is left alone, so the common
-   * case costs nothing and the service is not asked the same question every
-   * time the tab is opened.
-   */
-  /**
-   * Where to ask about, which is not the same as what has been downloaded.
-   *
-   * An installed area is the best answer, but on a phone opened for the first
-   * time there is not one yet — and that is exactly the phone that needs this
-   * most. The shipped pack index still says where the field area is, and it is
-   * precached with the app, so the declination can be right before a single
-   * tile has been fetched. Waiting for the download would have meant a student
-   * pressing Check again on a new phone and watching nothing happen.
-   */
-  async _declinationPoint() {
-    const doc = this.store.doc;
-    // A downloaded area first — and the course pack's before anybody's own
-    // box, which may be drawn around somewhere else entirely.
-    const area = doc.areas.find((a) => a.packId) || doc.areas[0];
-    if (area?.bbox) return { bbox: area.bbox, name: area.name || 'your field area' };
-    if (!this._packs) {
-      try { this._packs = await listPacks(); } catch { this._packs = []; }
-    }
-    const pack = (this._packs || []).find((p) => p.area?.bbox);
-    return pack ? { bbox: pack.area.bbox, name: pack.area.name || pack.name } : null;
-  }
-
-  async _ensureDeclination(point) {
-    const doc = this.store.doc;
-    if (navigator.onLine === false) return false;
-    if (!point) return false;
-    const [lon, lat] = bboxCenter(point.bbox);
-
-    const s = doc.settings;
-    const info = s.declinationInfo;
-    const alreadyForThisArea = s.declinationSet
-      && s.declinationSource === 'noaa'
-      && info
-      && Math.abs((info.lon ?? 1e9) - lon) < 1e-6
-      && Math.abs((info.lat ?? 1e9) - lat) < 1e-6;
-    if (alreadyForThisArea) return false;
-
-    let r = null;
-    try { r = await lookupDeclination(lon, lat); } catch { return false; }
-    if (!r) return false;
-    const next = Math.round(r.declination * 10) / 10;
-    const was = s.declinationSet ? s.declination : null;
-    this.store.edit((d) => {
-      d.settings.declination = next;
-      d.settings.declinationSet = true;
-      d.settings.declinationSource = 'noaa';
-      d.settings.declinationInfo = {
-        ...r, lon, lat, area: point.name || null,
-        // Kept so the check can say a number was changed rather than set.
-        replaced: was != null && Math.abs(was - next) >= 0.05 ? was : null,
-      };
-    }, { structural: true });
-    return true;
-  }
-
-  async checkReadiness() {
-    if (this._readyChecking) return;
-    this._readyChecking = true;
-    this.rebuild();
-    try {
-      // Count the real notebook, not the empty one the section starts on.
-      await this.opened;
-      // Ask for persistent storage here as well as on activate(). The map is
-      // where that used to happen, and the map is behind the first stage — so
-      // a student on day one, who is the one being asked to get the phone
-      // ready, was the one who never got asked for it. This is the right
-      // moment anyway: they are deliberately on the readiness screen, not
-      // being interrupted on first launch.
-      await requestPersistence();
-      const point = await this._declinationPoint();
-      await this._ensureDeclination(point);
-      this._ready = await fieldReady(this.store.doc, { declPoint: point });
-    } catch (err) {
-      console.warn('field-ready check failed', err);
-      this._ready = { checks: [], state: 'bad', ready: false, at: Date.now(),
-        error: err?.message || 'the check itself failed' };
-    }
-    this._readyChecking = false;
-    this.rebuild();
-  }
-
-  // -------------------------------------------------------------------------
-  // Course packs
-  // -------------------------------------------------------------------------
-
-  packs() { return this._packs; }
-  packStateOf(id) { return this._packStates.get(id) || null; }
-
-  packProgress() {
-    if (!this._packInstall) return null;
-    return { ...this._packInstall.progress, packId: this._packInstall.id };
-  }
-
-  /** Read the shipped index, then count each pack against the cache. */
-  async ensurePacks() {
-    if (this._packs || this._packsLoading) return;
-    this._packsLoading = true;
-    let list = [];
-    try { list = await listPacks(); } catch { /* an empty list is the answer */ }
-    this._packs = list;
-    this._packsLoading = false;
-    if (!list.length) { this.rebuild(); return; }
-    this.rebuild();
-    // Counted in one pass afterwards rather than per pack, so the list appears
-    // immediately and fills in its states rather than waiting on all of them.
-    const states = await Promise.all(list.map((p) => packState(p).catch(() => null)));
-    list.forEach((p, i) => { if (states[i]) this._packStates.set(p.id, states[i]); });
-    this.rebuild();
-  }
-
-  cancelPackInstall() { this._packInstall?.ctrl.abort(); }
-
-  /** Show where a pack covers, before deciding whether it is the right one. */
-  goToPackArea(id) {
-    const pack = (this._packs || []).find((p) => p.id === id);
-    if (pack?.area?.bbox) this.map.fitBounds(pack.area.bbox);
-  }
-
-  /**
-   * Install a shipped area.
-   *
-   * Ends in the same place a hand-made download ends — an entry in doc.areas
-   * with a real verify behind it — because everything downstream is written
-   * against that and should not learn a second shape. The area is matched by
-   * packId rather than name so re-installing repairs the one that is there
-   * instead of stacking up duplicates.
-   */
-  async installPack(id) {
-    const pack = (this._packs || []).find((p) => p.id === id);
-    if (!pack) return;
-    const ctrl = new AbortController();
-    this._packInstall = {
-      id, ctrl,
-      progress: { done: 0, total: pack.tiles || 0, bytes: 0, totalBytes: pack.bytes || 0, failed: 0 },
-    };
-    this.rebuild();
-
-    let result = null;
-    let quotaHit = false;
-    try {
-      result = await installPack(pack, {
-        signal: ctrl.signal,
-        onProgress: (p) => {
-          if (!this._packInstall) return;
-          this._packInstall.progress = p;
-          // Whichever panel is showing — the pack card lives on the block's
-          // course tab now, and the map section may not even be on screen.
-          this.host.touchPanel();
-        },
-      });
-    } catch (err) {
-      quotaHit = err && err.name === 'QuotaExceededError';
-    }
-    this._packInstall = null;
-
-    if (result && !result.aborted) {
-      const existing = this.store.doc.areas.find((a) => a.packId === pack.id);
-      const area = existing
-        ? { ...existing }
-        : makeArea({ ...pack.area, packId: pack.id, name: pack.area?.name || pack.name });
-      const check = await verifyArea(area);
-      area.check = check;
-      area.savedAt = new Date().toISOString();
-      area.bytes = pack.bytes || result.bytes;
-      this.store.edit((doc) => {
-        const at = doc.areas.findIndex((a) => a.packId === pack.id);
-        if (at >= 0) doc.areas[at] = area;
-        else doc.areas.push(area);
-      }, { structural: true });
-      this.map.purge();
-    }
-
-    // Recount both, so the panel tells the truth about what just happened
-    // rather than about what was asked for. checkReadiness rather than
-    // ensureReadiness: ensure is the once-per-open guard and would see the
-    // stale report sitting there and decline to replace it, which is exactly
-    // the report that has just stopped being true.
-    const st = await packState(pack).catch(() => null);
-    if (st) this._packStates.set(pack.id, st);
-    this.rebuild();
-    await this.checkReadiness();
-
-    if (quotaHit) {
-      alert('The browser ran out of storage part-way through.\n\nDelete an area you have finished with, then install this pack again — it picks up where it stopped.');
-    }
   }
 
   // -------------------------------------------------------------------------
@@ -2146,19 +1867,6 @@ export class MapSection {
       repair: (id) => this.repair(id),
       deleteArea: (id) => this.deleteArea(id),
       goToArea: (id) => this.goToArea(id),
-
-      readiness: () => this.readiness(),
-      readyChecking: () => this.readyChecking(),
-      ensureReadiness: () => this.ensureReadiness(),
-      checkReadiness: () => this.checkReadiness(),
-
-      packs: () => this.packs(),
-      ensurePacks: () => this.ensurePacks(),
-      packStateOf: (id) => this.packStateOf(id),
-      packProgress: () => this.packProgress(),
-      installPack: (id) => this.installPack(id),
-      cancelPackInstall: () => this.cancelPackInstall(),
-      goToPackArea: (id) => this.goToPackArea(id),
 
       setSetting: (p) => this.setSetting(p),
       setDocName: (n) => this.setDocName(n),
