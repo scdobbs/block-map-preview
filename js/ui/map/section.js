@@ -1142,14 +1142,6 @@ export class MapSection {
     if (st) this.map.setView(st.lon, st.lat, Math.max(this.map.zoom, 16));
   }
 
-  moveStationToFix(id) {
-    const fix = this.geo.state.fix;
-    if (!fix) return;
-    this.editStation(id, (s) => {
-      s.lon = fix.lon; s.lat = fix.lat; s.gpsAccuracy = fix.accuracy;
-    });
-  }
-
   // -------------------------------------------------------------------------
   // Elevation under the fix
   // -------------------------------------------------------------------------
@@ -1920,7 +1912,6 @@ export class MapSection {
       editStation: (id, fn, c) => this.editStation(id, fn, c),
       deleteStation: (id) => this.deleteStation(id),
       goToStation: (id) => this.goToStation(id),
-      moveStationToFix: (id) => this.moveStationToFix(id),
 
       selectLine: (id) => this.selectLine(id),
       selectedLineId: () => this.selectedLineId,

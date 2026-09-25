@@ -581,9 +581,8 @@ function stationEditor(ctx, st) {
   box.appendChild(el('div', { class: 'coord-line', text: formatLonLat(st.lon, st.lat) }));
 
   box.appendChild(el('div', { class: 'row-actions' }, [
-    el('button', { class: 'btn small', type: 'button', text: 'Center map', onclick: () => ctx.goToStation(st.id) }),
-    el('button', { class: 'btn small', type: 'button', text: 'Move here', onclick: () => ctx.moveStationToFix(st.id),
-      title: 'Put this station at your current position' }),
+    el('button', { class: 'btn small', type: 'button', text: 'Go to',
+      title: 'Centre the map on this station', onclick: () => ctx.goToStation(st.id) }),
     hasAttitude(st) ? el('button', {
       class: 'btn small', type: 'button', text: 'Clear reading',
       title: 'Keep the station, drop the attitude',
