@@ -171,6 +171,10 @@ export class App {
 
     this.undoBtn = iconBtn('↶', 'Undo', () => this.store.undo());
     this.redoBtn = iconBtn('↷', 'Redo', () => this.store.redo());
+    // Start again, from the block itself rather than from the bottom of the
+    // View tab. Asks first: it throws away the whole block.
+    this.clearBtn = iconBtn('×', 'Clear the block and start fresh', () => this.clearBlock());
+    this.clearBtn.classList.add('clear-btn');
 
     // Same control the map half has, for the same reason: on a phone the block
     // and the panel do not both fit, and turning a block is the one thing here
@@ -214,7 +218,7 @@ export class App {
     // drifting off to hover over the net instead.
     this.blockPane = el('div', { class: 'block-pane' }, [
       this.canvas,
-      el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn, this.mapChip, this.timeChip]),
+      el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn, this.clearBtn, this.mapChip, this.timeChip]),
       el('div', { class: 'hud hud-right' }, [this.fullBtn, this.compass.node]),
       this.scaleChip,
       this.markerChip,
@@ -661,6 +665,17 @@ export class App {
     const view = this.viewDoc();
     const ev = view.events.find((e) => e.id === this.selectedEventId);
     this.scene.showHelper(view, ev || null);
+  }
+
+  /** Throw the block away and start from the default one. Undoable. */
+  clearBlock() {
+    if (!confirm('Clear this block and start fresh?')) return;
+    this.stopPlay();
+    this.selectedEventId = null;
+    this.selectedMarkerId = null;
+    if (this.markerMode) this.setMarkerMode(null);
+    this.store.replace(defaultDocument());
+    this.scene.frame(this.store.doc);
   }
 
   applyPreset(preset) {
