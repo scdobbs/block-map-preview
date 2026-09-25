@@ -40,6 +40,9 @@ export class OrbitControls {
     this._pointers = new Map();
     this._prevPinch = 0;
     this._prevMid = null;
+    this._prevAngle = null;
+    this._midStart = null;
+    this._midFree = false;
     this._mode = null;
     this._downAt = 0;
     this._downPos = null;
@@ -79,7 +82,9 @@ export class OrbitControls {
   }
 
   _onDown(e) {
-    this.dom.setPointerCapture(e.pointerId);
+    // Capture can be refused for a pointer the browser has already let go of;
+    // the gesture still has to be tracked.
+    try { this.dom.setPointerCapture(e.pointerId); } catch { /* fine */ }
     this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (this._pointers.size === 1) {
       this._mode = (e.button === 2 || e.shiftKey) ? 'pan' : 'orbit';
@@ -98,6 +103,10 @@ export class OrbitControls {
       const [a, b] = [...this._pointers.values()];
       this._prevPinch = Math.hypot(a.x - b.x, a.y - b.y);
       this._prevMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      this._prevAngle = Math.atan2(b.y - a.y, b.x - a.x);
+      this._midStart = this._prevMid;
+      this._midFree = false;
+      this._azV = this._elV = 0;
     }
   }
 
@@ -128,15 +137,35 @@ export class OrbitControls {
       const [a, b] = [...this._pointers.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
       if (this._prevPinch > 0) {
         this.distance = clamp(
           this.distance * (this._prevPinch / Math.max(1, dist)),
           this.minDistance, this.maxDistance,
         );
       }
-      if (this._prevMid) this._pan(mid.x - this._prevMid.x, mid.y - this._prevMid.y);
+      // Twisting the two fingers turns the block about its own centre. It is
+      // what a hand does to a model, and it is the gesture that used to drift:
+      // read as a pinch, the two fingers' midpoint wanders a little and every
+      // wander was a pan. A map does not turn, so in map view a twist is
+      // ignored rather than tilting the sheet.
+      if (!this.mapView && this._prevAngle != null) {
+        let d = angle - this._prevAngle;
+        if (d > Math.PI) d -= 2 * Math.PI;
+        if (d < -Math.PI) d += 2 * Math.PI;
+        this.azimuth -= d / DEG;
+      }
+      // Panning with two fingers is deliberate only once the midpoint has
+      // clearly moved. Until then a pinch is a pinch and a twist is a twist,
+      // and neither slides the block off the screen.
+      if (this._midStart && !this._midFree
+          && Math.hypot(mid.x - this._midStart.x, mid.y - this._midStart.y) > 14) {
+        this._midFree = true;
+      }
+      if (this._prevMid && this._midFree) this._pan(mid.x - this._prevMid.x, mid.y - this._prevMid.y);
       this._prevPinch = dist;
       this._prevMid = mid;
+      this._prevAngle = angle;
       this.changed = true;
     }
   }
@@ -155,6 +184,8 @@ export class OrbitControls {
       this._mode = 'orbit';
       this._prevPinch = 0;
       this._prevMid = null;
+      this._prevAngle = null;
+      this._midStart = null;
     }
   }
 

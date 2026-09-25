@@ -35,6 +35,10 @@ export const expandIcon = () =>
   hudIcon(['M4 9 V4 H9', 'M15 4 H20 V9', 'M20 15 V20 H15', 'M9 20 H4 V15']);
 export const collapseIcon = () =>
   hudIcon(['M9 4 V9 H4', 'M20 9 H15 V4', 'M15 20 V15 H20', 'M4 15 H9 V20']);
+/** A ring with four ticks outside it: put the thing back in the middle. */
+export const recenterIcon = () =>
+  hudIcon(['M12 2.5 V6 M12 18 V21.5 M2.5 12 H6 M18 12 H21.5',
+    'M12 6 A6 6 0 1 0 12 18 A6 6 0 1 0 12 6', 'M12 10.5 A1.5 1.5 0 1 0 12 13.5 A1.5 1.5 0 1 0 12 10.5']);
 
 const path = (d, cls = 'evicon-line') => svg('path', { d, class: cls });
 

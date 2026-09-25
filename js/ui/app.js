@@ -2,7 +2,7 @@
 
 import { el, svg, clear } from './widgets.js';
 import { swatchEl } from './swatch.js';
-import { tabIcon, expandIcon, collapseIcon } from './icons.js';
+import { tabIcon, expandIcon, collapseIcon, recenterIcon } from './icons.js';
 import { layersPanel, historyPanel, terrainPanel, viewPanel, fieldPanel } from './panels.js';
 import { stereonet } from './stereonet.js';
 import { groundMapPane, GroundMap } from './groundMap.js';
@@ -175,6 +175,11 @@ export class App {
     // View tab. Asks first: it throws away the whole block.
     this.clearBtn = iconBtn('×', 'Clear the block and start fresh', () => this.clearBlock());
     this.clearBtn.classList.add('clear-btn');
+    // Bring the block back to the middle of the screen at a size that fits.
+    // Panning is easy to do by accident with two fingers, and a block that
+    // has slid half off the screen needs a way back that is on the screen.
+    this.recenterBtn = iconBtn(recenterIcon(), 'Recenter the block',
+      () => this.scene.frame(this.store.doc));
 
     // Same control the map half has, for the same reason: on a phone the block
     // and the panel do not both fit, and turning a block is the one thing here
@@ -219,7 +224,7 @@ export class App {
     this.blockPane = el('div', { class: 'block-pane' }, [
       this.canvas,
       el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn, this.clearBtn, this.mapChip, this.timeChip]),
-      el('div', { class: 'hud hud-right' }, [this.fullBtn, this.compass.node]),
+      el('div', { class: 'hud hud-right' }, [this.recenterBtn, this.fullBtn, this.compass.node]),
       this.scaleChip,
       this.markerChip,
       this.modeBanner,

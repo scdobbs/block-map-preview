@@ -96,8 +96,9 @@ html, body {
 
    The threshold is the width at which they genuinely stop fitting, measured
    rather than guessed: the switch is 198px centred, and the widest corner
-   cluster is the block's 108px, which collide below 434. */
-@media (max-width: 460px) {
+   cluster is the block's right-hand one at 160px (recenter, full screen and
+   the compass), which collide below 554. */
+@media (max-width: 560px) {
   .hud { top: calc(62px + env(safe-area-inset-top)); }
   /* Down here the switch already has the first row to itself, so the left
      cluster has the whole width and the cap below is not needed. */
@@ -123,6 +124,7 @@ html, body {
   backdrop-filter: blur(8px);
 }
 .icon-btn:disabled { opacity: .32; cursor: default; }
+.icon-btn.clear-btn { font-size: 26px; line-height: 1; color: var(--ink-dim); }
 .icon-btn:active:not(:disabled) { background: var(--bg-3); }
 
 .compass { width: 56px; height: 56px; }
