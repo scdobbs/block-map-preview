@@ -8,7 +8,7 @@
 import { el, clear } from '../widgets.js';
 import { expandIcon, collapseIcon, compassRose } from '../icons.js';
 import { MapCanvas } from './canvas.js';
-import { measurePanel, stationsPanel, linesPanel, areasPanel, setupPanel } from './panels.js';
+import { measurePanel, stationsPanel, linesPanel, netPanel, areasPanel, setupPanel } from './panels.js';
 import { blockPanel } from './blockPanel.js';
 import { measureView } from './measureView.js';
 import { netView } from './netView.js';
@@ -36,6 +36,7 @@ const TABS = [
   { id: 'measure', label: 'Measure', build: measurePanel },
   { id: 'stations', label: 'Stations', build: stationsPanel },
   { id: 'lines', label: 'Lines', build: linesPanel },
+  { id: 'net', label: 'Net', build: netPanel },
   { id: 'areas', label: 'Areas', build: areasPanel },
   { id: 'block', label: 'Block', build: blockPanel },
   { id: 'setup', label: 'Setup', build: setupPanel },
@@ -477,6 +478,11 @@ export class MapSection {
       }, { coalesce: 'map-view', silent: true, transient: true });
     }, 700);
     if (this.map.selection && this.activeTab === 'areas') this._refreshPanel();
+    // The Net tab's count and verdict follow the box as its corners drag.
+    if (this.map.selection && this.activeTab === 'net' && this.netArea?.kind === 'box') {
+      clearTimeout(this._netTimer);
+      this._netTimer = setTimeout(() => this.rebuild(), 250);
+    }
   }
 
   /**
@@ -2082,6 +2088,8 @@ export class MapSection {
 
       netArea: () => this.netAreaNow(),
       netInside: () => this.netInside(),
+      netFilters: () => this.netFilters,
+      netExcluded: () => this.netExcluded,
       netDrawing: () => this._netPolygon,
       beginNetBox: () => this.beginNetBox(),
       beginNetPolygon: () => this.beginNetPolygon(),

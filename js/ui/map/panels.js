@@ -25,6 +25,9 @@ import { formatDistance, formatBytes, formatLonLat, formatDDM, distance,
 import { APP_VERSION } from '../../version.js';
 import { docFingerprint } from '../../field/fingerprint.js';
 import { themeRow } from '../panels.js';
+import { verdict } from '../stereonet.js';
+import { fitBedding } from '../../geo/stereonet.js';
+import { netSelection } from './netView.js';
 
 // ---------------------------------------------------------------------------
 // Small local controls
@@ -376,8 +379,6 @@ export function stationsPanel(ctx) {
     return node;
   }
 
-  node.appendChild(netBlock(ctx));
-
   const fix = ctx.geoState().fix;
   // Newest first: the one you want is almost always the one you just took.
   const sorted = [...list].sort((a, b) => String(b.at).localeCompare(String(a.at)));
@@ -512,40 +513,52 @@ export function stationsPanel(ctx) {
   return node;
 }
 
+// ---------------------------------------------------------------------------
+// Net
+// ---------------------------------------------------------------------------
+
 /**
- * The way into the map's stereonet: choose the ground, then plot what was
- * measured on it.
+ * The stereonet tab: choose the ground, see what the stations on it say,
+ * and open the net to narrow the set.
  */
-function netBlock(ctx) {
-  const wrap = el('div', {});
-  wrap.appendChild(el('div', { class: 'sub-head', text: 'Stereonet' }));
+export function netPanel(ctx) {
+  const node = el('div', { class: 'panel' });
+  node.appendChild(head('Stereonet'));
   const area = ctx.netArea();
   if (ctx.netDrawing()) {
-    wrap.appendChild(el('div', { class: 'ctl-hint standalone',
+    node.appendChild(el('div', { class: 'ctl-hint standalone',
       text: 'Tap out the polygon on the map, then Plot on the bar below it.' }));
-    return wrap;
+    return node;
   }
   if (!area) {
-    wrap.appendChild(el('div', { class: 'row-actions wrap' }, [
+    node.appendChild(el('div', { class: 'row-actions wrap' }, [
       el('button', { class: 'btn primary', type: 'button', text: 'Select an area',
         title: 'A box on the map; drag its corners', onclick: () => ctx.beginNetBox() }),
       el('button', { class: 'btn', type: 'button', text: 'Draw a polygon',
         onclick: () => ctx.beginNetPolygon() }),
     ]));
-    wrap.appendChild(el('div', { class: 'ctl-hint standalone',
+    node.appendChild(el('div', { class: 'ctl-hint standalone',
       text: 'Stations inside the area are plotted as poles to bedding.' }));
-    return wrap;
+    return node;
   }
-  const n = ctx.netInside().length;
-  wrap.appendChild(el('div', { class: 'ctl-hint standalone',
-    text: `${area.kind === 'polygon' ? 'Polygon' : 'Box'} · ${n} station${n === 1 ? '' : 's'} inside${area.kind === 'box' ? '. Drag the corners to change it.' : '.'}` }));
-  wrap.appendChild(el('div', { class: 'row-actions wrap' }, [
-    el('button', { class: 'btn primary', type: 'button', text: 'Plot', disabled: !n,
+  const doc = ctx.doc();
+  const sel = netSelection(doc, ctx.netInside(), ctx.netFilters(), ctx.netExcluded());
+  const n = sel.inside.length;
+  node.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: `${area.kind === 'polygon' ? 'Polygon' : 'Box'} · ${n} station${n === 1 ? '' : 's'} inside, ${sel.plotted.length} plotted${area.kind === 'box' ? '. Drag the corners to change it.' : '.'}` }));
+  node.appendChild(el('div', { class: 'row-actions wrap' }, [
+    el('button', { class: 'btn primary', type: 'button', text: 'Open the net', disabled: !n,
       onclick: () => ctx.openNet() }),
     el('button', { class: 'btn', type: 'button', text: 'Draw a polygon', onclick: () => ctx.beginNetPolygon() }),
     el('button', { class: 'btn', type: 'button', text: 'Clear', onclick: () => ctx.clearNetArea() }),
   ]));
-  return wrap;
+  // The verdict without opening the net, so a box dragged about on the map
+  // answers as it goes.
+  if (sel.plotted.length) {
+    const fit = fitBedding(sel.plotted.map((st) => ({ id: st.id, strike: st.strike, dip: st.dip })));
+    node.appendChild(verdict(fit, null));
+  }
+  return node;
 }
 
 /**

@@ -185,6 +185,14 @@ export const TAB_ICONS = {
     svg('path', { d: 'M7 3 L15 21', class: 'tabicon-line', 'stroke-dasharray': '4 3' }),
   ]),
 
+  // A stereonet: the primitive circle and a girdle through it.
+  net: tab(() => [
+    svg('circle', { cx: 12, cy: 12, r: 8.5, class: 'tabicon-line' }),
+    svg('path', { d: 'M12 3.5 Q 18.5 12 12 20.5', class: 'tabicon-line' }),
+    svg('circle', { cx: 8.5, cy: 10, r: 1.4, class: 'tabicon-fill' }),
+    svg('circle', { cx: 10.5, cy: 14.5, r: 1.4, class: 'tabicon-fill' }),
+  ]),
+
   // A folded map sheet.
   areas: tab(() => [
     svg('path', { d: 'M3 6.5 L9 4 L15 6.5 L21 4 V17.5 L15 20 L9 17.5 L3 20 Z', class: 'tabicon-line' }),

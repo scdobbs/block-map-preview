@@ -17,6 +17,42 @@ import { PLANAR_FEATURES, CERTAINTIES, feature, formatAttitude, isLinearFeature,
 
 const VB = 360;
 
+
+const unitOf = (doc, st) => {
+  if (st.unitId) { const u = doc.units.find((x) => x.id === st.unitId); if (u) return u; }
+  const key = String(st.unitName || '').trim().toLowerCase();
+  return key ? doc.units.find((x) => String(x.name || '').trim().toLowerCase() === key) || null : null;
+};
+const unitName = (doc, st) => unitOf(doc, st)?.name || String(st.unitName || '').trim() || '';
+const formationOf = (doc, st) => {
+  const u = unitOf(doc, st);
+  if (!u) return null;
+  if (u.parentId) return doc.units.find((x) => x.id === u.parentId) || null;
+  return u.rank === 'formation' ? u : null;
+};
+
+/**
+ * What survives the filters, and why the rest did not. Shared with the Net
+ * tab, which states the verdict without opening the view.
+ */
+export function netSelection(doc, inside, f, excluded) {
+  // Only planes with a reading can go on as poles.
+  const planar = inside.filter((st) => !isLinearFeature(st.feature)
+    && Number.isFinite(st.strike) && Number.isFinite(st.dip));
+  const rows = planar.map((st) => {
+    const unit = unitName(doc, st);
+    const fm = formationOf(doc, st);
+    const why = f.featuresOff.has(st.feature) ? 'feature'
+      : f.certaintyOff.has(st.certainty || 'measured') ? 'confidence'
+      : (!f.overturned && isOverturned(st)) ? 'overturned'
+      : (unit && f.unitsOff.has(unit)) ? 'unit'
+      : (fm && f.formationsOff.has(fm.id)) ? 'formation'
+      : excluded.has(st.id) ? 'excluded' : null;
+    return { st, unit, fm, why };
+  });
+  return { inside, planar, rows, plotted: rows.filter((r) => !r.why).map((r) => r.st) };
+}
+
 export function netView(ctx) {
   const node = el('div', { class: 'measure-full net-full' });
   let selected = ctx.selectedStationId();
@@ -40,46 +76,11 @@ export function netView(ctx) {
 
   // -------------------------------------------------------------------------
 
-  const unitOf = (doc, st) => {
-    if (st.unitId) { const u = doc.units.find((x) => x.id === st.unitId); if (u) return u; }
-    const key = String(st.unitName || '').trim().toLowerCase();
-    return key ? doc.units.find((x) => String(x.name || '').trim().toLowerCase() === key) || null : null;
-  };
-  const unitName = (doc, st) => unitOf(doc, st)?.name || String(st.unitName || '').trim() || '';
-  const formationOf = (doc, st) => {
-    const u = unitOf(doc, st);
-    if (!u) return null;
-    if (u.parentId) return doc.units.find((x) => x.id === u.parentId) || null;
-    return u.rank === 'formation' ? u : null;
-  };
-
-  /** What survives the filters, and why the rest did not. */
-  const select = () => {
-    const doc = ctx.doc();
-    const f = ctx.filters;
-    const inside = ctx.inside();
-    // Only planes with a reading can go on as poles.
-    const planar = inside.filter((st) => !isLinearFeature(st.feature)
-      && Number.isFinite(st.strike) && Number.isFinite(st.dip));
-    const rows = planar.map((st) => {
-      const unit = unitName(doc, st);
-      const fm = formationOf(doc, st);
-      const why = f.featuresOff.has(st.feature) ? 'feature'
-        : f.certaintyOff.has(st.certainty || 'measured') ? 'confidence'
-        : (!f.overturned && isOverturned(st)) ? 'overturned'
-        : (unit && f.unitsOff.has(unit)) ? 'unit'
-        : (fm && f.formationsOff.has(fm.id)) ? 'formation'
-        : ctx.excluded.has(st.id) ? 'excluded' : null;
-      return { st, unit, fm, why };
-    });
-    return { inside, planar, rows, plotted: rows.filter((r) => !r.why).map((r) => r.st) };
-  };
-
   const build = () => {
     const doc = ctx.doc();
     const f = ctx.filters;
     const kind = doc.settings.netProjection === 'equalAngle' ? 'equalAngle' : 'equalArea';
-    const { inside, planar, rows, plotted } = select();
+    const { inside, planar, rows, plotted } = netSelection(doc, ctx.inside(), f, ctx.excluded);
     const beds = plotted.map((st) => ({ id: st.id, strike: st.strike, dip: st.dip }));
     const fit = fitBedding(beds);
     const area = ctx.area();
