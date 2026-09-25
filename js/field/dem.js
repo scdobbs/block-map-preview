@@ -268,12 +268,15 @@ export async function renderDemTile(z, x, y, opts = {}) {
   }
 
   if (contours && hi > lo) {
+    // Levels are multiples of the interval (levelsFor), so a 25 m interval
+    // gives 25, 50, 75 and never 87, 112, 137.
     const levels = levelsFor(lo, hi, step);
     const lines = traceContours(up.grid, up.w, up.h, levels);
     ctx.lineCap = 'round';
+    const isIndex = (level) => Math.abs(level / step) % 5 < 0.001;
     for (const { level, seg } of lines) {
       // Every fifth line heavier, the way a map prints index contours.
-      const index = Math.abs(level / step) % 5 < 0.001;
+      const index = isIndex(level);
       ctx.strokeStyle = index ? 'rgba(60, 40, 20, .78)' : 'rgba(70, 50, 30, .45)';
       ctx.lineWidth = (index ? 1.6 : 0.9) * Math.min(2, scale);
       ctx.beginPath();
@@ -283,12 +286,57 @@ export async function renderDemTile(z, x, y, opts = {}) {
       }
       ctx.stroke();
     }
+    for (const { level, seg } of lines) {
+      if (isIndex(level)) labelContour(ctx, level, seg, up.w, up.h, scale);
+    }
   }
 
   const result = { canvas, interval: step, lo, hi };
   rendered.set(key, result);
   while (rendered.size > RENDER_LIMIT) rendered.delete(rendered.keys().next().value);
   return result;
+}
+
+/**
+ * The elevation, written along an index contour once per tile.
+ *
+ * The traced line is a bag of short segments rather than an ordered path, so
+ * the label goes on the segment nearest the middle of the tile that is far
+ * enough from the edge not to be cut, set along the segment's direction and
+ * flipped so it never reads upside down. One label a tile is about the
+ * density a printed sheet has; tiles are 256 source pixels, so at the DEM's
+ * own zoom that is a label every couple of kilometres, and the tiles are
+ * re-rendered per zoom so the count grows with the map.
+ */
+function labelContour(ctx, level, seg, w, h, scale) {
+  const text = String(Math.round(level));
+  const fs = 10 * Math.min(2, Math.max(1, scale));
+  const margin = fs * 2.2;
+  const cx = w / 2, cy = h / 2;
+  let best = null, bestD = Infinity;
+  for (let i = 0; i < seg.length; i += 4) {
+    const mx = (seg[i] + seg[i + 2]) / 2, my = (seg[i + 1] + seg[i + 3]) / 2;
+    if (mx < margin || mx > w - margin || my < margin || my > h - margin) continue;
+    const d = Math.hypot(mx - cx, my - cy);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  if (best == null) return;
+  let angle = Math.atan2(seg[best + 3] - seg[best + 1], seg[best + 2] - seg[best]);
+  if (angle > Math.PI / 2) angle -= Math.PI;
+  if (angle < -Math.PI / 2) angle += Math.PI;
+  ctx.save();
+  ctx.translate((seg[best] + seg[best + 2]) / 2, (seg[best + 1] + seg[best + 3]) / 2);
+  ctx.rotate(angle);
+  ctx.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = fs * 0.35;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(255, 252, 245, .85)';
+  ctx.strokeText(text, 0, 0);
+  ctx.fillStyle = 'rgba(60, 40, 20, .95)';
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
 }
 
 /** Drop the caches — after clearing tiles, or when settings change wholesale. */
