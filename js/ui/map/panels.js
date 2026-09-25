@@ -24,6 +24,7 @@ import { formatDistance, formatBytes, formatLonLat, formatDDM, distance,
   bboxSize } from '../../field/geo.js';
 import { APP_VERSION } from '../../version.js';
 import { docFingerprint } from '../../field/fingerprint.js';
+import { themeRow } from '../panels.js';
 
 // ---------------------------------------------------------------------------
 // Small local controls
@@ -1561,6 +1562,7 @@ export function setupPanel(ctx) {
 
   // --- map -----------------------------------------------------------------
   node.appendChild(el('div', { class: 'sub-head', text: 'Map' }));
+  node.appendChild(themeRow());
   node.appendChild(selectRow({
     label: 'Base layer', value: s.baseLayer,
     options: BASE_SOURCES.map((id) => ({ value: id, label: SOURCES[id].label })),

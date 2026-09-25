@@ -12,7 +12,7 @@
 // would not find out until they were standing in it with no signal. So the
 // tile cache is named without a version and listed here as untouchable.
 
-const CACHE = 'blockdiagram-v93';
+const CACHE = 'blockdiagram-v94';
 
 // Must match CACHE_NAME in js/field/tiles.js.
 const TILE_CACHE = 'field-tiles';
@@ -49,6 +49,7 @@ const ASSETS = [
   './js/ui/widgets.js',
   './js/ui/swatch.js',
   './js/ui/icons.js',
+  './js/ui/theme.js',
   './js/ui/surfaceEditor.js',
   './js/ui/stereonet.js',
   './js/ui/groundMap.js',

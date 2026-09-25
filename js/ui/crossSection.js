@@ -21,6 +21,7 @@ import {
   structureTraces, clipRunsToGround, projectReadings, lidAt,
   SKY, BASEMENT, INTRUSION,
 } from '../geo/section.js';
+import { palette } from './theme.js';
 
 const FONT = '11px system-ui, -apple-system, sans-serif';
 const INK = '#0d1216';
@@ -286,7 +287,7 @@ export class CrossSection {
     g.restore();
 
     // --- frame, axes, labels ----------------------------------------------
-    g.strokeStyle = 'rgba(255,255,255,.25)';
+    g.strokeStyle = palette().frame;
     g.lineWidth = 1;
     if (cutOff == null) {
       g.strokeRect(ox + 0.5, oy + 0.5, plotW - 1, plotH - 1);
@@ -309,14 +310,14 @@ export class CrossSection {
     this._drawAxes(g, doc, frame, PX, PZ, ox, oy, plotW, plotH);
 
     g.font = '600 12px system-ui, -apple-system, sans-serif';
-    g.fillStyle = 'rgba(255,255,255,.85)';
+    g.fillStyle = palette().text;
     g.textAlign = 'left';
     g.fillText('A', ox, oy - 4);
     g.textAlign = 'right';
     g.fillText('A′', ox + plotW, oy - 4);
 
     g.font = FONT;
-    g.fillStyle = 'rgba(255,255,255,.42)';
+    g.fillStyle = palette().textFaint;
     g.textAlign = 'center';
     const veText = ve > 1.05 || ve < 0.95
       ? `vertical exaggeration ×${round1(ve)}`
@@ -429,10 +430,11 @@ export class CrossSection {
       const s = (frame.len * i) / n;
       if (i) g.lineTo(PX(s), PZ(prof[i])); else g.moveTo(PX(s), PZ(prof[i]));
     }
-    g.strokeStyle = 'rgba(10,14,18,.55)';
+    // The ground line sits between rock and sky, and the sky is the page.
+    g.strokeStyle = palette().groundHalo;
     g.lineWidth = 3;
     g.stroke();
-    g.strokeStyle = SKYLINE;
+    g.strokeStyle = palette().ground;
     g.lineWidth = 1.4;
     g.stroke();
   }
@@ -491,8 +493,8 @@ export class CrossSection {
   _drawAxes(g, doc, frame, PX, PZ, ox, oy, plotW, plotH) {
     const datum = doc.topo.datum || 0;
     g.font = FONT;
-    g.strokeStyle = 'rgba(255,255,255,.16)';
-    g.fillStyle = 'rgba(255,255,255,.5)';
+    g.strokeStyle = palette().grid;
+    g.fillStyle = palette().textDim;
 
     // Elevation, at a round interval chosen for the height of the pane.
     const span = frame.z1 - frame.z0;
@@ -513,7 +515,7 @@ export class CrossSection {
     // beside five-character elevations is a word sitting on top of them.
     g.textAlign = 'right';
     g.textBaseline = 'alphabetic';
-    g.fillStyle = 'rgba(255,255,255,.38)';
+    g.fillStyle = palette().textFaint;
     g.fillText('m', ox - 7, oy - 4);
 
     // Distance along the line. The end labels are pulled inside the frame
@@ -521,7 +523,7 @@ export class CrossSection {
     // "2.0 km" and "2.0 k" at the right-hand edge.
     const dStep = niceStep(frame.len, Math.max(2, Math.floor(plotW / 74)));
     g.textBaseline = 'top';
-    g.fillStyle = 'rgba(255,255,255,.5)';
+    g.fillStyle = palette().textDim;
     for (let v = 0; v <= frame.len + 1; v += dStep) {
       const x = PX(v);
       g.beginPath();

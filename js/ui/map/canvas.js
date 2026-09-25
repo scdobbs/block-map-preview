@@ -22,6 +22,7 @@ import { renderDemTile } from '../../field/dem.js';
 import { drawStation, drawPosition, drawSelection, drawAreaOutline, drawLine,
   distanceToLine } from './symbols.js';
 import { unitColor, DEFAULT_DIKE_THICKNESS } from '../../field/model.js';
+import { palette } from '../theme.js';
 
 const MIN_ZOOM = 4;
 const MAX_ZOOM = 19;          // past the imagery, where the contours carry it
@@ -299,7 +300,7 @@ export class MapCanvas {
     ctx.save();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
-    ctx.fillStyle = '#10161b';
+    ctx.fillStyle = palette().canvas;
     ctx.fillRect(0, 0, this.width, this.height);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
@@ -408,9 +409,9 @@ export class MapCanvas {
     // Nothing to show. A flat dark square rather than a guess, with a hatch so
     // it never gets mistaken for a lake or a shadow.
     ctx.save();
-    ctx.fillStyle = '#151c22';
+    ctx.fillStyle = palette().canvas2;
     ctx.fillRect(sx, sy, size, size);
-    ctx.strokeStyle = 'rgba(255,255,255,.035)';
+    ctx.strokeStyle = palette().hair1;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = -size; i < size; i += 14) {

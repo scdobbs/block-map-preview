@@ -26,6 +26,7 @@ import {
   layoutColumn, grainProfile, grainAt, grainScale, CONTACT_STYLE_BY_ID, rankLabel, isLeaf,
 } from '../../strat/model.js';
 import { symbolGroup, symbolLabel, SYMBOL_BY_ID } from './symbols.js';
+import { palette } from '../theme.js';
 
 // ---------------------------------------------------------------------------
 // Geometry
@@ -63,18 +64,22 @@ export function columnsOf({ descriptions = true } = {}) {
   };
 }
 
-export const SCREEN_THEME = {
-  ink: '#e8eef2',
-  dim: '#93a3af',
-  faint: '#647585',
-  line: '#2b3742',
-  rule: '#3d4c58',
-  paper: '#0f1418',
-  panel: '#161d23',
-  accent: '#ffc857',
-  warn: '#ffc857',
-  model: '#6ee7a5',
-};
+/** The on-screen palette, read from the stylesheet so it follows the theme. */
+export function screenTheme() {
+  const p = palette();
+  return {
+    ink: p.ink,
+    dim: p.inkDim,
+    faint: p.inkFaint,
+    line: p.line,
+    rule: p.rule,
+    paper: p.bg,
+    panel: p.panel,
+    accent: p.accent,
+    warn: p.accent,
+    model: p.measured,
+  };
+}
 
 export const PRINT_THEME = {
   ink: '#101418',
@@ -126,7 +131,7 @@ function tileURL(color, pattern) {
  */
 export function buildColumn(doc, opts = {}) {
   const {
-    theme = SCREEN_THEME,
+    theme = screenTheme(),
     selectedId = null,
     descriptions = doc.settings?.columnDescriptions !== false,
     marks: showMarks = doc.settings?.columnMarks !== false,

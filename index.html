@@ -22,6 +22,17 @@
 <meta name="apple-mobile-web-app-title" content="Block">
 <meta name="mobile-web-app-capable" content="yes">
 
+<script>
+// Pick the theme before the stylesheet paints, so a light-theme phone does
+// not flash dark on every open. js/ui/theme.js owns the choice from here on.
+(function () {
+  var c = null;
+  try { c = localStorage.getItem('blockdiagram.theme'); } catch (e) {}
+  var light = c === 'light' || (c !== 'dark' && window.matchMedia
+    && window.matchMedia('(prefers-color-scheme: light)').matches);
+  document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+})();
+</script>
 <link rel="stylesheet" href="./css/app.css">
 </head>
 <body>

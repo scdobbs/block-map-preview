@@ -3,7 +3,7 @@
 // user's finger.
 
 import {
-  el, svg, clear, numberRow, selectRow, toggleRow, compassDial, protractor,
+  el, svg, clear, numberRow, selectRow, toggleRow, chipsRow, compassDial, protractor,
   enableDragReorder,
 } from './widgets.js';
 import { swatchEl, drawSwatch } from './swatch.js';
@@ -21,6 +21,7 @@ import { formatLine, formatPlane } from '../geo/stereonet.js';
 import { surfaceRange, niceContourInterval, isDemSurface } from '../geo/surfaces.js';
 import { misfit as fitMisfit, unitCheck } from '../geo/infer.js';
 import { formatLonLat } from '../field/geo.js';
+import { themeChoice, setTheme } from './theme.js';
 
 // ---------------------------------------------------------------------------
 // Stratigraphy
@@ -1576,6 +1577,7 @@ export function viewPanel(ctx) {
     }));
 
     root.appendChild(el('div', { class: 'sub-head', text: 'Display' }));
+    root.appendChild(themeRow());
     root.appendChild(toggleRow({
       label: 'Lithology patterns', value: doc.settings.showPatterns,
       onChange: (v) => ctx.store.edit((d) => { d.settings.showPatterns = v; }, { structural: false }),
@@ -1669,6 +1671,20 @@ export function viewPanel(ctx) {
   build();
   root.refresh = build;
   return root;
+}
+
+/** Dark, light, or whatever the phone is set to. Shared with Map -> Setup. */
+export function themeRow() {
+  return chipsRow({
+    label: 'Theme',
+    value: themeChoice(),
+    options: [
+      { id: 'auto', label: 'Automatic' },
+      { id: 'dark', label: 'Dark' },
+      { id: 'light', label: 'Light' },
+    ],
+    onChange: (v) => setTheme(v),
+  });
 }
 
 function viewBtn(ctx, label, az, el_) {

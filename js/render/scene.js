@@ -11,6 +11,7 @@ import { unconformityDatums, sliceCut } from '../geo/model.js';
 import { transportFrame, rampGeometry, rampHeight } from '../geo/thrust.js';
 import { buildContourLabels, buildLabelMeshes, MAX_LABELS } from './contours.js';
 import { buildMarkers } from './markers.js';
+import { palette, hexInt } from '../ui/theme.js';
 
 export class BlockScene {
   constructor(canvas) {
@@ -21,7 +22,7 @@ export class BlockScene {
       alpha: false,
       powerPreference: 'high-performance',
     });
-    this.renderer.setClearColor(0x0f1418, 1);
+    this.renderer.setClearColor(hexInt(palette().scene), 1);
 
     this.scene = new THREE.Scene();
     // Two cameras, one at a time. Map view has to be orthographic or it is not
@@ -77,6 +78,12 @@ export class BlockScene {
     this._frameMs = 16;
     this._lastFrame = performance.now();
     this._autoSamples = 4;
+  }
+
+  /** The clear colour follows the theme; nothing else in the scene is chrome. */
+  setTheme() {
+    this.renderer.setClearColor(hexInt(palette().scene), 1);
+    this._needsRender = true;
   }
 
   resize() {

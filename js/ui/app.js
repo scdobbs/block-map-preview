@@ -19,6 +19,7 @@ import { footprint } from '../render/block.js';
 import { surfaceRange } from '../geo/surfaces.js';
 import { fitBedding } from '../geo/stereonet.js';
 import { quadrantBearing } from '../geo/math.js';
+import { watchSystemTheme } from './theme.js';
 
 const TABS = [
   { id: 'layers', label: 'Layers', build: layersPanel },
@@ -153,6 +154,18 @@ export class App {
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
     this._bindKeys();
+
+    // Light or dark. The stylesheet has already switched by the time this
+    // runs; the canvases have to be told.
+    watchSystemTheme();
+    window.addEventListener('themechange', () => {
+      this.scene.setTheme();
+      this.mapSection?.map.invalidate();
+      this.stratSection?.refresh();
+      if (this.store.doc.settings.showSection) this.xsec.refresh(false);
+      if (this._showGround) this.ground.refresh();
+      this.rebuildPanel();
+    });
 
     this.scene.resize();
     this.scene.frame(this.store.doc);

@@ -15,6 +15,7 @@ import { traceContours, levelsFor } from '../geo/marching.js';
 import { predictedTraces } from '../geo/infer.js';
 import { surfaceRange, isDemSurface } from '../geo/surfaces.js';
 import { lineKind } from '../field/model.js';
+import { palette } from './theme.js';
 
 /** Dash patterns, matching the way the Map section draws the same lines. */
 const DASH = {
@@ -83,10 +84,10 @@ export class GroundMap {
     if (this.showDrawn) this._drawSurvey(ctx, doc, px, py);
 
     // Frame and scale.
-    ctx.strokeStyle = 'rgba(255,255,255,.18)';
+    ctx.strokeStyle = palette().frame;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox + 0.5, oy + 0.5, bw - 1, bh - 1);
-    ctx.fillStyle = 'rgba(255,255,255,.45)';
+    ctx.fillStyle = palette().textDim;
     ctx.font = '11px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(
@@ -243,13 +244,13 @@ export class GroundMap {
     ctx.textAlign = 'right';
     let x = right;
     for (const [color, label] of bits.reverse()) {
-      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      ctx.fillStyle = palette().textDim;
       ctx.fillText(label, x, y);
       const wLabel = ctx.measureText(label).width;
       ctx.beginPath();
       ctx.moveTo(x - wLabel - 20, y - 4);
       ctx.lineTo(x - wLabel - 6, y - 4);
-      ctx.strokeStyle = 'rgba(255,255,255,.6)';
+      ctx.strokeStyle = palette().frame;
       ctx.lineWidth = 4.5;
       ctx.stroke();
       ctx.strokeStyle = color;
