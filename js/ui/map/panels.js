@@ -376,6 +376,8 @@ export function stationsPanel(ctx) {
     return node;
   }
 
+  node.appendChild(netBlock(ctx));
+
   const fix = ctx.geoState().fix;
   // Newest first: the one you want is almost always the one you just took.
   const sorted = [...list].sort((a, b) => String(b.at).localeCompare(String(a.at)));
@@ -495,6 +497,42 @@ export function stationsPanel(ctx) {
   };
 
   return node;
+}
+
+/**
+ * The way into the map's stereonet: choose the ground, then plot what was
+ * measured on it.
+ */
+function netBlock(ctx) {
+  const wrap = el('div', {});
+  wrap.appendChild(el('div', { class: 'sub-head', text: 'Stereonet' }));
+  const area = ctx.netArea();
+  if (ctx.netDrawing()) {
+    wrap.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'Tap out the polygon on the map, then Plot on the bar below it.' }));
+    return wrap;
+  }
+  if (!area) {
+    wrap.appendChild(el('div', { class: 'row-actions wrap' }, [
+      el('button', { class: 'btn primary', type: 'button', text: 'Select an area',
+        title: 'A box on the map; drag its corners', onclick: () => ctx.beginNetBox() }),
+      el('button', { class: 'btn', type: 'button', text: 'Draw a polygon',
+        onclick: () => ctx.beginNetPolygon() }),
+    ]));
+    wrap.appendChild(el('div', { class: 'ctl-hint standalone',
+      text: 'Stations inside the area are plotted as poles to bedding.' }));
+    return wrap;
+  }
+  const n = ctx.netInside().length;
+  wrap.appendChild(el('div', { class: 'ctl-hint standalone',
+    text: `${area.kind === 'polygon' ? 'Polygon' : 'Box'} · ${n} station${n === 1 ? '' : 's'} inside${area.kind === 'box' ? '. Drag the corners to change it.' : '.'}` }));
+  wrap.appendChild(el('div', { class: 'row-actions wrap' }, [
+    el('button', { class: 'btn primary', type: 'button', text: 'Plot', disabled: !n,
+      onclick: () => ctx.openNet() }),
+    el('button', { class: 'btn', type: 'button', text: 'Draw a polygon', onclick: () => ctx.beginNetPolygon() }),
+    el('button', { class: 'btn', type: 'button', text: 'Clear', onclick: () => ctx.clearNetArea() }),
+  ]));
+  return wrap;
 }
 
 /**

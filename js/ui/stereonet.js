@@ -120,7 +120,12 @@ function pathOf(points) {
   return points.map((p, i) => `${i ? 'L' : 'M'} ${sx(p).toFixed(2)} ${sy(p).toFixed(2)}`).join(' ');
 }
 
-function drawNet(face, kind, beds, fit, mapFit, showPlanes, ctx, measured) {
+/**
+ * Draw the net. Exported for the map's stereonet tool, which plots field
+ * stations rather than block markers: `ctx` only has to supply
+ * selectedMarkerId() and selectMarker(id).
+ */
+export function drawNet(face, kind, beds, fit, mapFit, showPlanes, ctx, measured) {
   clear(face);
 
   face.appendChild(svg('circle', { cx: C, cy: C, r: R, class: 'net-face' }));
@@ -398,7 +403,7 @@ function drawSide(side, doc, kind, beds, fit, mapFit, ctx, opts) {
  * a disclaimer — it is the difference between a measurement and a tautology,
  * and a student who cannot tell those apart will believe any model they build.
  */
-function verdict(fit, mapFit, modelled = false) {
+export function verdict(fit, mapFit, modelled = false) {
   const box = el('div', { class: `stereo-verdict ${fit.kind}` });
 
   if (fit.kind === 'few') {
@@ -524,7 +529,7 @@ function howWell(misfit) {
   return `The poles lie on one girdle to within ${misfit.toFixed(1)}°`;
 }
 
-function numbers(fit) {
+export function numbers(fit) {
   const box = el('details', { class: 'stereo-numbers' });
   box.appendChild(el('summary', { text: 'Eigenvalues' }));
   const [l1, l2, l3] = fit.values;

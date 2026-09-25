@@ -11,6 +11,7 @@ import { MapCanvas } from './canvas.js';
 import { measurePanel, stationsPanel, linesPanel, areasPanel, setupPanel } from './panels.js';
 import { blockPanel } from './blockPanel.js';
 import { measureView } from './measureView.js';
+import { netView } from './netView.js';
 import { niceScaleBar } from './symbols.js';
 import { FieldStore, loadWorkspace, readProject, writeProject, writeIndex,
   removeProject, projectMeta } from '../../field/store.js';
@@ -29,6 +30,7 @@ import { cutBlock, surveyExtent } from '../../field/cutblock.js';
 import { recordModelThicknesses, planModelThicknesses } from '../../strat/model.js';
 import { buildShading, shadingKey, patchColorCss, patchAt,
   unitFromStations, unitVerdictText } from './shading.js';
+import { bboxContains } from '../../field/geo.js';
 
 const TABS = [
   { id: 'measure', label: 'Measure', build: measurePanel },
@@ -103,6 +105,16 @@ export class MapSection {
     this._lastFeature = { planar: 'bedding', linear: 'lineation' };
 
     this.draft = freshDraft();
+
+    // The stereonet tool: the area it reads stations from, which stations
+    // have been taken out by hand, and the filters. Kept on the section and
+    // not in the document: a plot is a question asked of the notes, not a
+    // note.
+    this.netArea = null;            // { kind: 'box', bbox } | { kind: 'polygon', points }
+    this.netExcluded = new Set();
+    this.netFilters = freshNetFilters();
+    this.netNode = null;
+    this._netPolygon = false;
 
     this.projects = [];
     this.projectId = null;
@@ -641,6 +653,15 @@ export class MapSection {
   finishLine() {
     const line = this.drawing;
     if (!line) return;
+    // The stereonet's polygon is drawn with the line tools and kept out of
+    // the notes: it is where a question was asked, not a contact.
+    if (this._netPolygon) {
+      if (line.points.length >= 3) this.netArea = { kind: 'polygon', points: line.points.map((p) => [p[0], p[1]]) };
+      this._netPolygon = false;
+      this._endDrawing();
+      if (this.netArea) this.openNet();
+      return;
+    }
     if (!lineIsDrawable(line)) { this.cancelLine(); return; }
     const extending = this._extendingId;
     this.store.edit((doc) => {
@@ -655,7 +676,7 @@ export class MapSection {
     this._endDrawing();
   }
 
-  cancelLine() { this._endDrawing(); }
+  cancelLine() { this._netPolygon = false; this._endDrawing(); }
 
   _endDrawing() {
     this.drawing = null;
@@ -716,7 +737,8 @@ export class MapSection {
         onclick: () => this.undoVertex(),
       }),
       el('button', {
-        class: 'draw-btn primary', type: 'button', text: 'Done', disabled: n < 2,
+        class: 'draw-btn primary', type: 'button', text: this._netPolygon ? 'Plot' : 'Done',
+        disabled: n < (this._netPolygon ? 3 : 2),
         onclick: () => this.finishLine(),
       }),
       el('button', {
@@ -1243,6 +1265,92 @@ export class MapSection {
     this.map.clearSelection();
     this._draftArea = null;
     this.rebuild();
+  }
+
+  // -------------------------------------------------------------------------
+  // The stereonet tool
+  // -------------------------------------------------------------------------
+
+  /** Start a box on the map; its corners drag. Plot reads it when pressed. */
+  beginNetBox() {
+    if (this.drawing) this.cancelLine();
+    this._draftArea = null;
+    const bbox = this.map.beginSelection();
+    this.netArea = { kind: 'box', bbox };
+    this.rebuild();
+  }
+
+  /** Tap out a polygon instead; the draw bar's Plot closes it. */
+  beginNetPolygon() {
+    this.map.clearSelection();
+    this.netArea = null;
+    if (this.placeMode) this.togglePlace();
+    this.drawing = makeLine({ kind: 'boundary' });
+    this.drawing.closed = true;
+    this._netPolygon = true;
+    this.map.draftLine = this.drawing;
+    this.map.invalidate();
+    this._syncDrawBar();
+    this.rebuild();
+  }
+
+  clearNetArea() {
+    this.map.clearSelection();
+    this.netArea = null;
+    this.netExcluded.clear();
+    this.rebuild();
+  }
+
+  /** The area as it is now: a box follows its corners until Plot is pressed. */
+  netAreaNow() {
+    if (!this.netArea) return null;
+    if (this.netArea.kind === 'box') {
+      if (this.map.selection) this.netArea = { kind: 'box', bbox: [...this.map.selection] };
+      return this.netArea;
+    }
+    return this.netArea;
+  }
+
+  /** Every station inside the area, before any filter. */
+  netInside() {
+    const area = this.netAreaNow();
+    if (!area) return [];
+    const test = area.kind === 'box'
+      ? (st) => bboxContains(area.bbox, st.lon, st.lat)
+      : (st) => pointInPolygon(area.points, st.lon, st.lat);
+    return this.store.doc.stations.filter(test);
+  }
+
+  openNet() {
+    if (this.netNode) return;
+    this.netNode = netView(this.netContext());
+    this.host.root.appendChild(this.netNode);
+    this.host.root.classList.add('measuring');
+    this.rebuild();
+  }
+
+  closeNet() {
+    if (!this.netNode) return;
+    this.netNode.remove();
+    this.netNode = null;
+    this.host.root.classList.remove('measuring');
+    this.rebuild();
+  }
+
+  netContext() {
+    return {
+      doc: () => this.store.doc,
+      inside: () => this.netInside(),
+      area: () => this.netAreaNow(),
+      filters: this.netFilters,
+      excluded: this.netExcluded,
+      // In place: the view holds these objects.
+      resetFilters: () => { Object.assign(this.netFilters, freshNetFilters()); this.netExcluded.clear(); },
+      selectStation: (id) => { this.selectedStationId = id; this.map.selectedId = id; this.map.invalidate(); },
+      selectedStationId: () => this.selectedStationId,
+      setSetting: (p) => this.setSetting(p),
+      close: () => this.closeNet(),
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -1972,6 +2080,14 @@ export class MapSection {
       deleteStation: (id) => this.deleteStation(id),
       goToStation: (id) => this.goToStation(id),
 
+      netArea: () => this.netAreaNow(),
+      netInside: () => this.netInside(),
+      netDrawing: () => this._netPolygon,
+      beginNetBox: () => this.beginNetBox(),
+      beginNetPolygon: () => this.beginNetPolygon(),
+      clearNetArea: () => this.clearNetArea(),
+      openNet: () => this.openNet(),
+
       selectLine: (id) => this.selectLine(id),
       selectedLineId: () => this.selectedLineId,
       startLine: (k) => this.startLine(k),
@@ -2078,6 +2194,26 @@ let projectCounter = 0;
 function newId(prefix) {
   projectCounter += 1;
   return `${prefix}_${Date.now().toString(36)}${projectCounter.toString(36)}`;
+}
+
+function freshNetFilters() {
+  return {
+    featuresOff: new Set(['foliation', 'joint', 'fault', 'contact']),  // bedding on
+    unitsOff: new Set(),
+    formationsOff: new Set(),
+    certaintyOff: new Set(),
+    overturned: true,
+  };
+}
+
+/** Even-odd test in lon/lat, which is fine at the size of a field area. */
+function pointInPolygon(pts, lon, lat) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
 }
 
 function freshDraft() {

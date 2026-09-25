@@ -556,6 +556,8 @@ export class MapCanvas {
     }
     if (this.draftLine && this.draftLine.points.length) {
       const pts = project(this.draftLine);
+      // A polygon being drawn (the stereonet's area) is shown closed.
+      if (this.draftLine.closed && pts.length > 2) pts.push(pts[0]);
       if (pts.length === 1) {
         ctx.beginPath();
         ctx.arc(pts[0].x, pts[0].y, 6, 0, Math.PI * 2);

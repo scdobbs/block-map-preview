@@ -1402,6 +1402,38 @@ html, body {
 }
 .mf-foot.warn { color: var(--accent); }
 
+/* --- the map's stereonet ------------------------------------------------- */
+
+/* Same full-screen frame as the compass. The net takes the top, the verdict,
+   the filters and the station rows scroll under it. */
+.net-full .mf-scroll { gap: 10px; }
+.net-title { margin: 0; font-size: 16px; flex: 0 0 auto; }
+.net-full .mf-head .stereo-sub { flex: 1 1 auto; text-align: center; }
+.net-figure { flex: 0 0 auto; display: grid; place-items: center; }
+.net-figure .stereo-net { max-width: min(430px, 46vh); }
+.net-side { flex: 0 0 auto; }
+.net-rows { display: grid; gap: 4px; margin: 6px 0 10px; }
+.net-row {
+  display: grid; grid-template-columns: 16px auto auto 1fr; gap: 8px; align-items: baseline;
+  width: 100%; text-align: left; padding: 6px 8px; border-radius: 8px;
+  background: var(--hair-1); border: 1px solid transparent; color: var(--ink);
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.net-row.off { color: var(--ink-faint); }
+.net-row:disabled { cursor: default; }
+.net-row.selected { border-color: var(--accent); }
+.net-row-mark { color: var(--accent); font-size: 11px; }
+.net-row.off .net-row-mark { color: var(--ink-faint); }
+.net-row-name { font-weight: 650; font-variant-numeric: tabular-nums; }
+.net-row-att { font-variant-numeric: tabular-nums; }
+.net-row-sub { color: var(--ink-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-aspect-ratio: 1/1) {
+  .net-full .mf-scroll { grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); }
+  .net-figure { grid-column: 1; grid-row: 1 / span 6; position: sticky; top: 0; height: auto; }
+  .net-figure .stereo-net { max-width: min(520px, 80vh); }
+  .net-side { grid-column: 2; }
+}
+
 /* What came back through the door, shown on the Measure panel. */
 .held-reading {
   font-size: 15px; color: var(--accent); margin-bottom: 8px;
