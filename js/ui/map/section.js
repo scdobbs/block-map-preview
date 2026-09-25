@@ -137,6 +137,14 @@ export class MapSection {
   _buildDOM() {
     this.canvas = el('canvas', { class: 'mapview' });
 
+    // Where north is on a turned sheet. One tap puts the map north-up; two
+    // put the block diagram north-up as well, so both views can be squared
+    // from either one.
+    this.northIcon = northIcon();
+    this.northBtn = hudBtn(this.northIcon, 'North. Tap to put north up; double-tap to square the block too',
+      () => this._northTap());
+    this.northBtn.classList.add('north-btn');
+    this._northTapAt = 0;
     this.locateBtn = hudBtn(locateIcon(), 'Center on me', () => this.locate());
     this.layerBtn = hudBtn(layersIcon(), 'Change layer', () => this.cycleLayer());
     this.placeBtn = hudBtn(plusIcon(), 'Place a station by hand', () => this.togglePlace());
@@ -165,7 +173,7 @@ export class MapSection {
       this.canvas,
       el('div', { class: 'hud hud-left' }, [this.undoBtn, this.redoBtn]),
       el('div', { class: 'hud hud-right' }, [
-        this.locateBtn, this.layerBtn, this.fullBtn, this.placeBtn,
+        this.northBtn, this.locateBtn, this.layerBtn, this.fullBtn, this.placeBtn,
       ]),
       this.scaleChip,
       this.attrib,
@@ -247,7 +255,7 @@ export class MapSection {
     // A project you have just opened has nothing to undo back into.
     this.store.undoStack.length = 0;
     this.store.redoStack.length = 0;
-    this.map.setView(doc.view.lon, doc.view.lat, doc.view.zoom);
+    this.map.setView(doc.view.lon, doc.view.lat, doc.view.zoom, doc.view.bearing || 0);
     this._syncMap();
     this._syncDrawBar();
   }
@@ -428,6 +436,18 @@ export class MapSection {
     );
     const src = SOURCES[this.store.doc.settings.baseLayer];
     this.attrib.textContent = src ? src.attribution : '';
+    // The arrow turns with the sheet, so it always points at north.
+    this.northIcon.style.transform = `rotate(${this.map.bearing}deg)`;
+    this.northBtn.classList.toggle('on', this.map.bearing !== 0);
+  }
+
+  /** One tap squares the map; a second within a beat squares the block too. */
+  _northTap() {
+    const now = performance.now();
+    const double = now - this._northTapAt < 350;
+    this._northTapAt = double ? 0 : now;
+    this.map.setBearing(0);
+    if (double) this.host.resetNorth();
   }
 
   _onMapMove() {
@@ -437,7 +457,7 @@ export class MapSection {
     this._viewTimer = setTimeout(() => {
       if (!this.ready) return;
       this.store.edit((d) => {
-        d.view = { lon: this.map.lon, lat: this.map.lat, zoom: this.map.zoom };
+        d.view = { lon: this.map.lon, lat: this.map.lat, zoom: this.map.zoom, bearing: this.map.bearing };
       }, { coalesce: 'map-view', silent: true, transient: true });
     }, 700);
     if (this.map.selection && this.activeTab === 'areas') this._refreshPanel();
@@ -1859,7 +1879,7 @@ export class MapSection {
         const doc = migrateFieldDoc(JSON.parse(await file.text()));
         if (!confirm(`Replace the current notes with "${doc.name}"?\n\n${doc.stations.length} stations. This cannot be undone by closing the app.`)) return;
         this.store.replace(doc);
-        this.map.setView(doc.view.lon, doc.view.lat, doc.view.zoom);
+        this.map.setView(doc.view.lon, doc.view.lat, doc.view.zoom, doc.view.bearing || 0);
       } catch (err) {
         alert(`Could not open that file.\n${err.message}`);
       }
@@ -2062,6 +2082,16 @@ const locateIcon = () => svgIcon(['M12 3 V6 M12 18 V21 M3 12 H6 M18 12 H21',
 const layersIcon = () => svgIcon(['M12 3 L21 8 L12 13 L3 8 Z', 'M3 12.5 L12 17.5 L21 12.5',
   'M3 16.5 L12 21.5 L21 16.5']);
 const plusIcon = () => svgIcon(['M12 5 V19 M5 12 H19']);
+/** An arrow with a filled north half, turned by the bearing to keep pointing north. */
+function northIcon() {
+  const s = svgIcon(['M12 12 V21']);
+  const NS = 'http://www.w3.org/2000/svg';
+  const head = document.createElementNS(NS, 'path');
+  head.setAttribute('d', 'M12 2.5 L16.5 13.5 L12 11 L7.5 13.5 Z');
+  head.setAttribute('class', 'tabicon-fill');
+  s.appendChild(head);
+  return s;
+}
 
 function slug(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'field';

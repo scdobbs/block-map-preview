@@ -672,6 +672,17 @@ export class App {
     this.scene.showHelper(view, ev || null);
   }
 
+  /** Turn the block so north is up the screen, keeping the tilt. */
+  blockNorth() {
+    this.scene.controls.setView(0, this.scene.controls.elevation);
+  }
+
+  /** Both views north-up at once, from whichever one is on screen. */
+  resetNorth() {
+    this.blockNorth();
+    this.mapSection?.map.setBearing(0);
+  }
+
   /** Throw the block away and start from the default one. Undoable. */
   clearBlock() {
     if (!confirm('Clear this block and start fresh?')) return;

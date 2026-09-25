@@ -45,6 +45,12 @@ export class MapCanvas {
 
     this.center = { x: lonToWorld(-109.549), y: latToWorld(38.573) };
     this.zoom = 13;
+    // How far the sheet has been turned clockwise on screen, in degrees.
+    // Zero is north-up. Everything is drawn in an unturned frame under one
+    // canvas rotation, so the symbols turn with the map the way a printed
+    // sheet turns in the hand; only the text is counter-rotated to stay
+    // readable.
+    this.bearing = 0;
     this.dpr = 1;
     this.width = 0;
     this.height = 0;
@@ -116,18 +122,43 @@ export class MapCanvas {
 
   get metersPerPixel() { return metersPerPixel(this.lat, this.zoom); }
 
-  setView(lon, lat, zoom) {
+  setView(lon, lat, zoom, bearing = null) {
     this.center.x = lonToWorld(lon);
     this.center.y = latToWorld(lat);
     if (zoom != null) this.zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    if (bearing != null) this.bearing = normBearing(bearing);
+    this.invalidate();
+    this.onMove();
+  }
+
+  /** Turn the sheet to a bearing, keeping the middle of the screen still. */
+  setBearing(deg) {
+    const b = normBearing(deg);
+    if (b === this.bearing) return;
+    this.bearing = b;
+    this.invalidate();
+    this.onMove();
+  }
+
+  /** Turn about a screen point, so a twist keeps its pivot under the fingers. */
+  rotateAround(deg, px, py) {
+    const b = normBearing(deg);
+    if (b === this.bearing) return;
+    const before = this.screenToWorld(px, py);
+    this.bearing = b;
+    const after = this.screenToWorld(px, py);
+    this.center.x = wrapX(this.center.x + (before.x - after.x));
+    this.center.y = clamp(this.center.y + (before.y - after.y), 0, 1);
     this.invalidate();
     this.onMove();
   }
 
   panBy(dxPx, dyPx) {
     const w = this.worldSize;
-    this.center.x = wrapX(this.center.x - dxPx / w);
-    this.center.y = clamp(this.center.y - dyPx / w, 0, 1);
+    // A finger's movement is in screen pixels; the sheet underneath is turned.
+    const [ux, uy] = this._unrotate(dxPx, dyPx);
+    this.center.x = wrapX(this.center.x - ux / w);
+    this.center.y = clamp(this.center.y - uy / w, 0, 1);
     this.invalidate();
     this.onMove();
   }
@@ -163,20 +194,48 @@ export class MapCanvas {
   // Coordinates
   // -------------------------------------------------------------------------
 
-  screenToWorld(px, py) {
-    const w = this.worldSize;
-    return {
-      x: this.center.x + (px - this.width / 2) / w,
-      y: this.center.y + (py - this.height / 2) / w,
-    };
+  // Two frames. The SHEET frame is the map drawn north-up with the centre of
+  // the screen at its centre; the SCREEN frame is that sheet turned by the
+  // bearing. Drawing happens in the sheet frame under one canvas rotation,
+  // so it uses _proj; anything comparing against a finger uses the public
+  // screen-frame functions.
+
+  _rotate(dx, dy) {
+    const a = this.bearing * Math.PI / 180;
+    const c = Math.cos(a), s = Math.sin(a);
+    return [dx * c - dy * s, dx * s + dy * c];
   }
 
-  worldToScreen(x, y) {
+  _unrotate(dx, dy) {
+    const a = -this.bearing * Math.PI / 180;
+    const c = Math.cos(a), s = Math.sin(a);
+    return [dx * c - dy * s, dx * s + dy * c];
+  }
+
+  /** World to the sheet frame. */
+  _proj(x, y) {
     const w = this.worldSize;
     return {
       x: (x - this.center.x) * w + this.width / 2,
       y: (y - this.center.y) * w + this.height / 2,
     };
+  }
+
+  _projLL(lon, lat) { return this._proj(lonToWorld(lon), latToWorld(lat)); }
+
+  screenToWorld(px, py) {
+    const w = this.worldSize;
+    const [ux, uy] = this._unrotate(px - this.width / 2, py - this.height / 2);
+    return {
+      x: this.center.x + ux / w,
+      y: this.center.y + uy / w,
+    };
+  }
+
+  worldToScreen(x, y) {
+    const p = this._proj(x, y);
+    const [rx, ry] = this._rotate(p.x - this.width / 2, p.y - this.height / 2);
+    return { x: rx + this.width / 2, y: ry + this.height / 2 };
   }
 
   screenToLonLat(px, py) {
@@ -186,6 +245,22 @@ export class MapCanvas {
 
   lonLatToScreen(lon, lat) {
     return this.worldToScreen(lonToWorld(lon), latToWorld(lat));
+  }
+
+  /**
+   * The sheet-frame box that covers the whole turned screen, with a margin.
+   * A turned rectangle sticks out past its own width, so tiles and symbols
+   * are fetched and culled against this rather than against the screen.
+   */
+  _sheetBox(margin = 0) {
+    const w = this.width, h = this.height;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [px, py] of [[0, 0], [w, 0], [0, h], [w, h]]) {
+      const [ux, uy] = this._unrotate(px - w / 2, py - h / 2);
+      x0 = Math.min(x0, ux + w / 2); x1 = Math.max(x1, ux + w / 2);
+      y0 = Math.min(y0, uy + h / 2); y1 = Math.max(y1, uy + h / 2);
+    }
+    return { x0: x0 - margin, y0: y0 - margin, x1: x1 + margin, y1: y1 + margin };
   }
 
   // -------------------------------------------------------------------------
@@ -228,6 +303,12 @@ export class MapCanvas {
     ctx.fillRect(0, 0, this.width, this.height);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
+    // The one rotation everything below is drawn under.
+    if (this.bearing) {
+      ctx.translate(this.width / 2, this.height / 2);
+      ctx.rotate(this.bearing * Math.PI / 180);
+      ctx.translate(-this.width / 2, -this.height / 2);
+    }
 
     const cov = { wanted: 0, drawn: 0, missing: 0, fromCache: 0, absent: 0 };
     this._drawBase(ctx, cov);
@@ -260,10 +341,11 @@ export class MapCanvas {
   _visibleRange(tileZ) {
     const n = Math.pow(2, tileZ);
     const w = this.worldSize;
-    const left = this.center.x - (this.width / 2) / w;
-    const right = this.center.x + (this.width / 2) / w;
-    const top = this.center.y - (this.height / 2) / w;
-    const bottom = this.center.y + (this.height / 2) / w;
+    const box = this._sheetBox();
+    const left = this.center.x + (box.x0 - this.width / 2) / w;
+    const right = this.center.x + (box.x1 - this.width / 2) / w;
+    const top = this.center.y + (box.y0 - this.height / 2) / w;
+    const bottom = this.center.y + (box.y1 - this.height / 2) / w;
     return {
       x0: Math.floor(left * n), x1: Math.floor(right * n),
       y0: Math.max(0, Math.floor(top * n)), y1: Math.min(n - 1, Math.floor(bottom * n)),
@@ -419,8 +501,8 @@ export class MapCanvas {
   _drawUnits(ctx) {
     const shade = this._shade;
     if (!shade || !shade.canvas) return;
-    const a = this.worldToScreen(shade.box.x0, shade.box.y0);
-    const b = this.worldToScreen(shade.box.x1, shade.box.y1);
+    const a = this._proj(shade.box.x0, shade.box.y0);
+    const b = this._proj(shade.box.x1, shade.box.y1);
     ctx.save();
     ctx.globalAlpha = 0.46;
     ctx.imageSmoothingEnabled = false;
@@ -435,16 +517,17 @@ export class MapCanvas {
   }
 
   _drawAreas(ctx) {
+    const box = this._sheetBox(40);
     for (const a of this.areas) {
-      const p0 = this.lonLatToScreen(a.bbox[0], a.bbox[3]);
-      const p1 = this.lonLatToScreen(a.bbox[2], a.bbox[1]);
-      if (p1.x < -40 || p0.x > this.width + 40 || p1.y < -40 || p0.y > this.height + 40) continue;
+      const p0 = this._projLL(a.bbox[0], a.bbox[3]);
+      const p1 = this._projLL(a.bbox[2], a.bbox[1]);
+      if (p1.x < box.x0 || p0.x > box.x1 || p1.y < box.y0 || p0.y > box.y1) continue;
       drawAreaOutline(ctx, p0.x, p0.y, p1.x, p1.y, { complete: !!a.check?.complete });
     }
   }
 
   _drawLines(ctx) {
-    const project = (line) => line.points.map((p) => this.lonLatToScreen(p[0], p[1]));
+    const project = (line) => line.points.map((p) => this._projLL(p[0], p[1]));
     for (const line of this.lines) {
       if (!line.points || line.points.length < 2) continue;
       const selected = line.id === this.selectedLineId;
@@ -532,14 +615,17 @@ export class MapCanvas {
     // The selected one is drawn last so it is never buried under a neighbour.
     const list = this.stations.filter((s) => s.id !== this.selectedId);
     const sel = this.stations.find((s) => s.id === this.selectedId);
+    const box = this._sheetBox(60);
+    const upright = this.bearing * Math.PI / 180;
     const draw = (st) => {
-      const p = this.lonLatToScreen(st.lon, st.lat);
-      if (p.x < -60 || p.x > this.width + 60 || p.y < -60 || p.y > this.height + 60) return;
+      const p = this._projLL(st.lon, st.lat);
+      if (p.x < box.x0 || p.x > box.x1 || p.y < box.y0 || p.y > box.y1) return;
       const unit = st.unitId ? byId.get(st.unitId) : null;
       drawStation(ctx, p.x, p.y, st, {
         color: unit ? unitColor(unit) : '#ffc857',
         selected: st.id === this.selectedId,
         label: this.labelStations && st.name ? st.name : null,
+        upright,
       });
     };
     for (const st of list) draw(st);
@@ -547,7 +633,7 @@ export class MapCanvas {
   }
 
   _drawFix(ctx) {
-    const p = this.lonLatToScreen(this.fix.lon, this.fix.lat);
+    const p = this._projLL(this.fix.lon, this.fix.lat);
     const perM = 1 / this.metersPerPixel;
     drawPosition(ctx, p.x, p.y, {
       accuracyPx: (this.fix.accuracy || 0) * perM,
@@ -558,8 +644,8 @@ export class MapCanvas {
   }
 
   _drawSelection(ctx) {
-    const p0 = this.lonLatToScreen(this.selection[0], this.selection[3]);
-    const p1 = this.lonLatToScreen(this.selection[2], this.selection[1]);
+    const p0 = this._projLL(this.selection[0], this.selection[3]);
+    const p1 = this._projLL(this.selection[2], this.selection[1]);
     drawSelection(ctx, p0.x, p0.y, p1.x, p1.y);
   }
 
@@ -572,7 +658,9 @@ export class MapCanvas {
     c.style.touchAction = 'none';
 
     c.addEventListener('pointerdown', (e) => {
-      c.setPointerCapture(e.pointerId);
+      // Capture can be refused for a pointer the browser has already let go
+      // of; the gesture still has to be tracked.
+      try { c.setPointerCapture(e.pointerId); } catch { /* fine */ }
       this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 });
       if (this._pointers.size === 1) {
         const local = this._local(e);
@@ -603,6 +691,22 @@ export class MapCanvas {
         const g = this._gesture;
         if (g.dist > 0 && now.dist > 0) {
           this.zoomAround(g.zoom + Math.log2(now.dist / g.dist), now.mx, now.my);
+          this.onUserMove();
+        }
+        // Twisting the two fingers turns the sheet. Not until the twist is
+        // clearly a twist: a plain pinch wobbles a few degrees, and a map
+        // that turned on every pinch would never stay north-up.
+        let d = now.angle - g.angle;
+        if (d > Math.PI) d -= 2 * Math.PI;
+        if (d < -Math.PI) d += 2 * Math.PI;
+        if (!g.turning && Math.abs(d) > 8 * Math.PI / 180) {
+          g.turning = true;
+          g.angle = now.angle;
+          g.bearing = this.bearing;
+          d = 0;
+        }
+        if (g.turning) {
+          this.rotateAround(g.bearing + d * 180 / Math.PI, now.mx, now.my);
           this.onUserMove();
         }
         return;
@@ -667,6 +771,9 @@ export class MapCanvas {
       mx: (a.x + b.x) / 2 - r.left,
       my: (a.y + b.y) / 2 - r.top,
       zoom: this.zoom,
+      angle: Math.atan2(b.y - a.y, b.x - a.x),
+      bearing: this.bearing,
+      turning: false,
     };
   }
 
@@ -724,6 +831,7 @@ export class MapCanvas {
 }
 
 function tk(src, z, x, y) { return `${src}/${z}/${x}/${y}`; }
+function normBearing(b) { const v = ((Number(b) || 0) % 360 + 360) % 360; return Math.abs(v) < 0.05 || Math.abs(v - 360) < 0.05 ? 0 : v; }
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 function wrapX(x) { return x - Math.floor(x); }
 

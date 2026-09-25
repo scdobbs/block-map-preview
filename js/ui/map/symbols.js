@@ -27,6 +27,9 @@ function azVec(azDeg) {
  */
 export function drawStation(ctx, x, y, st, {
   size = 15, color = '#ffc857', selected = false, label = null, scale = 1,
+  // Radians the canvas is already turned by. Text is counter-rotated by
+  // this much so a station number stays readable on a turned sheet.
+  upright = 0,
 } = {}) {
   const s = size * scale;
   const lw = Math.max(1.6, 2 * scale);
@@ -78,7 +81,7 @@ export function drawStation(ctx, x, y, st, {
       ctx.stroke();
     }, lw, color);
     drawText(ctx, `${Math.round(st.plunge)}`, -tx * (len + 9 * scale), -ty * (len + 9 * scale), {
-      color, scale, weight: 600,
+      color, scale, weight: 600, upright,
     });
   } else if (!hasAttitude) {
     // A station with no attitude: a plain ring. It is a real observation and
@@ -155,7 +158,7 @@ export function drawStation(ctx, x, y, st, {
       // symbol round.
       drawText(ctx, `${Math.round(st.dip)}`,
         ox + dx * (tick + 9 * scale), oy + dy * (tick + 9 * scale), {
-        color, scale, weight: 600,
+        color, scale, weight: 600, upright,
       });
     }
   }
@@ -171,17 +174,17 @@ export function drawStation(ctx, x, y, st, {
       // Down-plunge end; the plunge number is at the tail.
       const [ux, uy] = azVec(st.trend + 90);
       drawText(ctx, annot, ux * s * 0.7, uy * s * 0.7, {
-        color: '#dce8f0', scale, size: 10, weight: 650, align: 'center',
+        color: '#dce8f0', scale, size: 10, weight: 650, align: 'center', upright,
       });
     } else if (hasAttitude && !linear && st.dip >= FLAT_DIP) {
       const [ux, uy] = azVec(st.strike - 90);
       drawText(ctx, annot, ux * s * 0.62, uy * s * 0.62, {
-        color: '#dce8f0', scale, size: 10, weight: 650, align: 'center',
+        color: '#dce8f0', scale, size: 10, weight: 650, align: 'center', upright,
       });
     } else {
       // No dip direction to hang it off; the corner is free either way.
       drawText(ctx, annot, s * 0.85, -s * 0.78, {
-        color: '#dce8f0', scale, size: 10, weight: 650, align: 'left',
+        color: '#dce8f0', scale, size: 10, weight: 650, align: 'left', upright,
       });
     }
   }
@@ -199,16 +202,18 @@ export function drawStation(ctx, x, y, st, {
   ctx.restore();
 }
 
-function drawText(ctx, text, x, y, { color = '#fff', scale = 1, size = 11, weight = 600, align = 'center' } = {}) {
+function drawText(ctx, text, x, y, { color = '#fff', scale = 1, size = 11, weight = 600, align = 'center', upright = 0 } = {}) {
   ctx.save();
+  ctx.translate(x, y);
+  if (upright) ctx.rotate(-upright);
   ctx.font = `${weight} ${size * scale}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
   ctx.lineWidth = 3 * scale;
   ctx.strokeStyle = 'rgba(8, 12, 15, .8)';
-  ctx.strokeText(text, x, y);
+  ctx.strokeText(text, 0, 0);
   ctx.fillStyle = color;
-  ctx.fillText(text, x, y);
+  ctx.fillText(text, 0, 0);
   ctx.restore();
 }
 
