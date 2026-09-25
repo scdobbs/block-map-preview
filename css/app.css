@@ -1083,6 +1083,9 @@ html, body {
 .map-pane {
   position: relative; flex: 1 1 auto; min-width: 0; min-height: 0;
   overflow: hidden; display: none;
+  /* The pane paints the map's own ground, so a canvas caught a frame
+     behind a resize never shows the page through. */
+  background: var(--canvas);
 }
 .mode-map .map-pane { display: block; }
 .mode-map .block-pane, .mode-map .stereo-panel { display: none !important; }
@@ -1100,13 +1103,15 @@ html, body {
   height: 7px; border: 1px solid var(--ink-dim); border-top: 0;
   display: inline-block;
 }
+/* Bottom left, above the scale bar, well away from the button column on the
+   right, and small: it is a credit, not a control. */
 .map-attrib {
   position: absolute; z-index: 5;
-  right: calc(10px + env(safe-area-inset-right));
-  bottom: calc(10px + env(safe-area-inset-bottom));
-  font-size: 10.5px; color: var(--ink-faint);
-  background: var(--glass-soft); padding: 3px 7px; border-radius: 6px;
-  pointer-events: none; max-width: 55%; text-align: right;
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(36px + env(safe-area-inset-bottom));
+  font-size: 9px; line-height: 1.2; color: var(--ink-faint);
+  background: var(--glass-soft); padding: 2px 6px; border-radius: 5px;
+  pointer-events: none; max-width: 60%; text-align: left;
 }
 
 /* Everything transient along the bottom of the map, in one column, clear of

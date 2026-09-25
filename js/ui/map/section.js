@@ -258,6 +258,12 @@ export class MapSection {
     this.map.purge();
     this.closeMeasure();
     if (this.placeMode) this.togglePlace();
+    // Full screen is a fact about this minute, as the block's is: a project
+    // opened later comes back with its panel showing. Leaving the flag set
+    // was also how the button could show full screen while the sheet was
+    // there: the flag arrived from the database after the section had
+    // started and the root class was never applied.
+    doc.settings.mapFull = false;
     this.store.replace(doc, true);
     // A project you have just opened has nothing to undo back into.
     this.store.undoStack.length = 0;
@@ -831,14 +837,21 @@ export class MapSection {
     this.host._syncFullClass();
     this._syncFullButton();
     // The sheet has gone or come back, so the map has a different amount of
-    // screen. The canvas watches its own box, but the block's canvas does not.
-    requestAnimationFrame(() => this.host.scene?.resize?.());
+    // screen. The canvas watches its own box, but that observer has been
+    // seen to miss a frame on iOS and leave a strip of the old size unpainted,
+    // so the map is sized again outright, now and once the layout has
+    // settled. The block's canvas does not watch its box at all.
+    const again = () => { this.map.resize(); this.map.invalidate(); this.host.scene?.resize?.(); };
+    requestAnimationFrame(again);
+    setTimeout(again, 350);
   }
 
   fullMap() { return this.store.doc.settings.mapFull === true; }
 
   _syncFullButton() {
     const on = this.fullMap();
+    // The button and the root class read the same flag at the same moment.
+    if (this._started) this.host._syncFullClass();
     clear(this.fullBtn);
     this.fullBtn.appendChild(on ? collapseIcon() : expandIcon());
     this.fullBtn.classList.toggle('on', on);
