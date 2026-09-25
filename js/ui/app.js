@@ -532,18 +532,33 @@ export class App {
   }
 
   _renderPanel() {
+    // Rebuilding the same tab keeps its scroll: tapping a station card in a
+    // long list rebuilds the panel, and coming back at the top every time
+    // meant scrolling down again to find the card just opened. A different
+    // tab starts at the top. Restored on a timeout, after the list has had
+    // its tick to set its full height, or the scroll would clamp to zero.
+    const key = `${this.mode}:${this._activeTabId()}`;
+    const y = key === this._panelKey ? this.sheetBody.scrollTop : 0;
+    this._panelKey = key;
     clear(this.sheetBody);
     const section = this.section;
+    let panel;
     if (section) {
-      const panel = section.buildPanel(section.activeTab);
+      panel = section.buildPanel(section.activeTab);
       this.panels[this.mode] = panel;
-      this.sheetBody.appendChild(panel);
-      return;
+    } else {
+      const t = TABS.find((x) => x.id === this.activeTab);
+      panel = t.build(this.ctx);
+      this.panels[this.activeTab] = panel;
     }
-    const t = TABS.find((x) => x.id === this.activeTab);
-    const panel = t.build(this.ctx);
-    this.panels[this.activeTab] = panel;
     this.sheetBody.appendChild(panel);
+    if (y > 0) {
+      setTimeout(() => {
+        if (!panel.isConnected) return;
+        this.sheetBody.scrollTop = y;
+        panel.syncScroll?.();
+      }, 0);
+    }
   }
 
   setTab(id) {

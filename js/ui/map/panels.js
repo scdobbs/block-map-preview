@@ -436,9 +436,19 @@ export function stationsPanel(ctx) {
     const y = scroller.scrollTop - listTop();
     const viewH = scroller.clientHeight;
     const at = (py) => {
-      // Index of the card at a y within the list, allowing for the open one.
-      let i = Math.floor(py / H);
-      if (selIdx >= 0 && i > selIdx) i = Math.floor((py - (selH - H)) / H);
+      // Index of the card at a y within the list, allowing for the open one,
+      // which is taller than the rest. Inside it the answer is the open card
+      // itself; past it the rest are shifted down by its extra height. The
+      // first version got this wrong inside the open card and handed back an
+      // index before it, so the window came out empty and the list vanished
+      // exactly when the open card scrolled into view.
+      let i;
+      if (selIdx >= 0 && py >= selIdx * H) {
+        const end = selIdx * H + selH;
+        i = py < end ? selIdx : selIdx + 1 + Math.floor((py - end) / H);
+      } else {
+        i = Math.floor(py / H);
+      }
       return Math.max(0, Math.min(sorted.length, i));
     };
     const i0 = Math.max(0, at(y) - OVER);
@@ -487,6 +497,9 @@ export function stationsPanel(ctx) {
     render(true);
     if (node._revealWanted) node.revealSelected();
   }, 0);
+
+  /** After the sheet's scroll was set from outside, redraw the window. */
+  node.syncScroll = () => render(false);
 
   /** Scroll so the selected station's card is at the top of the sheet. */
   node.revealSelected = () => {
