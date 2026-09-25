@@ -1101,12 +1101,6 @@ export function linesPanel(ctx) {
 // Areas
 // ---------------------------------------------------------------------------
 
-// readyBlock and packsBlock are built here, beside the tile code they report
-// on, but they are rendered by the course tab in the block's own panel set.
-// They ask nothing of the Areas panel and are exported rather than moved: the
-// map section's panelContext is exactly the set of accessors they need, and
-// copying them somewhere else would mean maintaining that contract twice.
-
 /**
  * The question that only gets asked in a parking lot.
  *
@@ -1297,6 +1291,12 @@ export function areasPanel(ctx) {
   node.appendChild(head('Offline areas',
     'Download a map before you leave. This is the only part that needs a connection.'));
 
+  // Whether the phone can leave signal at all, then the shipped packs, then
+  // the hand-drawn areas: the order a student actually needs them in.
+  node.appendChild(readyBlock(ctx));
+  const packs = packsBlock(ctx);
+  if (packs) node.appendChild(packs);
+
   const online = navigator.onLine !== false;
   let sizeStat = null, tilesStat = null, bytesStat = null;
   let newProgress = null;
@@ -1457,6 +1457,8 @@ export function areasPanel(ctx) {
       if (newProgress && p.areaId === ctx.draftArea()?.id) newProgress.set(p);
       areaProgress.get(p.areaId)?.set(p);
     }
+    const pp = ctx.packProgress();
+    if (pp) packs?.refreshBars?.(pp);
     if (!sizeStat) return;
     const box = ctx.selection();
     if (!box) return;

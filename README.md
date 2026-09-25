@@ -420,9 +420,7 @@ rather than stranded.
 
 ## Before you leave, while you still have signal
 
-Everything in this section lives on the **EPS 105** tab, in the block's own tab
-bar. It is there rather than in the Map section because it all has to be
-reachable on day one, when the Map section may still be locked.
+Everything in this section is at the top of **Map → Areas**.
 
 **Field ready** answers the only question anybody actually asks in a parking
 lot: can this phone be walked away from a connection right now. It counts what
@@ -1746,36 +1744,17 @@ and discouraging, so the line reads from `persisted || isInstalled()`.
 
 ## The course gate
 
-`js/unlock.js` releases the app in stages for a field course: the block alone
-to start with, so a hypothesis has to be argued from the rock rather than
-looked up; then the map and the column; then the block cut from the mapped
-area. A password from the instructor opens each one, entered on the **EPS 105**
-tab and remembered on that phone.
+Removed. Earlier builds released the app in stages for one field course, with
+a password from the instructor opening each one on an **EPS 105** tab. The
+class is over, so `js/unlock.js`, that tab and the three call sites that read
+the gate are gone, and the field-ready check and the course packs it hosted
+now sit at the top of **Map → Areas**.
 
-Two things about it are worth saying plainly.
-
-**It is a latch, not a lock.** The app is a static page served from a public
-repository. The passwords are in `js/unlock.js`, that file is readable by
-anyone, and a student who wants past a stage can get there. That is the right
-target: the gate exists so nobody wanders into stage three by tapping around on
-day one, not to defeat somebody who has decided to cheat — who could equally
-use any other app on the phone. Nothing here is worth defending harder than
-that, which is also why an unlocked stage shows its own password back: it was
-read aloud to a group standing outdoors, and the alternative to showing it is a
-student walking back across a hillside to ask.
-
-**It is temporary.** The stages belong to one course. A later build for a
-general audience deletes `js/unlock.js`, the `course` entry in the block's
-`TABS`, `coursePanel`, and the three call sites that read the gate — the mode
-switch in `js/ui/app.js`, the `tabs` getter in `js/ui/map/section.js`, and the
-panel itself. Nothing else knows about it.
-
-One thing the gate did force. Declination lives on Map → Setup, behind the
-first stage, so a student on day one would have been told to set a number they
-could not reach — a readiness check reporting a problem with no available
-remedy, which is worse than not reporting it. The check now fills it in itself
-from the field area's centre, so the card can reach fully green with both
-stages still locked. `_ensureDeclination` in `js/ui/map/section.js`.
+One thing the gate forced is kept, because it is right anyway. Declination
+lives on Map → Setup, and a readiness check that reported it unset would be
+reporting a problem and leaving the fix to the student. The check fills it in
+itself from the field area's centre, so the card can reach fully green before
+Setup has been opened. `_ensureDeclination` in `js/ui/map/section.js`.
 
 It does not wait for a downloaded area either. `_declinationPoint` takes one
 when the notebook has it and otherwise falls back to the shipped pack index,
@@ -1849,7 +1828,6 @@ vendor/three.module.js
 js/
   main.js             bootstrap, service worker, update prompt
   store.js            document state, undo/redo, autosave, import/export
-  unlock.js           the course gate — temporary, see "The course gate"
   geo/
     math.js           strike/dip/rake vectors and frames
     model.js          rock types, event definitions, defaults, presets
@@ -1883,7 +1861,7 @@ js/
     model.js          rank, grain-size scales, layout, thicknesses and their argument
   ui/
     app.js            shell, section switch, tabs, identify tool, time machine, files
-    panels.js         layers / history / terrain / field / view / EPS 105 panels
+    panels.js         layers / history / terrain / field / view panels
     stereonet.js      the net, and the readout of what it found
     groundMap.js      the map beside the block: walked vs predicted
     crossSection.js   the section beside the block: A–A′ and the plot
