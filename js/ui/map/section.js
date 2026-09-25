@@ -15,7 +15,7 @@ import { niceScaleBar } from './symbols.js';
 import { FieldStore, loadWorkspace, readProject, writeProject, writeIndex,
   removeProject, projectMeta } from '../../field/store.js';
 import { defaultFieldDocument, migrateFieldDoc, makeStation, makeArea, makePatch, makeUnit,
-  nextStationName, toGeoJSON, toCSV, toKML, toLinesCSV, isLinearFeature, makeLine,
+  nextStationName, closeNumberGap, toGeoJSON, toCSV, toKML, toLinesCSV, isLinearFeature, makeLine,
   lineKind, lineIsDrawable, lineLength, formatAttitude } from '../../field/model.js';
 import { Clinometer, GeoWatch, fixAge } from '../../field/sensors.js';
 import { fetchDeclination as lookupDeclination } from '../../field/declination.js';
@@ -1163,9 +1163,13 @@ export class MapSection {
     // Same hazard as a line: a station you have walked away from cannot be
     // taken again, and the delete button sits in a list of taps.
     const bits = [formatAttitude(st), st.unitName].filter((b) => b && b !== 'no attitude');
-    if (!confirm(`Delete station ${st.name || ''}?${bits.length ? `\n\n${bits.join(' · ')}` : ''}\n\nThis cannot be undone once the app is closed.`)) return;
+    const numbered = /^\s*[0-9]+\s*$/.test(String(st.name || ''));
+    if (!confirm(`Delete station ${st.name || ''}?${bits.length ? `\n\n${bits.join(' · ')}` : ''}`
+      + (numbered ? '\n\nStations numbered after it move down by one, so the sequence stays continuous.' : '')
+      + '\n\nThis cannot be undone once the app is closed.')) return;
     this.store.edit((doc) => {
       doc.stations = doc.stations.filter((s) => s.id !== id);
+      closeNumberGap(doc.stations, st.name);
     }, { structural: true });
     if (this.selectedStationId === id) this.selectedStationId = null;
   }

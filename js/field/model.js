@@ -300,6 +300,34 @@ export function linkStationsToUnits(doc) {
   return changed;
 }
 
+/**
+ * Close the gap a deleted station leaves in the numbering.
+ *
+ * Stations are numbered in the order they were taken, and the list should
+ * read 100, 101, 102 after a deletion rather than 100, 102, 103. Only bare
+ * integer names take part: every one greater than the deleted number comes
+ * down by one. Names with letters in them are left alone, and nothing moves
+ * if the deleted number is still in use by another station (a duplicate),
+ * since shifting would then make a second collision. Returns the renames as
+ * [from, to] pairs.
+ */
+export function closeNumberGap(stations, deletedName) {
+  const n = bareNumber(deletedName);
+  if (n == null) return [];
+  if (stations.some((s) => bareNumber(s.name) === n)) return [];
+  const renamed = [];
+  for (const s of stations) {
+    const k = bareNumber(s.name);
+    if (k != null && k > n) { renamed.push([s.name, String(k - 1)]); s.name = String(k - 1); }
+  }
+  return renamed;
+}
+
+function bareNumber(name) {
+  const t = String(name || '').trim();
+  return /^[0-9]+$/.test(t) ? parseInt(t, 10) : null;
+}
+
 export function hasAttitude(st) {
   return isLinearFeature(st.feature)
     ? Number.isFinite(st.trend) && Number.isFinite(st.plunge)
