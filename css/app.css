@@ -1153,6 +1153,12 @@ html, body {
   border-radius: var(--radius); backdrop-filter: blur(10px);
 }
 .map-readout.hidden { display: none; }
+/* The readout's text is a button that opens the station on its tab. */
+.readout-open {
+  flex: 1 1 auto; min-width: 0; text-align: left; padding: 0; margin: 0;
+  background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 /* The station list only builds the cards near the viewport; these hold the
    height of the ones it has not. */
 .vlist { display: block; }

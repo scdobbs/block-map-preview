@@ -742,14 +742,30 @@ export class MapSection {
     const attitude = Number.isFinite(st.strike)
       ? `${String(Math.round(st.strike)).padStart(3, '0')}/${Math.round(st.dip)}`
       : 'no attitude';
+    // The chip is a way in as well as a readout: tap it and the station
+    // opens on the Stations tab, scrolled into view.
     this.readout.append(
-      el('strong', { text: `${st.name || '—'}  ${attitude}` }),
-      el('span', { text: st.unitName ? ` ·\u00a0${st.unitName}` : '' }),
+      el('button', {
+        class: 'readout-open', type: 'button',
+        title: 'Open on the Stations tab',
+        onclick: () => this.openStationInList(st.id),
+      }, [
+        el('strong', { text: `${st.name || '—'}  ${attitude}` }),
+        el('span', { text: st.unitName ? ` ·\u00a0${st.unitName}` : '' }),
+      ]),
       el('button', {
         class: 'chip-close', type: 'button', text: '×', 'aria-label': 'Deselect',
         onclick: () => this.selectStation(null),
       }),
     );
+  }
+
+  /** Show a station's card and editor on the Stations tab. */
+  openStationInList(id) {
+    this.selectedStationId = id;
+    this.map.selectedId = id;
+    this.host.setTab('stations');
+    setTimeout(() => this.host.sectionPanel?.revealSelected?.(), 0);
   }
 
   /**
