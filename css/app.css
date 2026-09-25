@@ -1213,13 +1213,22 @@ html, body {
   font-size: 26px; line-height: 1; cursor: pointer; padding: 0;
 }
 
-/* The dial takes whatever room the controls do not. The SVG letterboxes
-   itself, so this works from a small phone to a tablet without breakpoints. */
+/* Between the header and the buttons everything scrolls: the dial, the
+   readout, and the details of the station being recorded. The buttons stay
+   put at the foot so Save is never off the bottom of a long form. */
+.mf-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; gap: 6px;
+  overscroll-behavior: contain;
+}
 .mf-dial-wrap {
-  flex: 1 1 auto; min-height: 140px;
+  flex: 0 0 auto; height: min(64vw, 36vh); min-height: 140px;
   display: grid; place-items: center;
 }
 .mf-dial { width: 100%; height: 100%; display: block; }
+.mf-details { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 2px; }
+.mf-details .ctl { margin: 8px 0; }
+.mf-actions { flex: 0 0 auto; display: grid; gap: 6px; padding-top: 4px; }
 
 .mf-face { fill: #0c1216; stroke: var(--line); stroke-width: 1.5; }
 .mf-inner { fill: none; stroke: rgba(255, 255, 255, .06); stroke-width: 1; }
@@ -1293,19 +1302,20 @@ html, body {
 .held-reading .held-scatter { color: var(--ink-faint); }
 
 /* Landscape, or a tablet: the dial goes beside the controls rather than
-   shrinking to a coin above them. */
+   shrinking to a coin above them, and stays put while the details scroll. */
 @media (min-aspect-ratio: 1/1) {
-  .measure-full {
+  .mf-scroll {
     display: grid; gap: 6px 22px;
     grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
-    grid-template-rows: auto 1fr;
     align-content: start;
   }
-  .mf-head { grid-column: 1 / -1; }
-  .mf-dial-wrap { grid-row: 2; grid-column: 1; }
-  .mf-readout, .mf-steady, .mf-steady-text, .mf-chips,
-  .mf-hold, .mf-save, .mf-why, .mf-foot { grid-column: 2; }
-  .mf-readout { align-self: end; }
+  .mf-dial-wrap {
+    grid-column: 1; grid-row: 1 / span 6; height: auto; max-height: 62vh;
+    position: sticky; top: 0;
+  }
+  .mf-readout, .mf-steady, .mf-steady-text, .mf-chips, .mf-details { grid-column: 2; }
+  .mf-actions { grid-template-columns: 1fr 1fr; }
+  .mf-why, .mf-foot { grid-column: 1 / -1; }
 }
 
 /* The dial is a tap target as well as a picture. */

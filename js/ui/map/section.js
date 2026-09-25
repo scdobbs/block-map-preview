@@ -955,6 +955,8 @@ export class MapSection {
   measureContext() {
     return {
       draft: this.draft,
+      doc: () => this.store.doc,
+      touchDraft: () => this.touchDraft(),
       clinoState: () => this.clino.state,
       geoState: () => this.geo.state,
       groundElevation: () => this.groundElevation(),

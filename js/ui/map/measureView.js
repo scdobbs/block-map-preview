@@ -11,10 +11,10 @@
 // for walking a bearing; for reading a structure the useful thing is to see the
 // strike-and-dip mark in the same orientation it will have on the map.
 
-import { el, svg, clear } from '../widgets.js';
+import { el, svg, clear, chipsRow, textRow, selectRow, toggleRow, noteRow } from '../widgets.js';
 import { quadrantBearing } from '../../geo/math.js';
-import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, feature, isLinearFeature }
-  from '../../field/model.js';
+import { FEATURES, PLANAR_FEATURES, LINEAR_FEATURES, feature, isLinearFeature,
+  CERTAINTIES, ROCKS, knownUnitNames, canBeOverturned } from '../../field/model.js';
 import { vecToTrendPlunge } from '../../geo/stereonet.js';
 import { formatDeclination } from '../../field/declination.js';
 import { fixAge } from '../../field/sensors.js';
@@ -53,6 +53,13 @@ export function measureView(ctx) {
     }, [el('span', { text: '×' })]),
   ]));
 
+  // Everything between the header and the buttons scrolls. The reading and
+  // what it was a reading of are recorded from one screen, so the details
+  // sit under the dial rather than on a panel you have to close this to
+  // reach.
+  const body = el('div', { class: 'mf-scroll' });
+  node.appendChild(body);
+
   // --- the dial -----------------------------------------------------------
   const face = svg('svg', { viewBox: '0 0 200 200', class: 'mf-dial' });
   buildRose(face);
@@ -80,7 +87,7 @@ export function measureView(ctx) {
   const dialWrap = el('div', { class: 'mf-dial-wrap', role: 'button', tabindex: '0',
     title: 'Tap to hold the reading' }, [face]);
   dialWrap.addEventListener('click', () => ctx.captureCompass());
-  node.appendChild(dialWrap);
+  body.appendChild(dialWrap);
 
   // --- readout ------------------------------------------------------------
   const big = el('div', { class: 'mf-big', text: '—' });
@@ -100,7 +107,7 @@ export function measureView(ctx) {
   const inclArc = svg('path', { class: 'mf-arc' });
   incl.append(inclArc, inclRay);
 
-  node.appendChild(el('div', { class: 'mf-readout' }, [
+  body.appendChild(el('div', { class: 'mf-readout' }, [
     el('div', { class: 'mf-numbers' }, [big, sub, units, derived]),
     el('div', { class: 'mf-incl-wrap' }, [incl]),
   ]));
@@ -108,11 +115,15 @@ export function measureView(ctx) {
   // --- steadiness ---------------------------------------------------------
   const bar = el('div', { class: 'mf-steady' }, [el('span', { class: 'mf-steady-fill' })]);
   const steadyText = el('div', { class: 'mf-steady-text', text: '' });
-  node.append(bar, steadyText);
+  body.append(bar, steadyText);
 
   // --- what it is ---------------------------------------------------------
   const chips = el('div', { class: 'chips mf-chips' });
-  node.appendChild(chips);
+  body.appendChild(chips);
+
+  // --- the rest of the record ----------------------------------------------
+  const details = buildDetails(ctx);
+  body.appendChild(details.node);
 
   // --- actions ------------------------------------------------------------
   const holdBtn = el('button', {
@@ -125,7 +136,7 @@ export function measureView(ctx) {
   });
   const why = el('div', { class: 'mf-why', text: '' });
   const foot = el('div', { class: 'mf-foot', text: '' });
-  node.append(holdBtn, saveBtn, why, foot);
+  node.appendChild(el('div', { class: 'mf-actions' }, [holdBtn, saveBtn, why, foot]));
 
   // -------------------------------------------------------------------------
 
@@ -225,6 +236,7 @@ export function measureView(ctx) {
 
     holdBtn.textContent = held ? 'Take a new reading' : 'Hold the reading';
     holdBtn.classList.toggle('primary', !held);
+    details.refresh();
 
     const target = ctx.measureTarget?.() || null;
     forStation.textContent = target ? `→ station ${target.name || '—'}` : '';
@@ -260,6 +272,97 @@ export function measureView(ctx) {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Unit, rock type, confidence, way-up and note: the same fields the Measure
+ * panel has, written into the same draft, so a station can be recorded whole
+ * without leaving the dial.
+ *
+ * Built once. The sensors refresh this view several times a second, and a
+ * form rebuilt that often would throw away a half-typed note, so refresh()
+ * only pushes a value into a control when the draft has changed under it:
+ * after a save empties the note, or when the feature chips move off bedding
+ * and the overturned switch stops applying.
+ */
+function buildDetails(ctx) {
+  const draft = ctx.draft;
+  const doc = ctx.doc();
+  const node = el('div', { class: 'mf-details' });
+
+  const known = knownUnitNames(doc);
+  const listId = 'mf-unit-names';
+  node.appendChild(el('datalist', { id: listId }, known.map((k) => el('option', { value: k.name }))));
+
+  const linkUnit = (name) => {
+    draft.unitName = String(name || '').trim();
+    const u = doc.units.find((x) => x.name.toLowerCase() === draft.unitName.toLowerCase());
+    draft.unitId = u ? u.id : null;
+    if (u) draft.rockId = u.rockId;
+  };
+
+  let unitChips = null;
+  if (known.length) {
+    unitChips = chipsRow({
+      label: 'Unit',
+      value: draft.unitName,
+      options: known.slice(0, 8).map((k) => ({ id: k.name, label: k.name })),
+      onChange: (v) => { linkUnit(v); unitText.input.value = draft.unitName; syncRock(); ctx.touchDraft(); },
+    });
+    node.appendChild(unitChips);
+  }
+  const unitText = textRow({
+    label: known.length ? 'Or type a unit name' : 'Unit',
+    value: draft.unitName, list: listId,
+    onChange: (v) => { linkUnit(v); unitChips?.setValue(draft.unitName); syncRock(); ctx.touchDraft(); },
+  });
+  node.appendChild(unitText);
+
+  const rockRow = selectRow({
+    label: 'Rock type',
+    value: draft.rockId || 'sandstone',
+    options: ROCKS.map((r) => ({ value: r.id, label: `${r.group} — ${r.label}` })),
+    onChange: (v) => { draft.rockId = v; ctx.touchDraft(); },
+  });
+  const rockSelect = rockRow.querySelector('select');
+  const syncRock = () => { rockSelect.value = draft.rockId || 'sandstone'; };
+  node.appendChild(rockRow);
+
+  node.appendChild(chipsRow({
+    label: 'Confidence',
+    value: draft.certainty,
+    options: CERTAINTIES.map((c) => ({ id: c.id, label: c.label, hint: c.hint })),
+    onChange: (v) => { draft.certainty = v; ctx.touchDraft(); },
+  }));
+
+  // Bedding only, for the reason the Measure panel gives: nothing else has a
+  // younger side to be on the wrong one of.
+  const overturned = toggleRow({
+    label: 'Overturned',
+    value: draft.overturned === true,
+    onChange: (v) => { draft.overturned = v; ctx.touchDraft(); },
+  });
+  node.appendChild(overturned);
+
+  const note = noteRow({
+    label: 'Note', value: draft.note, rows: 2,
+    onChange: (v) => { draft.note = v; ctx.touchDraft(); },
+  });
+  node.appendChild(note);
+
+  let lastNote = draft.note;
+  let lastUnit = draft.unitName;
+  node.refresh = () => {
+    overturned.style.display = canBeOverturned(draft.feature) ? '' : 'none';
+    if (draft.note !== lastNote) { lastNote = draft.note; note.input.value = draft.note || ''; }
+    if (draft.unitName !== lastUnit) {
+      lastUnit = draft.unitName;
+      unitText.input.value = draft.unitName || '';
+      unitChips?.setValue(draft.unitName);
+      syncRock();
+    }
+  };
+  return { node, refresh: node.refresh };
+}
 
 /** The fixed 0-360 card: ticks every 5, numbers every 30, letters at the quarters. */
 function buildRose(face) {
