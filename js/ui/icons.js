@@ -278,3 +278,26 @@ export function strikeDipMark(strike, dip, cls = 'sd-mark') {
   node.appendChild(g);
   return node;
 }
+
+/**
+ * The rose: a fixed face with N and a needle that turns. Over the block it
+ * turns with the camera; over the map it turns with the sheet. One drawing
+ * for both, so north looks the same wherever it is.
+ */
+export function compassRose() {
+  const node = svg('svg', { viewBox: '0 0 64 64', class: 'compass' });
+  node.appendChild(svg('circle', { cx: 32, cy: 32, r: 29, class: 'compass-face' }));
+  const dial = svg('g', {});
+  dial.appendChild(svg('text', { x: 32, y: 13, 'text-anchor': 'middle', class: 'compass-n', text: 'N' }));
+  dial.appendChild(svg('path', { d: 'M32 16 L38 33 L32 28 L26 33 Z', class: 'needle-n' }));
+  dial.appendChild(svg('path', { d: 'M32 55 L26 33 L32 38 L38 33 Z', class: 'needle-s' }));
+  node.appendChild(dial);
+
+  return {
+    node,
+    update(azimuth) {
+      // Camera azimuth is the direction we look from, so the rose counter-rotates.
+      dial.setAttribute('transform', `rotate(${-azimuth} 32 32)`);
+    },
+  };
+}

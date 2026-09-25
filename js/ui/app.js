@@ -2,7 +2,7 @@
 
 import { el, svg, clear } from './widgets.js';
 import { swatchEl } from './swatch.js';
-import { tabIcon, expandIcon, collapseIcon, recenterIcon } from './icons.js';
+import { tabIcon, expandIcon, collapseIcon, recenterIcon, compassRose } from './icons.js';
 import { layersPanel, historyPanel, terrainPanel, viewPanel, fieldPanel } from './panels.js';
 import { stereonet } from './stereonet.js';
 import { groundMapPane, GroundMap } from './groundMap.js';
@@ -1411,25 +1411,6 @@ function iconBtn(glyph, label, onClick) {
   return el('button', { class: 'icon-btn', type: 'button', title: label, 'aria-label': label, onclick: onClick }, [
     typeof glyph === 'string' ? el('span', { text: glyph }) : glyph,
   ]);
-}
-
-/** Small rose that spins with the camera so north is never in doubt. */
-function compassRose() {
-  const node = svg('svg', { viewBox: '0 0 64 64', class: 'compass' });
-  node.appendChild(svg('circle', { cx: 32, cy: 32, r: 29, class: 'compass-face' }));
-  const dial = svg('g', {});
-  dial.appendChild(svg('text', { x: 32, y: 13, 'text-anchor': 'middle', class: 'compass-n', text: 'N' }));
-  dial.appendChild(svg('path', { d: 'M32 16 L38 33 L32 28 L26 33 Z', class: 'needle-n' }));
-  dial.appendChild(svg('path', { d: 'M32 55 L26 33 L32 38 L38 33 Z', class: 'needle-s' }));
-  node.appendChild(dial);
-
-  return {
-    node,
-    update(azimuth) {
-      // Camera azimuth is the direction we look from, so the rose counter-rotates.
-      dial.setAttribute('transform', `rotate(${-azimuth} 32 32)`);
-    },
-  };
 }
 
 /** What to say beside the numbers: a bearing only when there is one to give. */

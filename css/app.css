@@ -228,11 +228,9 @@ html, body {
 
 .compass { width: 56px; height: 56px; cursor: pointer; }
 .compass:active .compass-face { fill: var(--bg-3); }
-/* The map's north arrow: the icon turns with the sheet, the button does not. */
-.north-btn .hud-icon { transition: transform .12s; transform-origin: 50% 50%; }
-.north-btn.on { border-color: var(--accent); }
-.north-btn.on .hud-icon .tabicon-fill { fill: var(--accent); }
-.north-btn.on .hud-icon .tabicon-line { stroke: var(--accent); }
+/* Over the map the same rose turns with the sheet; its rim lights when the
+   sheet is off north, which is when tapping it does something. */
+.compass.turned .compass-face { stroke: var(--accent); }
 .compass-face { fill: var(--glass); stroke: var(--line); }
 .needle-n { fill: var(--danger); }
 .needle-s { fill: var(--tick-2); }

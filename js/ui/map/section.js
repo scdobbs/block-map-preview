@@ -6,7 +6,7 @@
 // a record of an outcrop that actually exists.
 
 import { el, clear } from '../widgets.js';
-import { expandIcon, collapseIcon } from '../icons.js';
+import { expandIcon, collapseIcon, compassRose } from '../icons.js';
 import { MapCanvas } from './canvas.js';
 import { measurePanel, stationsPanel, linesPanel, areasPanel, setupPanel } from './panels.js';
 import { blockPanel } from './blockPanel.js';
@@ -140,10 +140,12 @@ export class MapSection {
     // Where north is on a turned sheet. One tap puts the map north-up; two
     // put the block diagram north-up as well, so both views can be squared
     // from either one.
-    this.northIcon = northIcon();
-    this.northBtn = hudBtn(this.northIcon, 'North. Tap to put north up; double-tap to square the block too',
-      () => this._northTap());
-    this.northBtn.classList.add('north-btn');
+    this.northRose = compassRose();
+    this.northBtn = this.northRose.node;
+    this.northBtn.setAttribute('role', 'button');
+    this.northBtn.setAttribute('tabindex', '0');
+    this.northBtn.setAttribute('aria-label', 'North. Tap to put north up; double-tap to square the block too');
+    this.northBtn.addEventListener('click', () => this._northTap());
     this._northTapAt = 0;
     this.locateBtn = hudBtn(locateIcon(), 'Center on me', () => this.locate());
     this.layerBtn = hudBtn(layersIcon(), 'Change layer', () => this.cycleLayer());
@@ -436,9 +438,11 @@ export class MapSection {
     );
     const src = SOURCES[this.store.doc.settings.baseLayer];
     this.attrib.textContent = src ? src.attribution : '';
-    // The arrow turns with the sheet, so it always points at north.
-    this.northIcon.style.transform = `rotate(${this.map.bearing}deg)`;
-    this.northBtn.classList.toggle('on', this.map.bearing !== 0);
+    // The needle turns with the sheet, so it always points at north. The
+    // rose's update takes a camera azimuth and counter-rotates; a sheet
+    // turned clockwise by b has north at +b, hence the sign.
+    this.northRose.update(-this.map.bearing);
+    this.northBtn.classList.toggle('turned', this.map.bearing !== 0);
   }
 
   /** One tap squares the map; a second within a beat squares the block too. */
@@ -2101,16 +2105,7 @@ const locateIcon = () => svgIcon(['M12 3 V6 M12 18 V21 M3 12 H6 M18 12 H21',
 const layersIcon = () => svgIcon(['M12 3 L21 8 L12 13 L3 8 Z', 'M3 12.5 L12 17.5 L21 12.5',
   'M3 16.5 L12 21.5 L21 16.5']);
 const plusIcon = () => svgIcon(['M12 5 V19 M5 12 H19']);
-/** An arrow with a filled north half, turned by the bearing to keep pointing north. */
-function northIcon() {
-  const s = svgIcon(['M12 12 V21']);
-  const NS = 'http://www.w3.org/2000/svg';
-  const head = document.createElementNS(NS, 'path');
-  head.setAttribute('d', 'M12 2.5 L16.5 13.5 L12 11 L7.5 13.5 Z');
-  head.setAttribute('class', 'tabicon-fill');
-  s.appendChild(head);
-  return s;
-}
+
 
 function slug(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'field';
