@@ -223,7 +223,7 @@ html, body {
   backdrop-filter: blur(8px);
 }
 .icon-btn:disabled { opacity: .32; cursor: default; }
-.icon-btn.clear-btn { font-size: 26px; line-height: 1; color: var(--ink-dim); }
+.icon-btn.clear-btn { font-size: 26px; line-height: 1; color: var(--danger); }
 .icon-btn:active:not(:disabled) { background: var(--bg-3); }
 
 .compass { width: 56px; height: 56px; cursor: pointer; }
