@@ -423,6 +423,7 @@ export class App {
     }
     this.root.classList.toggle('mode-map', mode === 'map');
     this.root.classList.toggle('mode-strata', mode === 'strata');
+    document.body.classList.toggle('map-mode', mode === 'map');
     this._syncFullClass();
 
     if (mode === 'map') {

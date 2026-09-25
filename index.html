@@ -28,9 +28,7 @@
 (function () {
   var c = null;
   try { c = localStorage.getItem('blockdiagram.theme'); } catch (e) {}
-  var light = c === 'light' || (c !== 'dark' && window.matchMedia
-    && window.matchMedia('(prefers-color-scheme: light)').matches);
-  document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', c === 'light' ? 'light' : 'dark');
 })();
 </script>
 <link rel="stylesheet" href="./css/app.css">

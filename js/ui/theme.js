@@ -8,17 +8,20 @@
 // are on any paper.
 //
 // The choice is a fact about this phone, not about a block or a notebook, so
-// it lives in localStorage beside the last-open section.
+// it lives in localStorage beside the last-open section. There is no
+// "follow the system" setting: in the field the phone's own schedule for
+// dark mode is nobody's business, and a map that changes colour at dusk on
+// its own is a surprise.
 
 const KEY = 'blockdiagram.theme';
-const CHOICES = new Set(['auto', 'dark', 'light']);
+const CHOICES = new Set(['dark', 'light']);
 
-/** What was chosen: 'auto', 'dark' or 'light'. */
+/** What was chosen: 'dark' or 'light'. Dark until somebody says otherwise. */
 export function themeChoice() {
   try {
     const v = localStorage.getItem(KEY);
-    return CHOICES.has(v) ? v : 'auto';
-  } catch { return 'auto'; }
+    return CHOICES.has(v) ? v : 'dark';
+  } catch { return 'dark'; }
 }
 
 /** What is on screen right now: 'dark' or 'light'. */
@@ -26,17 +29,14 @@ export function activeTheme() {
   return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
 }
 
-function resolve(choice) {
-  if (choice === 'dark' || choice === 'light') return choice;
-  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-}
+function resolve(choice) { return choice === 'light' ? 'light' : 'dark'; }
 
 /**
  * Apply a choice. The attribute drives the stylesheet; the meta tag colours
  * the browser chrome to match; the event tells the canvases to repaint.
  */
 export function setTheme(choice) {
-  const c = CHOICES.has(choice) ? choice : 'auto';
+  const c = CHOICES.has(choice) ? choice : 'dark';
   try { localStorage.setItem(KEY, c); } catch { /* private browsing */ }
   apply(resolve(c));
 }
@@ -51,15 +51,8 @@ function apply(theme) {
   if (was !== theme) window.dispatchEvent(new CustomEvent('themechange', { detail: theme }));
 }
 
-/** Follow the system setting while the choice is 'auto'. */
+/** Make the meta tag and the attribute agree with the saved choice. */
 export function watchSystemTheme() {
-  const mq = window.matchMedia?.('(prefers-color-scheme: light)');
-  if (!mq) return;
-  const onChange = () => { if (themeChoice() === 'auto') apply(resolve('auto')); };
-  if (mq.addEventListener) mq.addEventListener('change', onChange);
-  else mq.addListener(onChange);
-  // index.html set the attribute before first paint; make sure the meta tag
-  // and the resolved value agree with it.
   apply(resolve(themeChoice()));
 }
 

@@ -1679,7 +1679,6 @@ export function themeRow() {
     label: 'Theme',
     value: themeChoice(),
     options: [
-      { id: 'auto', label: 'Automatic' },
       { id: 'dark', label: 'Dark' },
       { id: 'light', label: 'Light' },
     ],

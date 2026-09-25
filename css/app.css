@@ -1090,7 +1090,11 @@ html, body {
 .mode-map .map-pane { display: block; }
 .mode-map .block-pane, .mode-map .stereo-panel { display: none !important; }
 
-.mapview { display: block; width: 100%; height: 100%; touch-action: none; }
+.mapview { display: block; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+/* Behind the map the page is the map's own ground: whatever the phone
+   leaves unpainted at the edge of the screen, under the home indicator,
+   reads as map rather than as a stripe of page. */
+body.map-mode { background: var(--canvas); }
 
 .hud-icon { width: 22px; height: 22px; display: block; }
 .icon-btn.on { background: var(--accent); border-color: var(--accent); }
@@ -1488,7 +1492,13 @@ html, body {
    Block/Map switch nowhere to sit on a phone held upright — they overlapped.
    A column is also what every other map puts there. The block section keeps
    its compass in the corner and is untouched. */
-.map-pane .hud-right { flex-direction: column; }
+.map-pane .hud-right { flex-direction: column; align-items: center; }
+/* The map's column is 56px wide and sits clear of the centred switch even
+   on a phone, so it keeps the top row where the block's wider cluster has
+   to drop; that also keeps its last button off the sheet. */
+@media (max-width: 560px) {
+  .map-pane .hud-right { top: calc(10px + env(safe-area-inset-top)); }
+}
 
 /* Full-screen map: the panel goes away entirely, the same way the map goes
    away when the clinometer is open. Whichever one is being used gets the
