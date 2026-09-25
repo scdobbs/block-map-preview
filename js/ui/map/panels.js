@@ -379,16 +379,16 @@ export function stationsPanel(ctx) {
   const fix = ctx.geoState().fix;
   // Newest first: the one you want is almost always the one you just took.
   const sorted = [...list].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const selectedId = ctx.selectedStationId();
+  const selIdx = sorted.findIndex((s) => s.id === selectedId);
 
-  for (const st of sorted) {
+  const card = (st) => {
     const unit = st.unitId ? doc.units.find((u) => u.id === st.unitId) : null;
     const rock = rockOf(st.rockId);
-    const selected = st.id === ctx.selectedStationId();
-
+    const selected = st.id === selectedId;
     const away = fix ? distance(fix.lon, fix.lat, st.lon, st.lat) : null;
-
-    const card = el('div', { class: `card station-card ${selected ? 'selected' : ''}` });
-    card.appendChild(el('button', {
+    const c = el('div', { class: `card station-card ${selected ? 'selected' : ''}` });
+    c.appendChild(el('button', {
       class: 'card-main', type: 'button',
       onclick: () => ctx.selectStation(selected ? null : st.id),
     }, [
@@ -402,10 +402,97 @@ export function stationsPanel(ctx) {
         ].filter(Boolean).join(' · ') }),
       ]),
     ]));
+    if (selected) c.appendChild(stationEditor(ctx, st));
+    return c;
+  };
 
-    if (selected) card.appendChild(stationEditor(ctx, st));
-    node.appendChild(card);
-  }
+  // --- the list, virtualised -------------------------------------------------
+  // Five hundred cards, each with its own swatch canvas, painted on every tap
+  // was the lag. Only the cards in and around the viewport exist now, inside
+  // two spacers that hold the list's full height, and the window is moved as
+  // the sheet scrolls. Card pitch is measured, not assumed; the one open
+  // card (the editor) is measured separately.
+  const top = el('div', { class: 'vspace' });
+  const slice = el('div');
+  const bottom = el('div', { class: 'vspace' });
+  const wrap = el('div', { class: 'vlist' }, [top, slice, bottom]);
+  node.appendChild(wrap);
+
+  const OVER = 6;
+  let H = ctx.cardPitch() || 66;   // remembered across rebuilds
+  let selH = H;
+  let from = -1, to = -1;
+  let scroller = null;
+  let ro = null;
+
+  const before = (i) => i * H + (selIdx >= 0 && i > selIdx ? selH - H : 0);
+  const total = () => before(sorted.length);
+  const listTop = () => wrap.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+
+  const render = (force = false) => {
+    if (!scroller) return;
+    const y = scroller.scrollTop - listTop();
+    const viewH = scroller.clientHeight;
+    const at = (py) => {
+      // Index of the card at a y within the list, allowing for the open one.
+      let i = Math.floor(py / H);
+      if (selIdx >= 0 && i > selIdx) i = Math.floor((py - (selH - H)) / H);
+      return Math.max(0, Math.min(sorted.length, i));
+    };
+    const i0 = Math.max(0, at(y) - OVER);
+    const i1 = Math.min(sorted.length, at(y + viewH) + OVER + 1);
+    if (!force && i0 === from && i1 === to) return;
+    from = i0; to = i1;
+    clear(slice);
+    for (let i = i0; i < i1; i++) slice.appendChild(card(sorted[i]));
+    top.style.height = `${before(i0)}px`;
+    bottom.style.height = `${Math.max(0, total() - before(i1))}px`;
+
+    // Measure what was just drawn and go round again if the guess was off.
+    const cards = [...slice.querySelectorAll(':scope > .station-card')];
+    const plain = cards.find((c) => !c.classList.contains('selected'));
+    if (plain) {
+      const pitch = plain.getBoundingClientRect().height + 8;
+      if (Math.abs(pitch - H) > 0.5) { H = pitch; ctx.rememberCardPitch(H); render(true); return; }
+    }
+    const open = cards.find((c) => c.classList.contains('selected'));
+    if (open) {
+      const pitch = open.getBoundingClientRect().height + 8;
+      if (Math.abs(pitch - selH) > 0.5) { selH = pitch; render(true); }
+    }
+  };
+
+  const onScroll = () => {
+    if (!node.isConnected) {
+      scroller.removeEventListener('scroll', onScroll);
+      ro?.disconnect();
+      return;
+    }
+    render(false);
+  };
+
+  // The panel is put into the sheet after it is built, so the scroller is
+  // only known a tick later. A timeout rather than an animation frame: the
+  // app can be opened with the screen off, and a frame never comes then.
+  setTimeout(() => {
+    scroller = node.parentElement;
+    if (!scroller) return;
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    if (typeof ResizeObserver === 'function') {
+      ro = new ResizeObserver(() => render(false));
+      ro.observe(scroller);
+    }
+    render(true);
+    if (node._revealWanted) node.revealSelected();
+  }, 0);
+
+  /** Scroll so the selected station's card is at the top of the sheet. */
+  node.revealSelected = () => {
+    if (selIdx < 0) return;
+    if (!scroller) { node._revealWanted = true; return; }
+    scroller.scrollTop = listTop() + before(selIdx) - 4;
+    render(false);
+  };
 
   return node;
 }

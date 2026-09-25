@@ -1950,6 +1950,8 @@ export class MapSection {
       recordStation: () => this.recordStation(),
       selectStation: (id) => this.selectStation(id),
       selectedStationId: () => this.selectedStationId,
+      cardPitch: () => this._cardPitch,
+      rememberCardPitch: (h) => { this._cardPitch = h; },
       editStation: (id, fn, c) => this.editStation(id, fn, c),
       deleteStation: (id) => this.deleteStation(id),
       goToStation: (id) => this.goToStation(id),

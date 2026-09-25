@@ -326,6 +326,10 @@ html, body {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
   padding: 4px 14px calc(28px + env(safe-area-inset-bottom));
   overscroll-behavior: contain;
+  /* The station list swaps cards in and out above the viewport as it
+     scrolls; left on, scroll anchoring would shift the scroll by a card
+     every time it did. */
+  overflow-anchor: none;
 }
 
 /* --- generic panel furniture ---------------------------------------------- */
@@ -1149,6 +1153,10 @@ html, body {
   border-radius: var(--radius); backdrop-filter: blur(10px);
 }
 .map-readout.hidden { display: none; }
+/* The station list only builds the cards near the viewport; these hold the
+   height of the ones it has not. */
+.vlist { display: block; }
+.vspace { display: block; height: 0; }
 .map-readout strong { color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: .3px; }
 .map-readout span { color: var(--ink-dim); }
 
