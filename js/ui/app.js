@@ -187,6 +187,19 @@ export class App {
     // sharing what is left of the stage with the net or the ground map.
     this.fullBtn = iconBtn(expandIcon(), 'Full screen block', () => this.setBlockFull());
     this.compass = compassRose();
+    // The rose is a control as well as a readout: one tap turns the block
+    // north-up, two within a beat square the map as well.
+    this.compass.node.setAttribute('role', 'button');
+    this.compass.node.setAttribute('tabindex', '0');
+    this.compass.node.setAttribute('aria-label', 'North. Tap to put north up; double-tap to square the map too');
+    this._compassTapAt = 0;
+    this.compass.node.addEventListener('click', () => {
+      const now = performance.now();
+      const double = now - this._compassTapAt < 350;
+      this._compassTapAt = double ? 0 : now;
+      if (double) this.resetNorth();
+      else this.blockNorth();
+    });
     this.readout = el('div', { class: 'readout hidden' });
     // Live reading for the marker under the finger. The panel list says the
     // same thing, but not while the sheet is collapsed or the student is
