@@ -269,6 +269,37 @@ export function nextStationName(stations) {
   return String(max + 1);
 }
 
+/**
+ * Point every station at the unit its name says it is in.
+ *
+ * A station records `unitName` as typed and `unitId` only if a unit with that
+ * name existed at the moment it was recorded. Stations taken before the
+ * column was set up therefore carry a name and no id, and the map colours by
+ * id, so they stayed yellow however many units were added afterwards. This
+ * fills in the id for any station whose link is missing or dangling, by the
+ * same trimmed, case-insensitive match the Unit field uses. A station that
+ * already points at a unit that exists is left alone, so renaming a unit
+ * does not unlink the stations recorded in it. Returns how many changed.
+ */
+export function linkStationsToUnits(doc) {
+  const units = doc.units || [];
+  const ids = new Set(units.map((u) => u.id));
+  const byName = new Map();
+  for (const u of units) {
+    const key = String(u.name || '').trim().toLowerCase();
+    // First one wins, as every other name lookup in the app has it.
+    if (key && !byName.has(key)) byName.set(key, u.id);
+  }
+  let changed = 0;
+  for (const s of doc.stations || []) {
+    if (s.unitId && ids.has(s.unitId)) continue;
+    const key = String(s.unitName || '').trim().toLowerCase();
+    const id = key ? byName.get(key) : null;
+    if (id && s.unitId !== id) { s.unitId = id; changed++; }
+  }
+  return changed;
+}
+
 export function hasAttitude(st) {
   return isLinearFeature(st.feature)
     ? Number.isFinite(st.trend) && Number.isFinite(st.plunge)
@@ -694,6 +725,8 @@ export function migrateFieldDoc(doc) {
     .filter((a) => a && Array.isArray(a.bbox) && a.bbox.length === 4)
     .map((a) => ({ ...makeArea(), ...a }));
   out.version = FIELD_SCHEMA_VERSION;
+  // Stations recorded before their unit existed get their link on the way in.
+  linkStationsToUnits(out);
   return out;
 }
 

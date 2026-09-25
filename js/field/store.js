@@ -11,7 +11,7 @@
 // database at all, which in practice means private browsing. Degraded is
 // better than refusing to take notes.
 
-import { defaultFieldDocument, migrateFieldDoc, newFieldId } from './model.js';
+import { defaultFieldDocument, migrateFieldDoc, newFieldId, linkStationsToUnits } from './model.js';
 
 const DB_NAME = 'blockdiagram-field';
 const DB_VERSION = 1;
@@ -218,14 +218,29 @@ export class FieldStore {
     this._lastAt = now;
 
     mutator(this.doc);
+    this._relink();
     if (!silent) this._emit({ structural });
     this._scheduleSave();
+  }
+
+  /**
+   * After any edit that touched the unit list, point stations at the units
+   * their names now match. Keyed on the units' ids and names, so a slider
+   * being dragged costs a string join and nothing more, and the map recolours
+   * the moment a unit is added or renamed rather than only for new stations.
+   */
+  _relink() {
+    const key = (this.doc.units || []).map((u) => `${u.id}:${u.name}`).join('|');
+    if (key === this._unitsKey) return;
+    this._unitsKey = key;
+    linkStationsToUnits(this.doc);
   }
 
   replace(doc, structural = true) {
     this.undoStack.push(snapshot(this.doc));
     this.redoStack.length = 0;
     this._lastKey = null;
+    this._unitsKey = null;
     this.doc = doc;
     this._emit({ structural });
     this._scheduleSave();
