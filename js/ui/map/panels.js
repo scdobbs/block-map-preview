@@ -1395,7 +1395,9 @@ export function areasPanel(ctx) {
             const next = on ? area.sources.filter((k) => k !== id) : [...area.sources, id];
             // Something has to be drawable, or the area is a blank screen.
             if (!next.some((k) => SOURCES[k].kind === 'base')) return;
-            ctx.setDraftArea({ sources: next });
+            // Adding NAIP means wanting the detail it has; the choice below
+            // can dial it back.
+            ctx.setDraftArea(id === 'naip' && !on ? { sources: next, maxZoom: 18 } : { sources: next });
           },
         }, [el('span', { text: s.label })]);
       })),
@@ -1403,6 +1405,22 @@ export function areasPanel(ctx) {
         text: 'Elevation draws the hillshade and contours and gives station heights.' }),
     ]);
     node.appendChild(layerChoice);
+
+    // NAIP goes past the zoom the other layers stop at, and how far past is
+    // most of the download. Offered only when it is in the box.
+    if (area.sources.includes('naip')) {
+      node.appendChild(chipsRow({
+        label: 'NAIP detail',
+        value: String(Math.min(18, Math.max(16, area.maxZoom || 18))),
+        options: [
+          { id: '16', label: 'Zoom 16 · 2 m' },
+          { id: '17', label: 'Zoom 17 · 1 m' },
+          { id: '18', label: 'Zoom 18 · 0.5 m' },
+        ],
+        onChange: (v) => ctx.setDraftArea({ maxZoom: Number(v) }),
+        hint: 'Each step is four times the tiles. Zoom 18 of a 10 km square is about 80 MB and half an hour on a good connection.',
+      }));
+    }
 
     const prog = ctx.downloadProgress();
     if (prog && prog.areaId === area.id) {

@@ -76,6 +76,28 @@ export const SOURCES = {
     url: (z, x, y) =>
       `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/${z}/${y}/${x}`,
   },
+  // NAIP: the 0.6 m orthoimagery the USGS layers above are resampled from,
+  // served by the USDA at full resolution. There is no tile cache behind it,
+  // so the app builds each tile itself: the bbox of a Web Mercator tile is
+  // asked for as a 256-pixel export, which comes back a JPEG of about 11 KB.
+  // Sharp to zoom 18, four times the linear detail of Aerial, at four times
+  // the tiles per zoom level. Public domain; the USDA asks to be credited.
+  naip: {
+    id: 'naip',
+    label: 'NAIP aerial',
+    kind: 'base',
+    detail: 'USDA NAIP orthoimagery at 0.6 m. Sharp to zoom 18; a much bigger download than Aerial.',
+    maxZoom: 18,
+    minZoom: 8,
+    bytes: 12000,
+    attribution: 'USDA NAIP (FPAC GEO)',
+    url: (z, x, y) => {
+      const [a, b, c, d] = mercatorTile(z, x, y);
+      return 'https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer/exportImage'
+        + `?bbox=${a.toFixed(2)},${b.toFixed(2)},${c.toFixed(2)},${d.toFixed(2)}`
+        + '&bboxSR=3857&imageSR=3857&size=256,256&format=jpg&f=image';
+    },
+  },
   // Not a picture. This one is decoded into numbers, and those numbers are
   // where the hillshade, the contour lines and every station's ground
   // elevation come from.
@@ -93,7 +115,16 @@ export const SOURCES = {
   },
 };
 
-export const BASE_SOURCES = ['topo', 'aerial', 'imagery'];
+export const BASE_SOURCES = ['topo', 'aerial', 'imagery', 'naip'];
+
+/** A Web Mercator tile's extent in metres, for a server with no tile cache. */
+const HALF_WORLD = Math.PI * 6378137;
+function mercatorTile(z, x, y) {
+  const w = (2 * HALF_WORLD) / Math.pow(2, z);
+  const minx = -HALF_WORLD + x * w;
+  const maxy = HALF_WORLD - y * w;
+  return [minx, maxy - w, minx + w, maxy];
+}
 
 export function source(id) { return SOURCES[id] || SOURCES.topo; }
 

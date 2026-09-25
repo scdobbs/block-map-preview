@@ -806,6 +806,7 @@ basemap worth having forbids the bulk pre-caching this feature exists to do.
 | **Topo** | USGS 7.5-minute quad | 16 (~1.8 m/px) |
 | **Aerial** | USGS orthoimagery | 16 |
 | **Aerial + topo** | the same imagery with contours and names over it | 16 |
+| **NAIP aerial** | USDA NAIP orthoimagery, 0.6 m, served by the USDA FPAC GEO Branch | 18 (~0.5 m/px) |
 | **Elevation** | Terrain Tiles on AWS (USGS 3DEP) | 15 (~10 m) |
 
 **Aerial + topo is the prettier layer and the gappier one.** USGS has not
@@ -820,7 +821,11 @@ complete and Repair would retry it forever. The map fills those squares from
 the next zoom out, so a hole in the source shows as a softer patch rather than
 as nothing at all.
 
-**The imagery stops at zoom 16** and there is no public-domain way past it.
+**The USGS imagery stops at zoom 16.** NAIP goes to 18, at four times the
+tiles per level: there is no tile cache behind it, so the app asks the USDA
+image server for each tile's own extent as a 256-pixel export, about 11 KB a
+tile. Zoom 18 of a 10 km square is roughly 80 MB; the Areas tab offers 16, 17
+or 18 when NAIP is in the box.
 Past that the photograph goes soft. Elevation is numbers rather than a
 picture, so the **hillshade and contours are worked out on the phone** and
 stay as sharp as the screen can draw them: zoom in on an outcrop and the

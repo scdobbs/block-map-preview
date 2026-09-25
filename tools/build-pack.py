@@ -39,7 +39,21 @@ SOURCES = {
                     url="https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}"),
     "dem": dict(max=15, min=8, bytes=80000,
                 url="https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"),
+    # No tile cache behind this one: each tile is an exportImage of its own
+    # Web Mercator bbox, built by naip_url below exactly as tiles.js builds it.
+    "naip": dict(max=18, min=8, bytes=12000, url=None),
 }
+
+HALF_WORLD = math.pi * 6378137.0
+
+
+def naip_url(z, x, y):
+    w = 2 * HALF_WORLD / 2 ** z
+    minx = -HALF_WORLD + x * w
+    maxy = HALF_WORLD - y * w
+    a, b, c, d = minx, maxy - w, minx + w, maxy
+    return ("https://apps.geo.fpac.usda.gov/geo-imagery/rest/services/naip/conus_naip/ImageServer/exportImage"
+            f"?bbox={a:.2f},{b:.2f},{c:.2f},{d:.2f}&bboxSR=3857&imageSR=3857&size=256,256&format=jpg&f=image")
 
 CHUNK_BYTES = 8 * 1024 * 1024
 UA = "block-map-preview pack builder (github.com/scdobbs/block-map-preview)"
@@ -77,6 +91,8 @@ def wanted_tiles(bbox, sources, min_zoom, max_zoom):
 
 
 def url_for(sid, z, x, y):
+    if sid == "naip":
+        return naip_url(z, x, y)
     return SOURCES[sid]["url"].format(z=z, x=x, y=y)
 
 
