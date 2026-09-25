@@ -941,7 +941,7 @@ export class MapSection {
     const d = this.draft;
     if (d.held) {
       d.held = false;
-      d.strike = d.dip = d.trend = d.plunge = d.scatter = null;
+      d.strike = d.dip = d.trend = d.plunge = d.scatter = d.heading = null;
       this.clino.reset();
       this._refreshPanel();
       return;
@@ -952,6 +952,7 @@ export class MapSection {
     d.dip = c.dip;
     d.trend = c.trend;
     d.plunge = c.plunge;
+    d.heading = c.heading;
     d.scatter = isLinearFeature(d.feature) ? c.lineScatter : c.scatter;
     d.held = true;
     this._refreshPanel();
@@ -1960,7 +1961,7 @@ function freshDraft() {
     source: 'compass',
     strike: null, dip: null,
     trend: null, plunge: null,
-    scatter: null, held: false,
+    scatter: null, held: false, heading: null,
     noAttitude: false,
     feature: 'bedding',
     overturned: false,

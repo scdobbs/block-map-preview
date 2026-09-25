@@ -457,12 +457,13 @@ is disabled it says why.
 on rock and read at arm's length, and at that moment nothing else on the
 screen is any use.
 
-The dial is a fixed 0–360 card with the strike-and-dip symbol turning inside
-it, rather than a compass card spinning under a fixed mark. A turning card is
-right for walking a bearing; for reading a structure you want to see the
-symbol in the orientation it will have on the map, so you can check at a
-glance that the app is describing the surface actually under the phone. Beside
-the numbers is a small side elevation showing how far the surface leans off
+The card turns with the phone, as a compass card does, so north on the dial
+is north on the ground, and the strike-and-dip symbol is drawn on the card in
+map orientation. Together those put the strike line on the screen along the
+real strike of the surface the phone is lying on: look at the rock, look at
+the phone, and see that the app is describing the surface actually under it.
+The small mark at the top of the dial is the phone's own top edge. Beside the
+numbers is a small side elevation showing how far the surface leans off
 horizontal, because a plan view cannot show a dip.
 
 Or **Type it**, using the same compass dial and protractor the History tab

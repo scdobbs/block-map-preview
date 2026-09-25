@@ -242,7 +242,12 @@ export class Clinometer {
     y = applyDeclination(y, decl);
 
     const now = performance.now();
-    this.samples.push({ t: now, n, y, absolute,
+    // Where the phone's own top edge points, levelled the way a compass
+    // does. The dial turns by this so that north on it is north on the
+    // ground, and a symbol drawn on it in map orientation lies along the
+    // real strike of the surface the phone is resting on.
+    const heading = tiltCompensatedHeading(n, y);
+    this.samples.push({ t: now, n, y, heading, absolute,
       accuracy: Number.isFinite(e.webkitCompassAccuracy) ? e.webkitCompassAccuracy : null });
     while (this.samples.length && now - this.samples[0].t > SAMPLE_MS) this.samples.shift();
 
@@ -271,6 +276,10 @@ export class Clinometer {
 
     const absolute = s.every((k) => k.absolute);
     const acc = s[s.length - 1].accuracy;
+    // A circular mean, so a window straddling north does not average to south.
+    let hx = 0, hy = 0;
+    for (const k of s) { hx += Math.sin(k.heading / RAD); hy += Math.cos(k.heading / RAD); }
+    const heading = wrap360(Math.atan2(hx, hy) * RAD);
     const { strike, dip } = normalToStrikeDip(mean);
     const { trend, plunge } = vecToTrendPlunge(meanLine);
 
@@ -283,6 +292,7 @@ export class Clinometer {
       // comes from gravity — but the strike is not, so it is not offered.
       strike: absolute ? strike : null,
       dip,
+      heading: absolute ? heading : null,
       // The same reading seen as a line, for lineations, slickenlines and
       // fold hinges. Plunge comes from gravity, trend from the compass, so
       // trend is withheld on the same terms the strike is.
@@ -328,7 +338,7 @@ function meanAxis(samples, key) {
 function emptyState() {
   return {
     ready: false, settling: false, samples: 0,
-    normal: null, strike: null, dip: null,
+    normal: null, strike: null, dip: null, heading: null,
     axis: null, trend: null, plunge: null,
     scatter: null, lineScatter: null, still: false,
     absolute: false,

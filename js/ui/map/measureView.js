@@ -6,10 +6,12 @@
 // leaning in, and the symbol needs to be big enough to check at a glance that
 // the app is describing the surface actually under the phone.
 //
-// So the dial is fixed north-up and the symbol turns inside it, rather than the
-// compass card turning under a fixed lubber line. A card that spins is right
-// for walking a bearing; for reading a structure the useful thing is to see the
-// strike-and-dip mark in the same orientation it will have on the map.
+// The card turns with the phone, as a compass card does, so north on the
+// dial is north on the ground; the strike-and-dip symbol is drawn on the
+// card in map orientation. Together those put the strike line on the screen
+// along the real strike of the surface the phone is lying on, which is the
+// check that matters: look at the rock, look at the phone, and see that the
+// app is describing the surface actually under it.
 
 import { el, svg, clear, chipsRow, textRow, selectRow, toggleRow, noteRow } from '../widgets.js';
 import { quadrantBearing } from '../../geo/math.js';
@@ -62,7 +64,10 @@ export function measureView(ctx) {
 
   // --- the dial -----------------------------------------------------------
   const face = svg('svg', { viewBox: '0 0 200 200', class: 'mf-dial' });
-  buildRose(face);
+  // Everything printed on the card turns with the phone's heading.
+  const card = svg('g', { class: 'mf-card-g' });
+  buildRose(card);
+  face.appendChild(card);
 
   // Everything that turns with the reading lives in one group, so a new
   // sample is a transform and two numbers rather than a rebuild.
@@ -80,6 +85,8 @@ export function measureView(ctx) {
   spin.append(strikeLine, dipTick, arrow);
   face.appendChild(spin);
   face.appendChild(svg('circle', { cx: C, cy: C, r: 4, class: 'mf-hub' }));
+  // The lubber line: the phone's own top edge, fixed while the card turns.
+  face.appendChild(svg('path', { d: `M ${C} ${C - R - 4} l -5 -7 h 10 Z`, class: 'mf-lubber' }));
 
   // Tapping the face holds the reading. The button below does the same thing,
   // but the face is where you are already looking and it is a much larger
@@ -174,6 +181,10 @@ export function measureView(ctx) {
     const az = held ? (linear ? d.trend : d.strike) : (linear ? s.trend : s.strike);
     const inc = held ? (linear ? d.plunge : d.dip) : (linear ? s.plunge : s.dip);
     const scatter = held ? d.scatter : (linear ? s.lineScatter : s.scatter);
+    // The card follows the phone; a held reading freezes the card with it,
+    // so the picture captured is the picture kept.
+    const heading = held ? d.heading : s.heading;
+    card.setAttribute('transform', heading == null ? '' : `rotate(${-heading} ${C} ${C})`);
 
     const ready = held || s.ready;
     strikeLine.style.display = linear ? 'none' : '';
@@ -190,7 +201,8 @@ export function measureView(ctx) {
       steadyText.textContent = '';
     } else {
       spin.style.opacity = '1';
-      spin.setAttribute('transform', az == null ? '' : `rotate(${az} ${C} ${C})`);
+      // Map orientation on a card that has itself been turned.
+      spin.setAttribute('transform', az == null ? '' : `rotate(${az - (heading || 0)} ${C} ${C})`);
 
       if (linear) {
         // A single-headed arrow: a lineation has a down-plunge direction even
